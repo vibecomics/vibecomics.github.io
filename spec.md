@@ -213,7 +213,8 @@ prompt?, aspectRatio?, visible, x, y, width, rotation, opacity }`. A layer
   and get its image later. `aspectRatio` (width / height) shapes a layer
   that has no image yet and tells the generator what proportions to use.
   Foreground layers should usually be PNGs with a transparent background;
-  a background should be generated at its panel's aspect ratio.
+  a background should be generated at its panel's aspect ratio. A foreground layer
+  is clipped to its panel.
   A layer's `prompt` is only its own part of the image prompt; see "Prompts" below.
   There is **no separate background field**: the background is the layer
   whose `kind` is `"background"`; it always fills the panel (cropped, never

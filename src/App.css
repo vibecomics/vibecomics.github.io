@@ -215,6 +215,24 @@
   touch-action: none;
 }
 
+/* Cuts a layer to its panel; hits outside the panel fall through, and hits inside reach the layer. */
+.panel-clip {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.panel-clip > .panel-layer-box {
+  pointer-events: auto;
+}
+
+/* The selected layer's outline and handles, drawn over a clipped copy of its image. */
+.panel-layer-box.controls-only > .panel-layer,
+.panel-layer-box.controls-only > .layer-placeholder {
+  visibility: hidden;
+}
+
 .layer-placeholder {
   display: flex;
   align-items: center;

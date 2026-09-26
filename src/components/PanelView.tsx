@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { cb } from '../ai/actions';
 import type { BubblePatch, LayerPatch } from '../ai/deps';
 import type { Panel } from '../types/comic';
@@ -34,23 +34,34 @@ export default function PanelView({ panel, number, editing }: Props) {
     <div className="panel-canvas" ref={canvasRef}>
       {number !== undefined && <span className="panel-number">{number}</span>}
       {!hasArt && <div className="panel-empty">No artwork yet</div>}
-      {layers.map((layer) => (
-        <LayerBox
-          key={layer.id}
-          layer={layerPreview?.id === layer.id ? { ...layer, ...layerPreview.patch } : layer}
-          canvasRef={canvasRef}
-          editing={
-            editing && {
-              selected: editing.selectedLayerId === layer.id,
-              onPreview: (patch) => setLayerPreview({ id: layer.id, patch }),
-              onCommit: (patch) => {
-                cb().layers.update(panel.id, layer.id, patch);
-                setLayerPreview(null);
-              },
-            }
-          }
-        />
-      ))}
+      {layers.map((layer) => {
+        const shown = layerPreview?.id === layer.id ? { ...layer, ...layerPreview.patch } : layer;
+        const layerEditing = editing && {
+          selected: editing.selectedLayerId === layer.id,
+          onPreview: (patch: LayerPatch) => setLayerPreview({ id: layer.id, patch }),
+          onCommit: (patch: LayerPatch) => {
+            cb().layers.update(panel.id, layer.id, patch);
+            setLayerPreview(null);
+          },
+        };
+        if (shown.kind === 'background') {
+          return (
+            <LayerBox key={layer.id} layer={shown} canvasRef={canvasRef} editing={layerEditing} />
+          );
+        }
+        // The selected panel lets its canvas overflow so handles stay reachable, so a foreground
+        // layer is cut to the panel by a wrapper, and its selection controls are drawn uncut.
+        return (
+          <Fragment key={layer.id}>
+            <div className="panel-clip">
+              <LayerBox layer={shown} canvasRef={canvasRef} />
+            </div>
+            {layerEditing?.selected && (
+              <LayerBox layer={shown} canvasRef={canvasRef} editing={layerEditing} controlsOnly />
+            )}
+          </Fragment>
+        );
+      })}
       {panel.bubbles.map((bubble) => (
         <BubbleView
           key={bubble.id}

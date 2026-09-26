@@ -19,6 +19,12 @@ interface Props {
   layer: Layer;
   canvasRef: RefObject<HTMLDivElement | null>;
   editing?: LayerEditing;
+  /**
+   * Draws only the outline and handles, with the image invisible. Pairs with a
+   * clipped copy of the layer so the selected layer's handles stay reachable
+   * outside the panel while its image is still clipped.
+   */
+  controlsOnly?: boolean;
 }
 
 const SNAP_DEGREES = 15;
@@ -62,7 +68,7 @@ function RotateHandle({
  * selected layer can be dragged to move, resized by its corners, and turned
  * by its rotate handle.
  */
-export default function LayerBox({ layer, canvasRef, editing }: Props) {
+export default function LayerBox({ layer, canvasRef, editing, controlsOnly }: Props) {
   const src = useDriveImage(layer.src);
   const boxRef = useRef<HTMLDivElement>(null);
 
@@ -109,7 +115,7 @@ export default function LayerBox({ layer, canvasRef, editing }: Props) {
     <div
       ref={boxRef}
       data-layer-id={layer.id}
-      className={`panel-layer-box${editing?.selected ? ' selected' : ''}`}
+      className={`panel-layer-box${editing?.selected ? ' selected' : ''}${controlsOnly ? ' controls-only' : ''}`}
       style={{
         left: `${layer.x}%`,
         top: `${layer.y}%`,
