@@ -141,6 +141,12 @@ test('a project persists on Drive and is picked up by the next command', async (
   const saved = google.projectIn(folder.id);
   assert.equal(saved.pages[1].panels[0].layers[0].prompt, 'A rooftop at dusk');
 
+  const panelId = split.json()[0].id;
+  const layerId = layer.json().id;
+  assert.equal((await run('layers', 'flip', panelId, layerId)).json().flipX, true);
+  assert.equal(google.projectIn(folder.id).pages[1].panels[0].layers[0].flipX, true);
+  assert.equal((await run('layers', 'flip', panelId, layerId)).json().flipX, false);
+
   // The current page is remembered: with none given, panels list shows page 1.
   assert.equal((await run('panels', 'list')).json().length, 2);
   assert.equal((await run('page', 'select', '0')).json().title, 'Cover');

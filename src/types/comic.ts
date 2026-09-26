@@ -34,6 +34,8 @@ export interface Layer {
   width: number;
   rotation: number;
   opacity: number;
+  /** Mirrors the layer's image left to right. Absent means not flipped. */
+  flipX?: boolean;
 }
 
 export interface Bubble {

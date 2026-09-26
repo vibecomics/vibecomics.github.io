@@ -207,14 +207,14 @@ project folder holds exactly one `project.json`.
   panels gets one full-page panel, and panels without rectangles are stacked
   as equal rows (`normalizeProject`).
 - `Layer` — `{ id, name, kind: "background" | "foreground", src, mediaId?,
-prompt?, aspectRatio?, visible, x, y, width, rotation, opacity }`. A layer
+prompt?, aspectRatio?, visible, x, y, width, rotation, opacity, flipX? }`. A layer
   is a `prompt` (what its art should show, for whoever generates the image)
   and optionally an image, so it can exist as just a prompt (`src` is `""`)
   and get its image later. `aspectRatio` (width / height) shapes a layer
   that has no image yet and tells the generator what proportions to use.
   Foreground layers should usually be PNGs with a transparent background;
   a background should be generated at its panel's aspect ratio. A foreground layer
-  is clipped to its panel.
+  is clipped to its panel. `flipX` mirrors the image left to right.
   A layer's `prompt` is only its own part of the image prompt; see "Prompts" below.
   There is **no separate background field**: the background is the layer
   whose `kind` is `"background"`; it always fills the panel (cropped, never

@@ -174,6 +174,7 @@ export const INPUTS = {
       example: '{ "mediaId": "media_ab12cd", "x": 10, "y": 20, "width": 60, "opacity": 1 }',
     },
   },
+  'layers.flip': { panelId: PANEL_ID, layerId: LAYER_ID },
   'layers.delete': { panelId: PANEL_ID, layerId: LAYER_ID },
   'layers.size': { panelId: PANEL_ID, layerId: LAYER_ID },
   'layers.move': {

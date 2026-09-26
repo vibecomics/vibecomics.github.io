@@ -6,6 +6,7 @@ import { usePointerDrag } from '../utils/drag';
 import { CORNERS, clamp, pointerPercent, round1 } from '../utils/geometry';
 import type { Point } from '../utils/geometry';
 import CornerHandle from './CornerHandle';
+import { FlipIcon } from './Icons';
 import { useDriveImage } from './useDriveImage';
 
 interface LayerEditing {
@@ -13,6 +14,7 @@ interface LayerEditing {
   /** Show a change while dragging, without touching the project. */
   onPreview: (patch: LayerPatch) => void;
   onCommit: (patch: LayerPatch) => void;
+  onFlip: () => void;
 }
 
 interface Props {
@@ -94,7 +96,7 @@ export default function LayerBox({ layer, canvasRef, editing, controlsOnly }: Pr
         src={src}
         alt={layer.name}
         className="panel-layer background"
-        style={{ opacity: layer.opacity }}
+        style={{ opacity: layer.opacity, transform: layer.flipX ? 'scaleX(-1)' : undefined }}
         draggable={false}
       />
     ) : null;
@@ -129,7 +131,7 @@ export default function LayerBox({ layer, canvasRef, editing, controlsOnly }: Pr
           src={src}
           alt={layer.name}
           className="panel-layer"
-          style={{ opacity: layer.opacity }}
+          style={{ opacity: layer.opacity, transform: layer.flipX ? 'scaleX(-1)' : undefined }}
           draggable={false}
         />
       ) : (
@@ -138,6 +140,18 @@ export default function LayerBox({ layer, canvasRef, editing, controlsOnly }: Pr
         </div>
       )}
       {editing?.selected && <RotateHandle boxRef={boxRef} editing={editing} />}
+      {editing?.selected && (
+        <button
+          type="button"
+          className="flip-handle"
+          title="Flip horizontally"
+          aria-label="Flip horizontally"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={editing.onFlip}
+        >
+          <FlipIcon />
+        </button>
+      )}
       {editing?.selected &&
         CORNERS.map((corner) => (
           <CornerHandle

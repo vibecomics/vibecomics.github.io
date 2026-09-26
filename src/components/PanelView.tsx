@@ -43,6 +43,7 @@ export default function PanelView({ panel, number, editing }: Props) {
             cb().layers.update(panel.id, layer.id, patch);
             setLayerPreview(null);
           },
+          onFlip: () => cb().layers.flip(panel.id, layer.id),
         };
         if (shown.kind === 'background') {
           return (

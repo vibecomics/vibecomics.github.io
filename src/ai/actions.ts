@@ -598,7 +598,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * layer prompt (see the layers namespace). Foreground images
        * should usually be PNGs with a transparent background.
        * @param panelId - The panel id.
-       * @param input - { name?, prompt?, mediaId?, src?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity? }. The image must be on Google Drive: pass mediaId (from media.upload or media.list, preferred) or src as a Drive URL; any other URL throws. Omit both for a layer that is only a prompt so far. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true. aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate.
+       * @param input - { name?, prompt?, mediaId?, src?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. The image must be on Google Drive: pass mediaId (from media.upload or media.list, preferred) or src as a Drive URL; any other URL throws. Omit both for a layer that is only a prompt so far. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate.
        * @returns A deep-cloned snapshot of the new Layer.
        */
       add: (panelId: string, input: LayerInput): Layer => {
@@ -628,7 +628,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * Update a layer: move (x/y), resize (width), rotate, change opacity or
-       * visibility, rename, edit its prompt, or swap its image (mediaId, or src as a Drive URL).
+       * visibility, flip it left to right (flipX), rename, edit its prompt, or swap its image (mediaId, or src as a Drive URL).
        * Only the given fields change.
        * @param panelId - The panel id.
        * @param layerId - The layer id.
@@ -640,6 +640,19 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         const swapsImage = Boolean(patch.src) || patch.mediaId !== undefined;
         const image = swapsImage ? resolveLayerImage(requireProject(deps), patch) : {};
         return layers.update(panelId, layerId, { ...patch, ...image });
+      },
+
+      /**
+       * Flip a layer's image horizontally (mirror it left to right); calling it
+       * again flips it back. Sets or clears the layer's flipX field.
+       * @param panelId - The panel id.
+       * @param layerId - The layer id.
+       * @returns A deep-cloned snapshot of the updated Layer. Throws when the panel or layer is not found.
+       */
+      flip: (panelId: string, layerId: string): Layer => {
+        const layer = layers.get(panelId, layerId);
+        if (!layer) throw new Error(`Layer "${layerId}" not found.`);
+        return layers.update(panelId, layerId, { flipX: !layer.flipX });
       },
 
       /**

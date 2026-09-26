@@ -275,6 +275,27 @@
   background: #0d6efd;
 }
 
+/* Under the selected layer's outline, on the side opposite the rotate handle. */
+.flip-handle {
+  position: absolute;
+  z-index: 12;
+  top: 100%;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin: 8px 0 0 -12px;
+  padding: 0;
+  border: 2px solid #0d6efd;
+  border-radius: 50%;
+  background: #fff;
+  color: #0d6efd;
+  cursor: pointer;
+  touch-action: none;
+}
+
 .resize-handle {
   position: absolute;
   z-index: 12;

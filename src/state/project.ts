@@ -142,6 +142,9 @@ function checkLayer(value: unknown, path: string): void {
   if (!isFiniteNumber(layer.opacity) || layer.opacity < 0 || layer.opacity > 1) {
     fail(path, '"opacity" must be a number between 0 and 1');
   }
+  if (layer.flipX !== undefined && typeof layer.flipX !== 'boolean') {
+    fail(path, '"flipX" must be a boolean');
+  }
   optionalString(layer, path, 'driveFileId');
   optionalString(layer, path, 'mediaId');
   optionalString(layer, path, 'prompt');

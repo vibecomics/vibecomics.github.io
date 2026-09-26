@@ -135,6 +135,10 @@
           "exclusiveMinimum": 0,
           "type": "number"
         },
+        "flipX": {
+          "description": "When true the layer's image is mirrored left to right. Absent means not flipped.",
+          "type": "boolean"
+        },
         "id": {
           "type": "string"
         },

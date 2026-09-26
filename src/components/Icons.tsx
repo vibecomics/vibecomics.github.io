@@ -18,6 +18,16 @@ export function TrashIcon() {
   );
 }
 
+/** Two halves of a shape either side of a dashed axis: mirrors left to right. */
+export function FlipIcon() {
+  return (
+    <svg {...icon}>
+      <path d="M8 2v12" strokeDasharray="1.5 2" />
+      <path d="M6 4.5 2 12h4zM10 4.5 14 12h-4z" />
+    </svg>
+  );
+}
+
 /** A box with an arrow leaving it: opens something in a new tab. */
 export function ExternalIcon() {
   return (
