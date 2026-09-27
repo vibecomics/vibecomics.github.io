@@ -19,7 +19,6 @@ import type {
   Panel,
   Scene,
 } from '../types/comic';
-import { driveFileIdFromUrl, driveFileUrl } from '../utils/driveUrl';
 import { newId } from '../utils/id';
 import type { ComicBuilderDeps, StoryEntryInput, StoryEntryPatch } from './deps';
 
@@ -230,29 +229,16 @@ export function storyApi<K extends keyof StoryTypes>(deps: ComicBuilderDeps, key
   };
 }
 
-/**
- * A layer's image as the canonical URL it is registered under, from a media id or that same URL, or
- * '' when it has none yet. Layers cannot use any other image source.
- */
+/** Validate a layer's image: mediaId must name a registered MediaItem, or be omitted for none yet. */
 export function resolveLayerImage(
   project: ComicProject,
-  { mediaId, src }: { mediaId?: string; src?: string }
-): { src: string; mediaId?: string } {
-  const { media } = project.metadata;
-  if (mediaId !== undefined) {
-    const item = media.find((m) => m.id === mediaId);
-    if (!item)
-      throw new Error(`Media "${mediaId}" not found. Upload the image with media.upload first.`);
-    return { src: driveFileUrl(item.driveFileId), mediaId };
-  }
-  if (!src) return { src: '' };
-  const fileId = driveFileIdFromUrl(src);
-  if (!fileId) {
-    throw new Error(
-      'Layer images must be registered media URLs. Upload the image with media.upload and pass the returned id as mediaId.'
-    );
-  }
-  return { src: driveFileUrl(fileId), mediaId: media.find((m) => m.driveFileId === fileId)?.id };
+  { mediaId }: { mediaId?: string }
+): { mediaId?: string } {
+  if (mediaId === undefined) return {};
+  const item = project.metadata.media.find((m) => m.id === mediaId);
+  if (!item)
+    throw new Error(`Media "${mediaId}" not found. Upload the image with media.upload first.`);
+  return { mediaId };
 }
 
 const round = (n: number) => Math.round(n * 100) / 100;

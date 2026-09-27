@@ -5,18 +5,17 @@ import type { ComicProject, MediaItem } from '../types/comic';
 import { removeMedia } from './media';
 import { assertValidProject, createBlankProject } from './project';
 
-const item = (id: string, driveFileId: string): MediaItem => ({
+const item = (id: string): MediaItem => ({
   id,
   name: `${id}.png`,
-  driveFileId,
-  url: `https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`,
+  fileName: `${id}.png`,
   mimeType: 'image/png',
-  thumbnailDriveFileId: `${driveFileId}-thumb`,
+  thumbnailFileName: `${id}.thumb.png`,
 });
 
 function projectWithMedia(): ComicProject {
   const project = createBlankProject('Test');
-  project.metadata.media = [item('m1', 'F1'), item('m2', 'F2')];
+  project.metadata.media = [item('m1'), item('m2')];
   project.metadata.characters.push({
     id: 'c1',
     name: 'Hero',
@@ -24,11 +23,10 @@ function projectWithMedia(): ComicProject {
     imageIds: ['m1', 'm2'],
     sceneIds: [],
   });
-  const layer = (id: string, mediaId: string | undefined, src: string) => ({
+  const layer = (id: string, mediaId: string | undefined) => ({
     id,
     name: id,
     kind: 'foreground' as const,
-    src,
     ...(mediaId && { mediaId }),
     visible: true,
     x: 0,
@@ -38,28 +36,26 @@ function projectWithMedia(): ComicProject {
     opacity: 1,
   });
   project.pages[0].panels[0].layers = [
-    layer('with-id', 'm1', project.metadata.media[0].url),
-    layer('by-url-only', undefined, project.metadata.media[0].url),
-    layer('other', 'm2', project.metadata.media[1].url),
+    layer('with-id', 'm1'),
+    layer('no-media', undefined),
+    layer('other', 'm2'),
   ];
   return project;
 }
 
 test('removeMedia unregisters the image and lets go of everything using it', () => {
   const project = projectWithMedia();
-  assert.deepEqual(removeMedia(project, 'm1'), { layers: 2, entries: 1 });
+  assert.deepEqual(removeMedia(project, 'm1'), { layers: 1, entries: 1 });
 
   assert.deepEqual(
     project.metadata.media.map((m) => m.id),
     ['m2']
   );
   assert.deepEqual(project.metadata.characters[0].imageIds, ['m2']);
-  const [withId, byUrl, other] = project.pages[0].panels[0].layers;
-  assert.equal(withId.src, '');
+  const [withId, noMedia, other] = project.pages[0].panels[0].layers;
   assert.equal('mediaId' in withId, false);
-  assert.equal(byUrl.src, '');
+  assert.equal('mediaId' in noMedia, false);
   assert.equal(other.mediaId, 'm2');
-  assert.notEqual(other.src, '');
   assertValidProject(project);
 });
 

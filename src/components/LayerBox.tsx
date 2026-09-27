@@ -7,6 +7,7 @@ import { CORNERS, clamp, pointerPercent, round1 } from '../utils/geometry';
 import type { Point } from '../utils/geometry';
 import CornerHandle from './CornerHandle';
 import { FlipIcon } from './Icons';
+import { useProject } from './ProjectContext';
 import { useDriveImage } from './useDriveImage';
 
 interface LayerEditing {
@@ -71,7 +72,9 @@ function RotateHandle({
  * by its rotate handle.
  */
 export default function LayerBox({ layer, canvasRef, editing, controlsOnly }: Props) {
-  const src = useDriveImage(layer.src);
+  const media = useProject().metadata.media;
+  const item = layer.mediaId ? media.find((m) => m.id === layer.mediaId) : undefined;
+  const src = useDriveImage(item);
   const boxRef = useRef<HTMLDivElement>(null);
 
   const toPanel = (event: { clientX: number; clientY: number }) =>

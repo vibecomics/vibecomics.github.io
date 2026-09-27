@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { MediaItem } from '../types/comic';
+import { mediaKey } from '../utils/mediaKey';
 import { cachedMediaInfo, loadMediaInfo, type MediaInfo } from './mediaImages';
 
 /**
- * The shape and transparency of every image, keyed by Drive file id (undefined for an image that
- * could not be read), and whether all of them are known yet. The reading happens in the
+ * The shape and transparency of every image, keyed by its stable file name (undefined for an image
+ * that could not be read), and whether all of them are known yet. The reading happens in the
  * background, so the picker can show its images at once and sort them when this is ready.
  */
 export function useMediaInfos(media: MediaItem[]): {
@@ -12,7 +13,7 @@ export function useMediaInfos(media: MediaItem[]): {
   ready: boolean;
 } {
   const [settledFor, setSettledFor] = useState<MediaItem[] | null>(null);
-  const allCached = media.every((item) => cachedMediaInfo(item.driveFileId));
+  const allCached = media.every((item) => cachedMediaInfo(mediaKey(item)));
 
   useEffect(() => {
     if (allCached) return;
@@ -24,7 +25,7 @@ export function useMediaInfos(media: MediaItem[]): {
   }, [media, allCached]);
 
   return {
-    infos: new Map(media.map((item) => [item.driveFileId, cachedMediaInfo(item.driveFileId)])),
+    infos: new Map(media.map((item) => [mediaKey(item), cachedMediaInfo(mediaKey(item))])),
     ready: allCached || settledFor === media,
   };
 }

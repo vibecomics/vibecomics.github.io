@@ -219,7 +219,8 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * Validation follows public/schema/comic-project.schema.json; the error
        * names the failing path (e.g. project.pages[2].panels[0].layers[1]).
        * Required: id, title, savedAt, pages and metadata (outline, characters,
-       * scenes, objects, media). Layer images must be registered media URLs (or empty).
+       * scenes, objects, media). A layer's image is set via mediaId (or omitted
+       * for a layer that is only a prompt so far).
        * This is the primary editing path for bulk changes: read snapshots via
        * page/panels/layers/bubbles/metadata, modify client-side, load the result.
        * Geometry (x/y/width/rotation/opacity) is preserved exactly. Pages
@@ -252,8 +253,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * Errors: references to something that does not exist (a layer's
        * subjectId, sceneId or mediaId, an image's subjectId or sceneId, a
        * character's, object's or scene's imageIds, sceneIds or characterIds),
-       * a layer whose src is not the image its mediaId names, an image on a
-       * layer that is not in the project's images, and duplicate ids.
+       * and duplicate ids.
        * Warnings: two characters, scenes or images with the same name, a
        * character and an object with the same name, layers and images left with
        * a default name, an image with no thumbnail, an image used nowhere, and a
@@ -594,7 +594,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * DIRTY. A layer's `dirty` field says whether its image still matches its
      * prompt. add/update set it automatically: editing the prompt (or, for a
      * background, its scene; or, for a foreground layer, its subject) turns it
-     * on; setting the image (mediaId or src) turns it off. Check layers.list or
+     * on; setting the image (mediaId) turns it off. Check layers.list or
      * layers.get for `dirty: true` to find which layers or backgrounds need a
      * new image generated for them, and regenerate just those, not the whole
      * panel.
@@ -628,7 +628,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * layer prompt (see the layers namespace). Foreground images
        * should usually be PNGs with a transparent background.
        * @param panelId - The panel id.
-       * @param input - { name?, prompt?, subjectId?, sceneId?, mediaId?, src?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. The image must already be registered: pass mediaId (from media.upload or media.list, preferred) or src as a registered media URL; any other URL throws. Omit both for a layer that is only a prompt so far. subjectId is the id of the character or object the layer shows (it must exist); the media picker lists that subject's art first. sceneId is the id of the scene a background layer is the setting of (it must exist); the picker lists that scene's art first. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate. dirty is set automatically (true when there's a prompt and no image yet) unless you pass it explicitly.
+       * @param input - { name?, prompt?, subjectId?, sceneId?, mediaId?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. mediaId must already be registered (from media.upload or media.list); omit it for a layer that is only a prompt so far. subjectId is the id of the character or object the layer shows (it must exist); the media picker lists that subject's art first. sceneId is the id of the scene a background layer is the setting of (it must exist); the picker lists that scene's art first. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate. dirty is set automatically (true when there's a prompt and no image yet) unless you pass it explicitly.
        * @returns A deep-cloned snapshot of the new Layer.
        */
       add: (panelId: string, input: LayerInput): Layer => {
@@ -652,7 +652,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
             ...definedFields(input),
             ...image,
             kind,
-            dirty: input.dirty ?? (Boolean(input.prompt?.trim()) && !image.src),
+            dirty: input.dirty ?? (Boolean(input.prompt?.trim()) && !image.mediaId),
             name: input.name ?? media?.name ?? (kind === 'background' ? 'Background' : 'Layer'),
           },
           kind === 'background'
@@ -661,10 +661,10 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * Update a layer: move (x/y), resize (width), rotate, change opacity or
-       * visibility, flip it left to right (flipX), rename, edit its prompt, set what it shows (subjectId: a character or object id) or, for a background, the scene it is the setting of (sceneId), either null to clear it, or swap its image (mediaId, or src as a registered media URL).
+       * visibility, flip it left to right (flipX), rename, edit its prompt, set what it shows (subjectId: a character or object id) or, for a background, the scene it is the setting of (sceneId), either null to clear it, or swap its image (mediaId).
        * Only the given fields change. dirty tracks itself: editing prompt,
        * subjectId or sceneId turns it on (off again if that leaves no prompt);
-       * setting mediaId or src turns it off, even in the same call.
+       * setting mediaId turns it off, even in the same call.
        * @param panelId - The panel id.
        * @param layerId - The layer id.
        * @param patch - Partial layer fields.
@@ -672,7 +672,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        */
       update: (panelId: string, layerId: string, patch: LayerUpdate): Layer => {
         if (patch.kind !== undefined) assertKind(patch.kind, LAYER_KINDS, 'Layer kind');
-        const swapsImage = Boolean(patch.src) || patch.mediaId !== undefined;
+        const swapsImage = patch.mediaId !== undefined;
         const image = swapsImage ? resolveLayerImage(requireProject(deps), patch) : {};
         const { subjectId, sceneId, ...rest } = patch;
         if (typeof subjectId === 'string') assertSubject(requireProject(deps), subjectId);
@@ -1056,7 +1056,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       /**
        * Get one media entry.
        * @param id - The media id.
-       * @returns A deep-cloned MediaItem snapshot, or null when not found. Read-only. url is the image's internal storage reference, not something you can fetch yourself: use media.download(id) to read the image itself.
+       * @returns A deep-cloned MediaItem snapshot, or null when not found. Read-only. fileName is the image's internal storage reference, not something you can fetch yourself: use media.download(id) to read the image itself.
        */
       get: (id: string): MediaItem | null => {
         const item = requireProject(deps).metadata.media.find((m) => m.id === id);
@@ -1079,8 +1079,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * the file in metadata.media. All images live in the project's storage:
        * upload art and character reference images with this, then wire the
        * returned id into a layer (layers.add with mediaId) or a character /
-       * scene / object (imageIds). The returned url is the image's internal
-       * storage reference.
+       * scene / object (imageIds).
        *
        * Always send a thumbnail with the image. The editor's media picker
        * lists every image in the project as a thumbnail, and an image with
@@ -1097,7 +1096,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @param name - File name, e.g. "hero-front.png".
        * @param dataUrl - The image bytes as a data: URL (e.g. from a generated PNG).
        * @param opts - Optional { mimeType, thumbnailDataUrl, subjectId, sceneId }: mimeType defaults to "image/png"; thumbnailDataUrl is the image resized to about 256px on its long side, as a data: URL (PNG for transparent images, else JPEG). Strongly recommended. subjectId is the id of the character or object this image is art of (it must exist): the media picker lists a subject's art first. sceneId is the same for a scene (a background). Do not use either for reference art: put those ids in the character's or scene's imageIds.
-       * @returns A promise resolving to the new MediaItem. Its thumbnailDriveFileId is set when a thumbnail was stored; if it is missing, retry with media.uploadThumbnail.
+       * @returns A promise resolving to the new MediaItem. Its thumbnailFileName is set when a thumbnail was stored; if it is missing, retry with media.uploadThumbnail.
        */
       upload: (
         name: string,
@@ -1159,7 +1158,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * images uploaded without a thumbnail, and to replace a poor one.
        * @param id - The media id.
        * @param dataUrl - The thumbnail bytes as a data: URL.
-       * @returns A promise resolving to the updated MediaItem, whose thumbnailDriveFileId is the new thumbnail's Drive file id. Rejects when the media id is not found.
+       * @returns A promise resolving to the updated MediaItem, whose thumbnailFileName is the new thumbnail's stable name. Rejects when the media id is not found.
        */
       uploadThumbnail: (id: string, dataUrl: string): Promise<MediaItem> =>
         deps.uploadStorageThumbnail(id, dataUrl),

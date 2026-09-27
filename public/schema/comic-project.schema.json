@@ -178,10 +178,6 @@
           "description": "Rotation in degrees.",
           "type": "number"
         },
-        "src": {
-          "description": "Google Drive URL of the image, e.g. https://www.googleapis.com/drive/v3/files/<id>?alt=media, or an empty string while the layer is only a prompt. Images are never stored anywhere else. Older projects with a driveFileId are converted on load.",
-          "type": "string"
-        },
         "visible": {
           "type": "boolean"
         },
@@ -198,24 +194,13 @@
           "type": "number"
         }
       },
-      "required": [
-        "id",
-        "name",
-        "kind",
-        "src",
-        "visible",
-        "x",
-        "y",
-        "width",
-        "rotation",
-        "opacity"
-      ],
+      "required": ["id", "name", "kind", "visible", "x", "y", "width", "rotation", "opacity"],
       "type": "object"
     },
     "MediaItem": {
       "properties": {
-        "driveFileId": {
-          "description": "Google Drive file id of the image in the project folder.",
+        "fileName": {
+          "description": "The stable, backend-portable name this image is stored under in the project's storage folder (Drive, or a self-hosted server), assigned once at upload. Not a URL: resolve it to bytes with media.download.",
           "type": "string"
         },
         "id": {
@@ -236,16 +221,12 @@
           "description": "Optional id of the character or object this image is art of (not its reference art, which is the entity's imageIds).",
           "type": "string"
         },
-        "thumbnailDriveFileId": {
-          "description": "Optional Google Drive file id of a small copy of the image (about 256px on its long side) shown in lists and pickers instead of the full file.",
-          "type": "string"
-        },
-        "url": {
-          "description": "Drive URL for the file. Fetching the bytes needs a valid Drive access token.",
+        "thumbnailFileName": {
+          "description": "The stable name of a small copy of the image (about 256px on its long side) shown in lists and pickers instead of the full file. Absent when none was made.",
           "type": "string"
         }
       },
-      "required": ["id", "name", "driveFileId", "url", "mimeType"],
+      "required": ["id", "name", "fileName", "mimeType"],
       "type": "object"
     },
     "Panel": {

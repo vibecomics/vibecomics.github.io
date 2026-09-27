@@ -139,6 +139,17 @@ export function createDriveRest({ getToken, fetch: fetchImpl = fetch }: DriveRes
       );
     },
 
+    /** The file named `name` directly inside `folderId`, or undefined when there is none. */
+    async findFileByName(folderId: string, name: string): Promise<DriveFileMeta | undefined> {
+      const escaped = name.replace(/'/g, "\\'");
+      const [found] = await queryFiles<DriveFileMeta>(
+        `'${folderId}' in parents and name='${escaped}' and trashed=false`,
+        'id,name,mimeType',
+        '&pageSize=1'
+      );
+      return found;
+    },
+
     /** Move a file to the Drive trash (recoverable there). A file that is already gone counts as trashed. */
     async trashFile(fileId: string): Promise<void> {
       try {

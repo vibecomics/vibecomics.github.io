@@ -219,6 +219,8 @@ export function createFakeGoogle(now: () => number = Date.now) {
       return file ? JSON.parse(file.content.toString('utf8')) : null;
     },
     file: (id: string) => files.get(id),
+    /** A file by its Drive name, trashed or not (unlike liveFiles). */
+    fileNamed: (name: string) => [...files.values()].find((f) => f.name === name),
     liveFiles: () => [...files.values()].filter((f) => !f.trashed && f.mimeType !== FOLDER),
   };
 }

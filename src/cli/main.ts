@@ -131,7 +131,7 @@ async function run(argv: string[], io: CliIo): Promise<number | void> {
 
   if (
     spec.path === 'media.upload' &&
-    !(result as { thumbnailDriveFileId?: string }).thumbnailDriveFileId
+    !(result as { thumbnailFileName?: string }).thumbnailFileName
   ) {
     io.stderr(
       'note: this image has no thumbnail, so the editor must download it in full to list it. ' +

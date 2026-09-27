@@ -1,5 +1,4 @@
 import type { ComicProject } from '../types/comic';
-import { driveFileIdFromUrl } from '../utils/driveUrl';
 
 /** What removing an image from the project touched. */
 export interface MediaRemoval {
@@ -29,8 +28,7 @@ export function removeMedia(project: ComicProject, id: string): MediaRemoval {
   for (const page of project.pages) {
     for (const panel of page.panels) {
       for (const layer of panel.layers) {
-        if (layer.mediaId !== id && driveFileIdFromUrl(layer.src) !== item.driveFileId) continue;
-        layer.src = '';
+        if (layer.mediaId !== id) continue;
         delete layer.mediaId;
         removal.layers++;
       }

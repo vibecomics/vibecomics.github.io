@@ -1,12 +1,9 @@
 import type { MediaItem } from '../types/comic';
-import { driveFileIdFromUrl } from '../utils/driveUrl';
 import Spinner from './Spinner';
 import { useMediaUrl } from './useMediaUrl';
 
 interface Props {
-  /** Drive URL of the image shown, or '' when there is none yet. */
-  src: string;
-  /** The registered image behind `src`, when known: its thumbnail is shown instead of the full file. */
+  /** The registered image shown, or undefined while the layer has none yet. */
   item?: MediaItem;
   /** Names the button for screen readers, e.g. "Change background image". */
   label: string;
@@ -15,9 +12,8 @@ interface Props {
 }
 
 /** The image a layer uses, as a thumbnail that opens the media picker when clicked. */
-export default function MediaSlot({ src, item, label, busy, onClick }: Props) {
-  const fileId = src ? driveFileIdFromUrl(src) : null;
-  const { url } = useMediaUrl(item ?? (fileId ? { driveFileId: fileId } : null));
+export default function MediaSlot({ item, label, busy, onClick }: Props) {
+  const { url } = useMediaUrl(item ?? null);
   return (
     <button
       type="button"
@@ -30,7 +26,7 @@ export default function MediaSlot({ src, item, label, busy, onClick }: Props) {
       {url ? (
         <img src={url} alt="" />
       ) : (
-        <span className="text-muted small">{src ? '…' : 'Add image'}</span>
+        <span className="text-muted small">{item ? '…' : 'Add image'}</span>
       )}
       {busy && (
         <span className="media-slot-busy">

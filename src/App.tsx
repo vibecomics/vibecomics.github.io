@@ -20,12 +20,13 @@ import {
   disconnectActiveBackend,
   downloadFile,
   ensureProjectFolder,
-  fileUrl,
+  findFileByName,
   hasStorageAccess,
   listProjectFolders,
   loadProjectFile,
   saveProjectJson,
   setActiveBackend,
+  setCurrentFolderId,
   trashFile,
   uploadImage,
 } from './storage/activeBackend';
@@ -43,6 +44,7 @@ const drive = {
   uploadImage,
   trashFile,
   downloadFile,
+  findFileByName,
   ensureProjectFolder,
   loadProjectFile,
   saveProjectJson,
@@ -115,6 +117,7 @@ export default function App() {
 
   function showProject(opened: ComicProject, folderId: string, version: string | null) {
     folderIdRef.current = folderId;
+    setCurrentFolderId(folderId);
     setCurrentProject(opened);
     selectPage(0);
     setPreview(false);
@@ -125,6 +128,7 @@ export default function App() {
 
   function dropProject() {
     folderIdRef.current = null;
+    setCurrentFolderId(null);
     setCurrentProject(null);
     selectPage(0);
     setPreview(false);
@@ -299,7 +303,6 @@ export default function App() {
         getFolderId: () => folderIdRef.current,
         updateProject: (mutation) => deps.updateProject(mutation),
         drive,
-        fileUrl,
         makeThumbnail,
       }),
     };
@@ -317,7 +320,7 @@ export default function App() {
   } else if (screen === 'tiles') {
     content = <ProjectTiles folders={folders} />;
   } else if (project && preview && currentPage) {
-    content = <PreviewScreen page={currentPage} pageSize={project.metadata.pageSize} />;
+    content = <PreviewScreen project={project} page={currentPage} pageSize={project.metadata.pageSize} />;
   } else if (project) {
     content = (
       <EditorScreen

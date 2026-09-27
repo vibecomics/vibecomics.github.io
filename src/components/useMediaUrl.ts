@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import type { MediaItem } from '../types/comic';
 import { errorMessage } from '../utils/errors';
+import { mediaKey } from '../utils/mediaKey';
 import { loadDisplayUrl } from './mediaImages';
 
-type Source = Pick<MediaItem, 'driveFileId' | 'thumbnailDriveFileId'>;
+type Source = Pick<MediaItem, 'fileName' | 'thumbnailFileName'>;
 
 /**
  * An image as something an <img> can show: its thumbnail when it has one that loads, else the full
@@ -14,25 +15,25 @@ export function useMediaUrl(source: Source | null): {
   failed: boolean;
   error: string | null;
 } {
-  const full = source?.driveFileId ?? null;
-  const thumb = source?.thumbnailDriveFileId;
-  const key = full && `${thumb ?? ''}/${full}`;
+  const full = source ? mediaKey(source) : null;
+  const { fileName, thumbnailFileName } = source ?? {};
+  const key = full && `${thumbnailFileName ?? ''}/${full}`;
   const [state, setState] = useState<{ key: string | null; url: string | null; error?: string }>({
     key: null,
     url: null,
   });
 
   useEffect(() => {
-    if (!full) return;
+    if (!full || !fileName) return;
     let current = true;
-    loadDisplayUrl({ driveFileId: full, thumbnailDriveFileId: thumb }).then(
+    loadDisplayUrl({ fileName, thumbnailFileName }).then(
       (url) => current && setState({ key, url }),
       (e) => current && setState({ key, url: null, error: errorMessage(e) })
     );
     return () => {
       current = false;
     };
-  }, [key, full, thumb]);
+  }, [key, full, fileName, thumbnailFileName]);
 
   const settled = key !== null && state.key === key;
   return {

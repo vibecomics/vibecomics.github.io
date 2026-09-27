@@ -243,11 +243,9 @@ prompt?, aspectRatio?, subjectId?, sceneId?, visible, x, y, width, rotation, opa
   stretched) and sits at the bottom, so its `x`/`y`/`width` are ignored.
   Layers are drawn in **array order** (last on top); `layers.move` reorders.
   For foreground layers `x`/`y`/`width` are percentages of panel size and
-  the aspect ratio is preserved. `src` is always the image's **Google Drive
-  URL** (`https://www.googleapis.com/drive/v3/files/<id>?alt=media`): layers
-  are created from a `mediaId` or a Drive URL and reject anything else, and
-  `normalizeProject` turns older `driveFileId` layers and Drive share links
-  into that form. `src` may also be empty (a prompt-only layer).
+  the aspect ratio is preserved. A layer's image is its `mediaId`, pointing
+  at a `MediaItem` in `metadata.media`; `mediaId` is absent for a
+  prompt-only layer with no image yet.
 - `Bubble` — `{ id, kind: "speech" | "thought" | "shout" | "caption", text, x, y,
 width, height, tailX?, tailY? }`. Bubbles always render above all layers.
   `x`/`y` is the bubble's top-left corner and `width`/`height` its size, in
@@ -264,8 +262,7 @@ objects[], media[] }`: the story bible plus the media registry.
 - `Character` / `ComicObject` — `{ id, name, description, imageIds[],
 sceneIds[] }`. The description carries visual continuity guidance.
 - `Scene` — `{ id, name, description, characterIds[], imageIds[] }`.
-- `MediaItem` — `{ id, name, driveFileId, url, mimeType, thumbnailDriveFileId?, subjectId?, sceneId? }`. `subjectId` is the character or object, and `sceneId` the scene, the image is art of (reference art stays in the entity's `imageIds`); `media.upload(..., { subjectId, sceneId })` and `media.update(id, { name?, subjectId?, sceneId? })` set them (`null` clears), and each must name an existing entity. `media.update` also renames the image (the Drive file keeps its uploaded name). The thumbnail is a small Drive file (about 256px on the long side; PNG if the image has transparency, else JPEG) that the UI shows instead of the full image. `media.upload` documents that the caller (an LLM) should resize the image and pass `thumbnailDataUrl`, so the media picker never has to download full images; if it is omitted the browser makes one; `media.uploadThumbnail(id, dataUrl)` adds or replaces one. `media.delete(id)` trashes both files on Drive, then removes the item, empties the `src`/`mediaId` of layers using it and drops it from `imageIds` (`src/state/media.ts`). `url` values
-  require a valid Drive access token to fetch bytes.
+- `MediaItem` — `{ id, name, fileName, mimeType, thumbnailFileName?, subjectId?, sceneId? }`. `fileName` (and `thumbnailFileName`) is the stable, backend-portable name the image is stored under in the project's storage folder, assigned once at upload from the media id; it is not a URL (see §6's "Addressing images by name"). `subjectId` is the character or object, and `sceneId` the scene, the image is art of (reference art stays in the entity's `imageIds`); `media.upload(..., { subjectId, sceneId })` and `media.update(id, { name?, subjectId?, sceneId? })` set them (`null` clears), and each must name an existing entity. `media.update` only renames the registry entry (the stored file keeps its name). The thumbnail is a small stored file (about 256px on the long side; PNG if the image has transparency, else JPEG) that the UI shows instead of the full image. `media.upload` documents that the caller (an LLM) should resize the image and pass `thumbnailDataUrl`, so the media picker never has to download full images; if it is omitted the browser makes one; `media.uploadThumbnail(id, dataUrl)` adds or replaces one. `media.delete(id)` trashes both files in storage, then removes the item, clears `mediaId` on layers using it and drops it from `imageIds` (`src/state/media.ts`).
 
 Structural validation lives in `src/state/project.ts` (`assertValidProject`,
 `createBlankProject`).
@@ -321,7 +318,7 @@ Namespaces:
   `src/state/layout.ts`.
 - `layers` — `list(panelId)`, `get(panelId, layerId)`, `add(panelId, layer)`
   (a background goes to the bottom; the image is optional, given as `mediaId`
-  or a Drive URL), `update(panelId, layerId, patch)`, `delete(panelId,
+  from a registered `MediaItem`), `update(panelId, layerId, patch)`, `delete(panelId,
 layerId)`, `move(panelId, layerId, "top" | "bottom" | "up" | "down" |
 index)`, `size(panelId, layerId)` (the size to generate the art at: the
   panel's for a background, `width` × `aspectRatio` for a foreground layer)
@@ -409,11 +406,13 @@ they cannot drift from the code.
   at Google (full sign-out).
 - **Folder layout:** one folder per project (named after the project),
   containing `project.json` and uploaded artwork. Artwork is uploaded via
-  `uploadImage()` and registered as `MediaItem`s; every image is a Drive file. Layers store its
-  Drive URL. Because Drive needs the access token, `useDriveImage` fetches
-  the bytes once (`loadBlobUrl`) and shows them from a blob URL. Character
-  reference images are uploaded from the Cast & Props and Scenes tabs via
-  `media.upload` and shown as blob-URL thumbnails (the media thumbnail, `thumbnailDriveFileId`).
+  `uploadImage()` and registered as `MediaItem`s, each named by its stable
+  `fileName` (see §6's "Addressing images by name"); a layer holds only the
+  `mediaId` pointing at one. Because Drive needs the access token, `useDriveImage`
+  fetches the bytes once (`loadBlobUrl`) and shows them from a blob URL.
+  Character reference images are uploaded from the Cast & Props and Scenes
+  tabs via `media.upload` and shown as blob-URL thumbnails (the media
+  thumbnail, `thumbnailFileName`).
 - **One implementation for the page and the CLI:** the Drive REST calls
   (`driveRest.ts`) and the OAuth device-flow requests (`deviceOAuth.ts`) use no
   browser APIs; the access token and `fetch` are injected. `driveClient.ts` binds
@@ -449,11 +448,11 @@ runs it locally (default `0.0.0.0:8081`; `npm run dev` is fixed to
 **Pluggable backends.** `src/storage/backend.ts` defines `StorageBackendImpl`:
 the shape any project store must implement (`listProjectFolders`,
 `ensureProjectFolder`, `uploadImage`, `trashFile`, `downloadFile`,
-`saveProjectJson`, `loadProjectFile`, `fileUrl`, `hasAccess`, `disconnect`,
-plus a display `label`). Each backend's own module builds and exports one:
-`driveClient.ts`'s `driveBackend` binds it to Drive's REST calls and the
-page's in-memory token; `serverClient.ts`'s `serverBackend` binds it to
-`serverRest.ts`'s calls and a base URL checked once against `GET /health`
+`findFileByName`, `saveProjectJson`, `loadProjectFile`, `hasAccess`,
+`disconnect`, plus a display `label`). Each backend's own module builds and
+exports one: `driveClient.ts`'s `driveBackend` binds it to Drive's REST calls
+and the page's in-memory token; `serverClient.ts`'s `serverBackend` binds it
+to `serverRest.ts`'s calls and a base URL checked once against `GET /health`
 (remembered in `localStorage` since it is not a secret, but only to prefill
 the connect screen's field next time; the app never reconnects on its own).
 `src/storage/activeBackend.ts` holds a `REGISTRY: Record<StorageBackend,
@@ -466,15 +465,21 @@ adding a third backend means writing a new module that implements
 `StorageBackendImpl`, adding one line to `REGISTRY` and to the `StorageBackend`
 union, and giving the splash screen a way to connect it. Nothing else changes.
 
-One seam outside that registry: `MediaHost.fileUrl` (`src/ai/storageDeps.ts`)
-is the URL wrapper an uploaded file's `MediaItem.url` gets, since Drive's and
-a server's canonical file URLs behave differently. Drive's `driveFileUrl(id)`
-string is never fetched literally (`useDriveImage` extracts the id back out
-of it and downloads with the access token); a server's is a plain URL it
-answers directly with no auth, so `useDriveImage` returns it unchanged for
-anything that is not a recognized Drive URL, no fetch needed. App.tsx passes
-`activeBackend.ts`'s `fileUrl` in; the CLI (Drive-only) leaves it out and gets
-`driveFileUrl` by default.
+**Addressing images by name, not URL.** A `MediaItem`'s `fileName` (and
+`thumbnailFileName`) is the stable, backend-portable name it is stored under
+in the project's storage folder, assigned once at upload
+(`src/ai/storageDeps.ts`) from the media id and never changed — never a raw
+URL or a backend's own opaque file id. To read the bytes, the active
+backend's `findFileByName(folderId, name)` resolves that name to whatever the
+backend addresses it by internally (a Drive file id, or the server's own
+generated id), and `downloadFile` fetches it with that id
+(`src/components/mediaImages.ts`, `src/ai/storageDeps.ts`). `project.json`
+itself never stores that resolved id, so moving a project's files between
+backends needs no rewriting of the file: copy the bytes under matching names
+to the other backend and the same `fileName` values resolve there too. A
+layer holds no image reference of its own beyond `mediaId`, pointing at the
+`MediaItem`; `Layer.src` and any backend-specific id on a `MediaItem` are
+gone.
 
 The CLI does not support the server backend (`connectStorageWithServer` is a
 stub there that points at `vibecomics auth login`): it stays Drive-only.
@@ -578,7 +583,7 @@ runs the CLI. Other scripts:
 `npm run lint` (oxlint) and `npm test` (runs the extractor, then
 `scripts/run-tests.mjs`, which bundles every `src/**/*.test.ts` with esbuild and
 runs it with Node's built-in test runner; the tests cover the pure code: panel
-layout geometry, Drive URL parsing, and project validation and normalization,
+layout geometry, and project validation and normalization,
 plus the CLI end to end against an in-memory fake of Google's OAuth and Drive
 endpoints, `src/cli/testing/fakeGoogle.ts`). Formatting: Prettier config in `.prettierrc.json` (single quotes, semicolons, 2-space,
 100 col, es5 trailing commas); `npm run format` / `npm run format:check`;
@@ -657,7 +662,8 @@ message, where, fix? }`, errors first; exposed as `project.lint()` and the
   panel layout geometry (`layout.ts`), the three-way project merge used to
   combine two systems' saves (`merge.ts`) and `useProjectSaver`.
 - `src/types/comic.ts` — the data model; `src/utils/` — small shared helpers
-  (`driveUrl.ts` builds and parses Drive URLs, `geometry.ts`, `drag.ts`, ...).
+  (`mediaKey.ts` derives the cache/lookup key for a `MediaItem` from its
+  `fileName`, `geometry.ts`, `drag.ts`, ...).
 - `*.test.ts` files sit next to the code they test (`npm test`).
 
 ## 13. The command line (`vibecomics.mjs`)

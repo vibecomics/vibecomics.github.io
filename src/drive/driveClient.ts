@@ -16,7 +16,6 @@
 
 import { getGoogleDeviceClientId, getGoogleDeviceClientSecret } from '../config';
 import type { StorageBackendImpl } from '../storage/backend';
-import { driveFileUrl } from '../utils/driveUrl';
 import { pollDeviceOnce, revokeToken, startDeviceFlow } from './deviceOAuth';
 import type { DeviceCodeInfo } from './deviceOAuth';
 import { createDriveRest } from './driveRest';
@@ -146,9 +145,9 @@ export const driveBackend: StorageBackendImpl = {
   uploadImage: drive.uploadImage,
   trashFile: drive.trashFile,
   downloadFile: drive.downloadFile,
+  findFileByName: drive.findFileByName,
   saveProjectJson: drive.saveProjectJson,
   loadProjectFile: drive.loadProjectFile,
-  fileUrl: driveFileUrl,
   hasAccess: hasDriveAccess,
   disconnect: disconnectDrive,
 };

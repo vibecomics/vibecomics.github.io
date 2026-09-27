@@ -14,14 +14,14 @@ export interface StorageBackendImpl {
   uploadImage(folderId: string, file: File, name?: string): Promise<DriveFileMeta>;
   trashFile(fileId: string): Promise<void>;
   downloadFile(fileId: string): Promise<Blob>;
+  /** The file named `name` directly inside the project folder, or undefined when there is none. */
+  findFileByName(folderId: string, name: string): Promise<DriveFileMeta | undefined>;
   saveProjectJson(
     folderId: string,
     project: unknown,
     expectVersion?: string | null
   ): Promise<string | null>;
   loadProjectFile(folderId: string): Promise<ProjectFile>;
-  /** The canonical URL wrapper for a registered file id (see activeBackend.ts's `fileUrl` doc). */
-  fileUrl(fileId: string): string;
   /** True while this backend has a live connection. */
   hasAccess(): boolean;
   /** Drop the connection (revoking it, if the backend has something to revoke). */

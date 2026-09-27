@@ -67,6 +67,13 @@ export function createServerRest({ getBaseUrl, fetch: fetchImpl = fetch }: Serve
       return (await res.json()) as DriveFileMeta;
     },
 
+    /** The file named `name` in the project folder, or undefined when there is none. */
+    async findFileByName(folderId: string, name: string): Promise<DriveFileMeta | undefined> {
+      const res = await serverRequest(`/projects/${encodeURIComponent(folderId)}/files`);
+      const files = (await res.json()) as DriveFileMeta[];
+      return files.findLast((f) => f.name === name);
+    },
+
     /** Move a file to its project's trash. A file that is already gone counts as trashed. */
     async trashFile(fileId: string): Promise<void> {
       try {

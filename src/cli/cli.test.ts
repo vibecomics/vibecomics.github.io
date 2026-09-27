@@ -237,8 +237,8 @@ test('media: upload a file with a thumbnail, look at it, delete it', async () =>
   const item = uploaded.json();
   assert.equal(item.name, 'hero.png');
   assert.equal(item.mimeType, 'image/png');
-  assert.ok(item.thumbnailDriveFileId);
-  assert.deepEqual(google.file(item.driveFileId)!.content, PNG);
+  assert.ok(item.thumbnailFileName);
+  assert.deepEqual(google.fileNamed(item.fileName)!.content, PNG);
   assert.equal((await run('media', 'list')).json().length, 1);
 
   const downloaded = await run('media', 'download', item.id, '--out', 'copy.png');
@@ -250,12 +250,12 @@ test('media: upload a file with a thumbnail, look at it, delete it', async () =>
   // Without a thumbnail the upload works, and stderr says how to add one (stdout stays pure JSON).
   const named = await run('media', 'upload', 'hero.png', '--name', 'hero-front.png');
   assert.equal(named.json().name, 'hero-front.png');
-  assert.equal(named.json().thumbnailDriveFileId, undefined);
+  assert.equal(named.json().thumbnailFileName, undefined);
   assert.match(named.err, /note: this image has no thumbnail.*media uploadThumbnail/);
 
   const removed = await run('media', 'delete', item.id);
   assert.deepEqual(removed.json(), { layers: 0, entries: 0 });
-  assert.equal(google.file(item.driveFileId)!.trashed, true);
+  assert.equal(google.fileNamed(item.fileName)!.trashed, true);
 });
 
 test('JSON can come from a file with @', async () => {
@@ -483,9 +483,9 @@ test('the rest of the API works through the command line', async () => {
   // A thumbnail added later, then the whole project replaced from a file
   fs.writeFileSync(path.join(work, 'art.png'), PNG);
   const media = (await run('media', 'upload', 'art.png')).json();
-  assert.equal(media.thumbnailDriveFileId, undefined);
+  assert.equal(media.thumbnailFileName, undefined);
   const fixed = (await run('media', 'uploadThumbnail', media.id, 'art.png')).json();
-  assert.ok(fixed.thumbnailDriveFileId);
+  assert.ok(fixed.thumbnailFileName);
   assert.equal((await run('media', 'get', media.id)).json().id, media.id);
 
   const snapshot = JSON.parse(JSON.stringify(saved()));

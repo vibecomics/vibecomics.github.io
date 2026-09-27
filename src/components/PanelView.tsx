@@ -28,7 +28,7 @@ export default function PanelView({ panel, number, editing }: Props) {
     null
   );
   const layers = panel.layers.filter((layer) => layer.visible);
-  const hasArt = panel.layers.some((layer) => layer.visible && layer.src);
+  const hasArt = panel.layers.some((layer) => layer.visible && layer.mediaId);
 
   return (
     <div className="panel-canvas" ref={canvasRef}>

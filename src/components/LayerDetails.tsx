@@ -41,7 +41,7 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         value={layer.prompt ?? ''}
         placeholder="Prompt or description"
         aria-label="Layer prompt"
-        autoFocus={!layer.prompt && !layer.src}
+        autoFocus={!layer.prompt && !layer.mediaId}
         onChange={(e) => update({ prompt: e.target.value })}
       />
       {layer.dirty && (
@@ -101,9 +101,8 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
       )}
       <div className="mb-2">
         <MediaSlot
-          src={layer.src}
           item={media.find((m) => m.id === layer.mediaId)}
-          label={`${layer.src ? 'Change' : 'Add'} ${background ? 'background' : 'layer'} image`}
+          label={`${layer.mediaId ? 'Change' : 'Add'} ${background ? 'background' : 'layer'} image`}
           busy={task.busy}
           onClick={() => setPicking(true)}
         />

@@ -1,7 +1,6 @@
-import type { ComicProject, Layer, PageSize } from '../types/comic';
+import type { ComicProject, PageSize } from '../types/comic';
 import { blankMetadata, DEFAULT_PAGE_SIZE } from '../types/comic';
 import { createPanel, normalizePagePanels } from './layout';
-import { driveFileIdFromUrl, driveFileUrl } from '../utils/driveUrl';
 import { newId } from '../utils/id';
 
 export function createBlankProject(
@@ -24,17 +23,8 @@ export function normalizeProject(p: ComicProject): void {
   p.metadata.pageSize ??= { ...DEFAULT_PAGE_SIZE };
   for (const page of p.pages) {
     normalizePagePanels(page.panels);
-    const panels = page.panels;
-    panels.flatMap((panel) => panel.layers).forEach(normalizeLayerImage);
-    panels.flatMap((panel) => panel.bubbles).forEach((bubble) => (bubble.height ??= 20));
+    page.panels.flatMap((panel) => panel.bubbles).forEach((bubble) => (bubble.height ??= 20));
   }
-}
-
-/** Store every layer image as the canonical Drive URL (older projects used a separate driveFileId). */
-function normalizeLayerImage(layer: Layer & { driveFileId?: string }): void {
-  const fileId = driveFileIdFromUrl(layer.src) ?? layer.driveFileId;
-  if (fileId) layer.src = driveFileUrl(fileId);
-  delete layer.driveFileId;
 }
 
 /**
@@ -66,8 +56,8 @@ function checkMetadata(value: unknown, path: string): void {
   media.forEach((item, i) => {
     const mediaPath = `${path}.media[${i}]`;
     const record = expectRecord(item, mediaPath);
-    expectStrings(record, mediaPath, ['id', 'name', 'driveFileId', 'url', 'mimeType']);
-    optionalString(record, mediaPath, 'thumbnailDriveFileId');
+    expectStrings(record, mediaPath, ['id', 'name', 'fileName', 'mimeType']);
+    optionalString(record, mediaPath, 'thumbnailFileName');
     optionalString(record, mediaPath, 'subjectId');
     optionalString(record, mediaPath, 'sceneId');
   });
@@ -135,7 +125,7 @@ function checkPanelRect(panel: Record<string, unknown>, path: string): void {
 
 function checkLayer(value: unknown, path: string): void {
   const layer = expectRecord(value, path);
-  expectStrings(layer, path, ['id', 'name', 'src']);
+  expectStrings(layer, path, ['id', 'name']);
   if (layer.kind !== 'background' && layer.kind !== 'foreground') {
     fail(path, '"kind" must be "background" or "foreground"');
   }
@@ -150,7 +140,6 @@ function checkLayer(value: unknown, path: string): void {
   if (layer.dirty !== undefined && typeof layer.dirty !== 'boolean') {
     fail(path, '"dirty" must be a boolean');
   }
-  optionalString(layer, path, 'driveFileId');
   optionalString(layer, path, 'mediaId');
   optionalString(layer, path, 'subjectId');
   optionalString(layer, path, 'sceneId');
@@ -160,14 +149,6 @@ function checkLayer(value: unknown, path: string): void {
     !(isFiniteNumber(layer.aspectRatio) && layer.aspectRatio > 0)
   ) {
     fail(path, '"aspectRatio" must be a positive number');
-  }
-  const hasImage = layer.src !== '';
-  if (
-    hasImage &&
-    !driveFileIdFromUrl(layer.src as string) &&
-    typeof layer.driveFileId !== 'string'
-  ) {
-    fail(path, '"src" must be a Google Drive URL or empty (upload the image with media.upload)');
   }
 }
 

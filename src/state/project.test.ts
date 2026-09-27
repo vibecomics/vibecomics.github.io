@@ -4,13 +4,11 @@ import { test } from 'node:test';
 import type { ComicProject } from '../types/comic';
 import { assertValidProject, createBlankProject, normalizeProject } from './project';
 
-const DRIVE_URL = 'https://www.googleapis.com/drive/v3/files/IMG?alt=media';
-
 const layer = (overrides: Record<string, unknown> = {}) => ({
   id: 'l1',
   name: 'Layer',
   kind: 'foreground',
-  src: DRIVE_URL,
+  mediaId: 'm1',
   visible: true,
   x: 0,
   y: 0,
@@ -37,17 +35,9 @@ test('a blank project is valid and starts with one full-page panel', () => {
   assert.equal(project.pages[0].panels[0].width, 100);
 });
 
-test('layers may have a Drive image or none, but no other image source', () => {
+test('layers may have a mediaId or none', () => {
   assertValidProject(projectWith([layer()]));
-  assertValidProject(projectWith([layer({ src: '' })]));
-  assert.throws(
-    () => assertValidProject(projectWith([layer({ src: 'https://example.com/a.png' })])),
-    /Google Drive URL/
-  );
-  assert.throws(
-    () => assertValidProject(projectWith([layer({ src: 'blob:http://x/1' })])),
-    /Google Drive URL/
-  );
+  assertValidProject(projectWith([layer({ mediaId: undefined })]));
 });
 
 test('validation reports the path of the problem', () => {
@@ -67,9 +57,9 @@ test('a panel rectangle is all-or-nothing and must lie within the page', () => {
   assert.throws(() => assertValidProject(outside), /within the page/);
 });
 
-test('normalizeProject upgrades older projects', () => {
+test('normalizeProject fills in fields added after a project.json was written', () => {
   const old = projectWith(
-    [layer({ src: '', driveFileId: 'IMG' })],
+    [layer()],
     [{ id: 'b', kind: 'speech', text: 'Hi', x: 1, y: 1, width: 40 }]
   );
   old.pages.push({ id: 'p2', number: 1, title: '', panels: [] });
@@ -78,33 +68,23 @@ test('normalizeProject upgrades older projects', () => {
   assertValidProject(old);
   normalizeProject(old);
 
-  const [migrated] = old.pages[0].panels[0].layers;
-  assert.equal(migrated.src, DRIVE_URL);
-  assert.equal('driveFileId' in migrated, false);
   assert.equal(old.pages[0].panels[0].bubbles[0].height, 20);
   assert.equal(old.pages[1].panels.length, 1);
   assert.ok(old.metadata.pageSize.widthIn > 0);
 });
 
-test('normalizeProject turns a Drive share link into the canonical URL', () => {
-  const project = projectWith([layer({ src: 'https://drive.google.com/file/d/IMG/view' })]);
-  normalizeProject(project);
-  assert.equal(project.pages[0].panels[0].layers[0].src, DRIVE_URL);
-});
-
-test('a media item may carry a thumbnail Drive file id, which must be a string', () => {
+test('a media item may carry a thumbnail file name, which must be a string', () => {
   const project = createBlankProject('Test');
   project.metadata.media.push({
     id: 'm1',
     name: 'a.png',
-    driveFileId: 'F1',
-    url: DRIVE_URL,
+    fileName: 'a.png',
     mimeType: 'image/png',
-    thumbnailDriveFileId: 'T1',
+    thumbnailFileName: 'a.thumb.png',
   });
   assertValidProject(project);
-  (project.metadata.media[0] as unknown as Record<string, unknown>).thumbnailDriveFileId = 5;
-  assert.throws(() => assertValidProject(project), /thumbnailDriveFileId/);
+  (project.metadata.media[0] as unknown as Record<string, unknown>).thumbnailFileName = 5;
+  assert.throws(() => assertValidProject(project), /thumbnailFileName/);
 });
 
 test('pages and panels may have a prompt, which must be text', () => {

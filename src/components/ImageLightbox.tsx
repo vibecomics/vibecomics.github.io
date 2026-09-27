@@ -25,7 +25,7 @@ export default function ImageLightbox({ items, start, onClose }: Props) {
   useEffect(() => {
     if (!item) return;
     let current = true;
-    loadBlobUrl(item.driveFileId).then(
+    loadBlobUrl(item).then(
       (url) => current && setLoaded({ id: item.id, url }),
       () => current && setLoaded({ id: item.id, url: null })
     );

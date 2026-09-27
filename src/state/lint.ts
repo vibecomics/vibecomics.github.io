@@ -1,12 +1,11 @@
 /**
  * Checks a project for problems that do not stop it from opening but make it wrong or hard to work
- * with: references to things that no longer exist, images that disagree with the layers using them,
- * names that are duplicated or say nothing. Pure and read-only, so the editor, the API and the CLI
- * all use it. `assertValidProject` (project.ts) is the other check: it decides whether a file can
- * be opened at all, while lint never blocks opening or saving.
+ * with: references to things that no longer exist, names that are duplicated or say nothing. Pure
+ * and read-only, so the editor, the API and the CLI all use it. `assertValidProject` (project.ts)
+ * is the other check: it decides whether a file can be opened at all, while lint never blocks
+ * opening or saving.
  */
 import type { ComicProject, Layer } from '../types/comic';
-import { driveFileIdFromUrl } from '../utils/driveUrl';
 import type { Where } from './merge';
 
 export type LintSeverity = 'error' | 'warning' | 'info';
@@ -69,7 +68,6 @@ export function lintProject(project: ComicProject): LintFinding[] {
   const scenes = metadata.scenes;
   const media = metadata.media;
   const mediaById = new Map(media.map((item) => [item.id, item]));
-  const mediaByFile = new Map(media.map((item) => [item.driveFileId, item]));
   const characterIds = new Set(characters.map((c) => c.id));
   const subjectIds = new Set([...characters, ...objects].map((e) => e.id));
   const sceneIds = new Set(scenes.map((s) => s.id));
@@ -196,27 +194,11 @@ export function lintProject(project: ComicProject): LintFinding[] {
     }
 
     const registered = layer.mediaId === undefined ? undefined : mediaById.get(layer.mediaId);
-    const fileId = layer.src ? driveFileIdFromUrl(layer.src) : null;
     if (layer.mediaId !== undefined && !registered) {
       add({
         code: 'missing-media',
         severity: 'error',
         message: `${label} uses image ${layer.mediaId}, which is not in the project's images. Pick another image with layers.update (mediaId).`,
-        where,
-      });
-    } else if (registered && layer.src && fileId !== registered.driveFileId) {
-      add({
-        code: 'image-mismatch',
-        severity: 'error',
-        message: `${label} says it uses ${quoted(registered.name)} (${registered.id}) but its src is a different file.`,
-        where,
-        fix: { call: 'layers.update', args: [panelId, layer.id, { mediaId: registered.id }] },
-      });
-    } else if (layer.mediaId === undefined && fileId && !mediaByFile.has(fileId)) {
-      add({
-        code: 'unregistered-image',
-        severity: 'error',
-        message: `${label} shows a Drive file that is not in the project's images. Upload it with media.upload and set mediaId.`,
         where,
       });
     }
@@ -229,7 +211,7 @@ export function lintProject(project: ComicProject): LintFinding[] {
         where,
       });
     }
-    if (!layer.src && !layer.prompt?.trim()) {
+    if (!layer.mediaId && !layer.prompt?.trim()) {
       add({
         code: 'empty-layer',
         severity: 'info',
@@ -380,9 +362,6 @@ export function lintProject(project: ComicProject): LintFinding[] {
   const placed = new Set<string>();
   for (const { layer } of layers) {
     if (layer.mediaId) placed.add(layer.mediaId);
-    const file = layer.src ? driveFileIdFromUrl(layer.src) : null;
-    const item = file ? mediaByFile.get(file) : undefined;
-    if (item) placed.add(item.id);
   }
   const inReferences = new Map<string, Set<string>>();
   for (const entry of [...characters, ...objects, ...scenes]) {
@@ -435,7 +414,7 @@ export function lintProject(project: ComicProject): LintFinding[] {
         where,
       });
     }
-    if (!item.thumbnailDriveFileId) {
+    if (!item.thumbnailFileName) {
       add({
         code: 'missing-thumbnail',
         severity: 'warning',

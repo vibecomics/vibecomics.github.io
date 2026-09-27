@@ -11,7 +11,6 @@ const layer = (id: string, name: string, extra: Partial<Layer> = {}): Layer => (
   id,
   name,
   kind: 'foreground',
-  src: '',
   visible: true,
   x: 0,
   y: 0,
@@ -480,9 +479,7 @@ test('property: merging is the same whichever side is "ours" when nothing confli
 
 test('a layer or image subject merges like any other field, and can be cleared', () => {
   const b = base();
-  b.metadata.media = [
-    { id: 'm1', name: 'run.png', driveFileId: 'F1', url: 'u', mimeType: 'image/png' },
-  ];
+  b.metadata.media = [{ id: 'm1', name: 'run.png', fileName: 'run.png', mimeType: 'image/png' }];
   const mine = clone(b);
   const theirs = clone(b);
   mine.pages[1].panels[0].layers[0].subjectId = 'c1';

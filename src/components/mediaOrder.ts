@@ -1,5 +1,5 @@
 import type { ComicProject, MediaItem } from '../types/comic';
-import { driveFileIdFromUrl } from '../utils/driveUrl';
+import { mediaKey } from '../utils/mediaKey';
 import type { MediaInfo } from './mediaImages';
 
 /** The character or object a layer shows, or the scene a background is set in, and what the project says about its images. */
@@ -26,17 +26,13 @@ export type MediaPreference = MediaShapePreference & {
   subject?: Subject;
 };
 
-/** Ids of the images that some layer of the project uses, by media id or by Drive URL. */
+/** Ids of the images that some layer of the project uses. */
 export function placedMediaIds(project: ComicProject): Set<string> {
-  const byFile = new Map(project.metadata.media.map((item) => [item.driveFileId, item.id]));
   const placed = new Set<string>();
   for (const page of project.pages) {
     for (const panel of page.panels) {
       for (const layer of panel.layers) {
         if (layer.mediaId) placed.add(layer.mediaId);
-        const fileId = layer.src ? driveFileIdFromUrl(layer.src) : null;
-        const id = fileId && byFile.get(fileId);
-        if (id) placed.add(id);
       }
     }
   }
@@ -114,7 +110,7 @@ export function groupMedia(
     } else if (!infos) {
       shapeGroups[0].items.push(item);
     } else {
-      const info = infos.get(item.driveFileId);
+      const info = infos.get(mediaKey(item));
       let rank: number;
       if (prefer.kind === 'background') {
         rank = !info || info.transparent ? 2 : fits(info, prefer.aspectRatio) ? 0 : 1;
@@ -161,13 +157,11 @@ export function searchTextByMedia(project: ComicProject): Map<string, string> {
       if (owner) add(item.id, owner.name);
     }
   }
-  const byFile = new Map(project.metadata.media.map((item) => [item.driveFileId, item.id]));
   for (const page of project.pages) {
     for (const panel of page.panels) {
       for (const layer of panel.layers) {
         if (DEFAULT_LAYER_NAMES.has(normalizeText(layer.name))) continue;
-        const fileId = layer.src ? driveFileIdFromUrl(layer.src) : null;
-        add(layer.mediaId ?? (fileId ? byFile.get(fileId) : undefined), layer.name);
+        add(layer.mediaId, layer.name);
       }
     }
   }

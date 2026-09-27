@@ -6,7 +6,7 @@ import { loadBlobUrl } from './mediaImages';
 /** Width / height of a media item's image. */
 async function imageAspect(item: MediaItem): Promise<number> {
   const image = new Image();
-  image.src = await loadBlobUrl(item.driveFileId);
+  image.src = await loadBlobUrl(item);
   await image.decode();
   return Math.round((image.naturalWidth / image.naturalHeight) * 1000) / 1000;
 }

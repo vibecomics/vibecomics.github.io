@@ -1,6 +1,17 @@
-import { downloadFile } from '../storage/activeBackend';
+import { downloadFile, findFileByName, getCurrentFolderId } from '../storage/activeBackend';
 import type { MediaItem } from '../types/comic';
 import { createBlobStore } from '../utils/blobStore';
+import { mediaKey } from '../utils/mediaKey';
+import type { FileRef } from '../utils/mediaKey';
+
+/** The backend id for a file ref's stable name, resolved by listing the open project's folder. */
+async function resolveFileId(ref: FileRef): Promise<string> {
+  const folderId = getCurrentFolderId();
+  if (!folderId) throw new Error('No project folder is open.');
+  const found = await findFileByName(folderId, ref.fileName);
+  if (!found) throw new Error(`No file named "${ref.fileName}" in this project.`);
+  return found.id;
+}
 
 const blobUrls = new Map<string, Promise<string>>();
 
@@ -66,10 +77,10 @@ function isRetryable(error: unknown): boolean {
   return /Drive API error (429|5\d\d)/.test(message) || /rate ?limit|quota/i.test(message);
 }
 
-async function downloadWithRetry(driveFileId: string): Promise<Blob> {
+async function downloadWithRetry(ref: FileRef): Promise<Blob> {
   for (let attempt = 1; ; attempt++) {
     try {
-      return await downloadFile(driveFileId);
+      return await downloadFile(await resolveFileId(ref));
     } catch (e) {
       if (attempt >= MAX_ATTEMPTS || !isRetryable(e)) throw e;
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * 2 ** (attempt - 1)));
@@ -78,43 +89,46 @@ async function downloadWithRetry(driveFileId: string): Promise<Blob> {
 }
 
 /**
- * Drive URLs need an auth header, so images are fetched once and shown from blob URLs. `low`
- * priority is for work nobody is looking at; asking for the same file at `high` speeds it up.
+ * A registered file's bytes as a blob URL, fetched once and cached: on Drive that avoids sending
+ * the access token to an `<img>` tag, and on any backend it avoids resolving the stable name to a
+ * backend id on every access. `low` priority is for work nobody is looking at; asking for the same
+ * file at `high` speeds it up.
  */
-export function loadBlobUrl(driveFileId: string, priority: Priority = 'high'): Promise<string> {
-  let url = blobUrls.get(driveFileId);
+export function loadBlobUrl(ref: FileRef, priority: Priority = 'high'): Promise<string> {
+  const key = mediaKey(ref);
+  let url = blobUrls.get(key);
   if (url) {
     if (priority === 'high') {
-      for (const job of queue) if (job.id === driveFileId) job.priority = 'high';
+      for (const job of queue) if (job.id === key) job.priority = 'high';
     }
     return url;
   }
   url = (async () => {
     // A kept copy needs no download, so it does not wait in the download queue.
-    const kept = await store.get(driveFileId);
+    const kept = await store.get(key);
     if (kept) return URL.createObjectURL(kept);
-    const blob = await schedule(driveFileId, priority, () => downloadWithRetry(driveFileId));
-    void store.put(driveFileId, blob);
+    const blob = await schedule(key, priority, () => downloadWithRetry(ref));
+    void store.put(key, blob);
     return URL.createObjectURL(blob);
   })();
-  url.catch(() => blobUrls.delete(driveFileId));
-  blobUrls.set(driveFileId, url);
+  url.catch(() => blobUrls.delete(key));
+  blobUrls.set(key, url);
   return url;
 }
 
 /** An image as shown in lists and pickers: its thumbnail, or the full image when it has none or the thumbnail cannot be loaded. */
 export async function loadDisplayUrl(
-  item: Pick<MediaItem, 'driveFileId' | 'thumbnailDriveFileId'>,
+  item: Pick<MediaItem, 'fileName' | 'thumbnailFileName'>,
   priority: Priority = 'high'
 ): Promise<string> {
-  if (item.thumbnailDriveFileId) {
+  if (item.thumbnailFileName) {
     try {
-      return await loadBlobUrl(item.thumbnailDriveFileId, priority);
+      return await loadBlobUrl({ fileName: item.thumbnailFileName }, priority);
     } catch {
       // Fall through to the full image.
     }
   }
-  return loadBlobUrl(item.driveFileId, priority);
+  return loadBlobUrl(item, priority);
 }
 
 /**
@@ -122,12 +136,12 @@ export async function loadDisplayUrl(
  * blob URL of the downloaded bytes; the tab is opened first, inside the click, so pop-up blockers
  * allow it. Throws when the browser blocks the tab.
  */
-export function openInNewTab(item: Pick<MediaItem, 'driveFileId' | 'name'>): void {
+export function openInNewTab(item: Pick<MediaItem, 'fileName' | 'name'>): void {
   const tab = window.open('', '_blank');
   if (!tab) throw new Error('The browser blocked the new tab. Allow pop-ups for this site.');
   tab.document.title = item.name;
   tab.document.body.textContent = 'Loading image…';
-  loadBlobUrl(item.driveFileId).then(
+  loadBlobUrl(item).then(
     (url) => {
       tab.location.href = url;
     },
@@ -166,15 +180,16 @@ function hasTransparency(image: HTMLImageElement): boolean {
 }
 
 /** The info of an image that has already been read, else undefined. */
-export function cachedMediaInfo(driveFileId: string): MediaInfo | undefined {
-  return infos.get(driveFileId);
+export function cachedMediaInfo(key: string): MediaInfo | undefined {
+  return infos.get(key);
 }
 
 /** Read an image's shape and transparency (once per file), from its thumbnail when it has one. */
 export function loadMediaInfo(
-  item: Pick<MediaItem, 'driveFileId' | 'thumbnailDriveFileId' | 'mimeType'>
+  item: Pick<MediaItem, 'fileName' | 'thumbnailFileName' | 'mimeType'>
 ): Promise<MediaInfo> {
-  let info = pendingInfos.get(item.driveFileId);
+  const key = mediaKey(item);
+  let info = pendingInfos.get(key);
   if (!info) {
     info = (async () => {
       const image = new Image();
@@ -184,11 +199,11 @@ export function loadMediaInfo(
         aspect: Math.round((image.naturalWidth / image.naturalHeight) * 1000) / 1000,
         transparent: MIME_WITH_ALPHA.test(item.mimeType) && hasTransparency(image),
       };
-      infos.set(item.driveFileId, result);
+      infos.set(key, result);
       return result;
     })();
-    info.catch(() => pendingInfos.delete(item.driveFileId));
-    pendingInfos.set(item.driveFileId, info);
+    info.catch(() => pendingInfos.delete(key));
+    pendingInfos.set(key, info);
   }
   return info;
 }

@@ -6,11 +6,9 @@ export interface Layer {
   name: string;
   kind: LayerKind;
   /**
-   * Google Drive URL of the layer's image (images are never stored anywhere
-   * else), or '' while the layer has none yet: a layer can start as just a prompt.
+   * Id of the MediaItem this layer's artwork came from, absent while the layer has none yet: a
+   * layer can start as just a prompt.
    */
-  src: string;
-  /** Id of the MediaItem this layer's artwork came from. */
   mediaId?: string;
   /** Id of the character or object this layer shows; the media picker lists that subject's art first. */
   subjectId?: string;
@@ -106,20 +104,23 @@ export interface ComicPage {
   panels: Panel[];
 }
 
-/** One file in the project's media registry (lives in the Drive project folder). */
+/** One file in the project's media registry (lives in the project's storage folder). */
 export interface MediaItem {
   id: string;
   name: string;
-  driveFileId: string;
-  /** Drive URL for the file; fetching its bytes needs a valid Drive access token. */
-  url: string;
+  /**
+   * The stable, backend-portable name this image is stored under in the project's storage folder
+   * (e.g. Drive's file name, or the storage server's file name), assigned once at upload and never
+   * changed. Resolve it to bytes with media.download; it is not a URL.
+   */
+  fileName: string;
   /** e.g. "image/png" */
   mimeType: string;
   /**
-   * Drive file id of a small copy of the image (about 256px on its long side) that the UI shows
+   * The stable name of a small copy of the image (about 256px on its long side) that the UI shows
    * in lists and pickers instead of the full file. Absent when none was made.
    */
-  thumbnailDriveFileId?: string;
+  thumbnailFileName?: string;
   /**
    * Id of the character or object this image is art of (not its reference art: that is the
    * entity's `imageIds`). The media picker lists a subject's art first.

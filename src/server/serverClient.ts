@@ -85,9 +85,9 @@ export const serverBackend: StorageBackendImpl = {
   uploadImage: rest.uploadImage,
   trashFile: rest.trashFile,
   downloadFile: rest.downloadFile,
+  findFileByName: rest.findFileByName,
   saveProjectJson: rest.saveProjectJson,
   loadProjectFile: rest.loadProjectFile,
-  fileUrl: (fileId) => `${getServerUrl()}/files/${encodeURIComponent(fileId)}`,
   hasAccess: hasServerAccess,
   disconnect: disconnectServer,
 };

@@ -48,7 +48,7 @@ export interface ComicBuilderDeps {
   downloadStorageMedia(id: string): Promise<{ name: string; mimeType: string; dataUrl: string }>;
 }
 
-/** Input for layers.add(). Geometry is in % of panel size; the image is a mediaId or a Drive URL src, or omitted for a layer that is only a prompt so far. */
+/** Input for layers.add(). Geometry is in % of panel size; the image is a mediaId, or omitted for a layer that is only a prompt so far. */
 export type LayerInput = Partial<Omit<Layer, 'id'>>;
 /** Patch for layers.update(). Only the given fields change. */
 export type LayerPatch = Partial<Omit<Layer, 'id'>>;

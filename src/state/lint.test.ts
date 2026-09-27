@@ -6,15 +6,12 @@ import { lintErrors, lintProject } from './lint';
 import type { LintFinding } from './lint';
 import { createBlankProject } from './project';
 
-const fileUrl = (id: string) => `https://www.googleapis.com/drive/v3/files/${id}?alt=media`;
-
 const media = (id: string, name: string, extra: Partial<MediaItem> = {}): MediaItem => ({
   id,
   name,
-  driveFileId: `F-${id}`,
-  url: fileUrl(`F-${id}`),
+  fileName: `${id}.png`,
   mimeType: 'image/png',
-  thumbnailDriveFileId: `T-${id}`,
+  thumbnailFileName: `${id}.thumb.png`,
   ...extra,
 });
 
@@ -22,7 +19,6 @@ const layer = (id: string, name: string, extra: Partial<Layer> = {}): Layer => (
   id,
   name,
   kind: 'foreground',
-  src: '',
   prompt: `${name} prompt`,
   visible: true,
   x: 0,
@@ -66,13 +62,11 @@ function tidy(): ComicProject {
   project.pages[0].panels[0].layers = [
     layer('l-bg', 'Background', {
       kind: 'background',
-      src: fileUrl('F-m-bg'),
       mediaId: 'm-bg',
       sceneId: 'scene-roof',
       width: 100,
     }),
     layer('l-mara', 'Mara running', {
-      src: fileUrl('F-m-art'),
       mediaId: 'm-art',
       subjectId: 'char-mara',
     }),
@@ -157,24 +151,12 @@ test('references to images and links that do not exist are errors with a fix tha
   ]);
 });
 
-test('a layer whose image is not what it says is an error', () => {
+test('a layer whose mediaId names an image that is not registered is an error', () => {
   const project = tidy();
   layers(project)[1].mediaId = 'm-gone';
-  layers(project)[0].src = fileUrl('F-other');
-  let findings = lintProject(project);
-  assert.deepEqual(codes(findings).sort(), ['image-mismatch', 'missing-media']);
-  assert.deepEqual(find(findings, 'image-mismatch')[0].fix, {
-    call: 'layers.update',
-    args: [project.pages[0].panels[0].id, 'l-bg', { mediaId: 'm-bg' }],
-  });
+  const findings = lintProject(project);
+  assert.deepEqual(codes(findings), ['missing-media']);
   assert.equal(find(findings, 'missing-media')[0].fix, undefined);
-
-  // A Drive image that was never registered
-  const other = tidy();
-  delete layers(other)[1].mediaId;
-  layers(other)[1].src = fileUrl('F-unregistered');
-  findings = lintProject(other);
-  assert.deepEqual(codes(findings), ['unregistered-image']);
 });
 
 test('duplicate ids are errors', () => {
@@ -218,9 +200,7 @@ test('duplicate names are warnings, whatever the case or spacing', () => {
 test('default names, a missing thumbnail and an unused image are warnings', () => {
   const project = tidy();
   layers(project)[1].name = 'Layer 3';
-  project.metadata.media.push(
-    media('m-img', 'image_2384.png', { thumbnailDriveFileId: undefined })
-  );
+  project.metadata.media.push(media('m-img', 'image_2384.png', { thumbnailFileName: undefined }));
   const findings = lintProject(project);
   assert.deepEqual(codes(findings).sort(), [
     'default-image-name',

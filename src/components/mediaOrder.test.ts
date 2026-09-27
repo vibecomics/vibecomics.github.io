@@ -18,8 +18,7 @@ import {
 const item = (id: string): MediaItem => ({
   id,
   name: id,
-  driveFileId: id,
-  url: '',
+  fileName: id,
   mimeType: 'image/png',
 });
 
@@ -82,7 +81,6 @@ function castProject(): ComicProject {
   const project = createBlankProject('Test');
   const media = (id: string, extra: Partial<MediaItem> = {}): MediaItem => ({
     ...item(id),
-    url: `https://www.googleapis.com/drive/v3/files/${id}?alt=media`,
     ...extra,
   });
   project.metadata.media = [
@@ -112,7 +110,6 @@ function castProject(): ComicProject {
       id: 'l1',
       name: 'Mara at the gate',
       kind: 'foreground',
-      src: project.metadata.media[2].url,
       mediaId: 'used',
       visible: true,
       x: 0,
@@ -125,7 +122,7 @@ function castProject(): ComicProject {
       id: 'l2',
       name: 'Layer',
       kind: 'foreground',
-      src: project.metadata.media[5].url,
+      mediaId: 'other',
       visible: true,
       x: 0,
       y: 0,
@@ -137,7 +134,7 @@ function castProject(): ComicProject {
   return project;
 }
 
-test('placedMediaIds counts an image used by media id or by its Drive URL', () => {
+test('placedMediaIds counts every image a layer uses by its mediaId', () => {
   assert.deepEqual([...placedMediaIds(castProject())].sort(), ['other', 'used']);
 });
 

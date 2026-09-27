@@ -82,8 +82,8 @@ export default function LayerRow({
           onClick={onSelect}
         >
           {background ? 'Background' : layer.name}
-          {(background || !layer.src) && (
-            <span className="text-muted ms-2">{layer.src ? layer.name : 'no image'}</span>
+          {(background || !layer.mediaId) && (
+            <span className="text-muted ms-2">{layer.mediaId ? layer.name : 'no image'}</span>
           )}
         </button>
         {layer.dirty && (

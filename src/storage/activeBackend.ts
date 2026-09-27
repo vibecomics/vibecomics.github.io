@@ -22,6 +22,8 @@ const REGISTRY: Record<StorageBackend, StorageBackendImpl> = {
 };
 
 let active: StorageBackend | null = null;
+/** The open project's folder id, so code with no access to it (mediaImages.ts) can still resolve a file by name. */
+let currentFolderId: string | null = null;
 
 export function getActiveBackend(): StorageBackend | null {
   return active;
@@ -29,6 +31,14 @@ export function getActiveBackend(): StorageBackend | null {
 
 export function setActiveBackend(kind: StorageBackend | null): void {
   active = kind;
+}
+
+export function getCurrentFolderId(): string | null {
+  return currentFolderId;
+}
+
+export function setCurrentFolderId(folderId: string | null): void {
+  currentFolderId = folderId;
 }
 
 function current(): StorageBackendImpl {
@@ -59,6 +69,11 @@ export const trashFile = (fileId: string): Promise<void> => current().trashFile(
 
 export const downloadFile = (fileId: string): Promise<Blob> => current().downloadFile(fileId);
 
+export const findFileByName = (
+  folderId: string,
+  name: string
+): Promise<DriveFileMeta | undefined> => current().findFileByName(folderId, name);
+
 export const saveProjectJson = (
   folderId: string,
   project: unknown,
@@ -67,14 +82,6 @@ export const saveProjectJson = (
 
 export const loadProjectFile = (folderId: string): Promise<ProjectFile> =>
   current().loadProjectFile(folderId);
-
-/**
- * The URL a registered image is fetched through: on Drive this is the file's canonical
- * `driveFileUrl` wrapper (never fetched literally: `useDriveImage` extracts the id and downloads it
- * with the access token); on a storage server it is a plain URL the server answers directly, with no
- * auth, so it doubles as something an `<img>` can load once connected.
- */
-export const fileUrl = (fileId: string): string => current().fileUrl(fileId);
 
 /** A human label for status messages ("Saved to Google Drive.", "Refresh from the storage server"). */
 export const backendLabel = (kind: StorageBackend | null = active): string =>

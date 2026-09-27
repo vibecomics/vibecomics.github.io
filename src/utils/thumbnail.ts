@@ -1,10 +1,14 @@
 /** Longest side, in pixels, of a generated thumbnail. */
 export const THUMBNAIL_SIZE = 256;
 
+/** The file extension for a mime type, e.g. "image/jpeg" -> "jpg". */
+export function extensionForMimeType(mimeType: string): string {
+  return mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1] || 'png';
+}
+
 /** The file name for the thumbnail of `name`, e.g. "hero.png" -> "hero.thumb.png". */
 export function thumbnailName(name: string, mimeType: string): string {
-  const extension = mimeType === 'image/jpeg' ? 'jpg' : mimeType.split('/')[1] || 'png';
-  return `${name.replace(/\.[^.]+$/, '')}.thumb.${extension}`;
+  return `${name.replace(/\.[^.]+$/, '')}.thumb.${extensionForMimeType(mimeType)}`;
 }
 
 /**
