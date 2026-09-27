@@ -1,3 +1,5 @@
+import Spinner from './Spinner';
+
 interface Props {
   label: string;
   busy?: boolean;
@@ -9,6 +11,7 @@ interface Props {
 export default function FileButton({ label, busy = false, multiple = false, onFiles }: Props) {
   return (
     <label className={`btn btn-outline-secondary btn-sm${busy ? ' disabled' : ''}`}>
+      {busy && <Spinner />}
       {busy ? 'Uploading…' : label}
       <input
         type="file"

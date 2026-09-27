@@ -1,10 +1,17 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
 import type { DeviceCodeInfo } from '../drive/driveClient';
+import Spinner from './Spinner';
+import { useBusy } from './useBusy';
 
 /** Gate shown until Drive is connected: the app has nowhere else to load or save a comic. */
 export default function SplashScreen({ deviceCode }: { deviceCode: DeviceCodeInfo | null }) {
   const [whyOpen, setWhyOpen] = useState(false);
+  const popup = useBusy();
+  const device = useBusy();
+  // The code flow keeps working after the code is shown: it waits for the approval.
+  const deviceWaiting = device.busy || deviceCode !== null;
+  const connecting = popup.busy || deviceWaiting;
 
   return (
     <div className="min-vh-100 d-flex align-items-center justify-content-center bg-body-tertiary p-3">
@@ -57,19 +64,25 @@ export default function SplashScreen({ deviceCode }: { deviceCode: DeviceCodeInf
           </div>
           <button
             className="btn btn-primary btn-lg w-100"
-            onClick={() => void cb().storage.connect()}
+            disabled={connecting}
+            onClick={() => void popup.run(() => cb().storage.connect())}
           >
+            {popup.busy && <Spinner />}
             Connect with Google Drive
           </button>
           <button
             className="btn btn-outline-primary w-100 mt-2"
             // The app reports a failed connect in a toast.
+            disabled={connecting}
             onClick={() =>
-              cb()
-                .storage.connectWithDevice()
-                .catch(() => undefined)
+              void device.run(() =>
+                cb()
+                  .storage.connectWithDevice()
+                  .catch(() => undefined)
+              )
             }
           >
+            {deviceWaiting && <Spinner />}
             Connect with a code (for AI assistants)
           </button>
           {deviceCode && (

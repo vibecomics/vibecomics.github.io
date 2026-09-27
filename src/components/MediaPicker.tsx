@@ -70,7 +70,15 @@ function Tile({ item, current, deleting, onPick, onPreview, onDelete }: TileProp
           disabled={deleting}
           onClick={() => onDelete(item)}
         >
-          <TrashIcon />
+          {deleting ? (
+            <span
+              className="spinner-border spinner-border-sm"
+              role="status"
+              aria-label="Deleting"
+            />
+          ) : (
+            <TrashIcon />
+          )}
         </button>
       </div>
     </div>

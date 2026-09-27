@@ -5,6 +5,7 @@ import ConflictDot from './ConflictDot';
 import DropdownMenu, { DropdownItem } from './DropdownMenu';
 import { EDITOR_TABS } from './editorTabs';
 import type { EditorTab } from './editorTabs';
+import { useBusy } from './useBusy';
 import RefreshButton from './RefreshButton';
 import SaveButton from './SaveButton';
 
@@ -32,6 +33,8 @@ export default function EditorNavbar({
   onRefresh,
 }: Props) {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  // Opening the project list and closing a project (which saves first) go to Drive.
+  const menuTask = useBusy();
   const menuProps = (menu: Exclude<OpenMenu, null>) => ({
     open: openMenu === menu,
     onOpenChange: (open: boolean) => setOpenMenu(open ? menu : null),
@@ -42,13 +45,24 @@ export default function EditorNavbar({
     <nav className="navbar navbar-dark bg-dark flex-nowrap gap-2 px-3">
       <DropdownMenu
         {...menuProps('main')}
-        toggle={<span className="navbar-toggler-icon" />}
+        toggleDisabled={menuTask.busy}
+        toggle={
+          menuTask.busy ? (
+            <span className="spinner-border spinner-border-sm" role="status" aria-label="Working" />
+          ) : (
+            <span className="navbar-toggler-icon" />
+          )
+        }
         toggleClassName="btn btn-outline-light btn-sm"
         toggleLabel="Menu"
       >
-        <DropdownItem onClick={() => void cb().storage.showProjects()}>Open project</DropdownItem>
+        <DropdownItem onClick={() => void menuTask.run(() => cb().storage.showProjects())}>
+          Open project
+        </DropdownItem>
         <DropdownItem onClick={() => cb().page.openPreview()}>Preview this page</DropdownItem>
-        <DropdownItem onClick={() => void cb().storage.closeProject()}>Close project</DropdownItem>
+        <DropdownItem onClick={() => void menuTask.run(() => cb().storage.closeProject())}>
+          Close project
+        </DropdownItem>
       </DropdownMenu>
 
       <span className="navbar-brand mb-0 h1 fs-5 text-truncate me-auto">{title}</span>

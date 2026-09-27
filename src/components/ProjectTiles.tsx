@@ -3,6 +3,8 @@ import type { FormEvent } from 'react';
 import { cb } from '../ai/actions';
 import type { ProjectFolder } from '../drive/driveClient';
 import { PAGE_SIZE_PRESETS } from '../types/comic';
+import Spinner from './Spinner';
+import { useBusy } from './useBusy';
 import { errorMessage } from '../utils/errors';
 
 function NewProjectModal({ onClose }: { onClose: () => void }) {
@@ -94,6 +96,13 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
 /** One card per Drive project folder, plus a dashed tile that creates a new project. */
 export default function ProjectTiles({ folders }: { folders: ProjectFolder[] }) {
   const [showNewModal, setShowNewModal] = useState(false);
+  const [openingId, setOpeningId] = useState<string | null>(null);
+  const opening = useBusy();
+
+  function open(folderId: string) {
+    setOpeningId(folderId);
+    void opening.run(() => cb().storage.openProject(folderId));
+  }
 
   return (
     <div className="min-vh-100 bg-body-tertiary">
@@ -107,8 +116,10 @@ export default function ProjectTiles({ folders }: { folders: ProjectFolder[] }) 
                   <h2 className="card-title h6 text-truncate">{folder.name}</h2>
                   <button
                     className="btn btn-primary mt-auto align-self-start"
-                    onClick={() => void cb().storage.openProject(folder.id)}
+                    disabled={opening.busy}
+                    onClick={() => open(folder.id)}
                   >
+                    {opening.busy && openingId === folder.id && <Spinner />}
                     Open
                   </button>
                 </div>
