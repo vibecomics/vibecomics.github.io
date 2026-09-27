@@ -5,14 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "node scripts/extract-docs.mjs && node scripts/build-cli.mjs && vite",
-    "build": "node scripts/extract-docs.mjs && node scripts/build-cli.mjs && tsc -b && vite build && node scripts/build-meta.mjs",
+    "build": "node scripts/extract-docs.mjs && node scripts/build-cli.mjs && node scripts/build-http-storage.mjs && tsc -b && vite build && node scripts/build-meta.mjs",
     "lint": "oxlint",
     "test": "node scripts/extract-docs.mjs && node scripts/run-tests.mjs",
     "preview": "vite preview",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "cli": "node scripts/extract-docs.mjs && node scripts/build-cli.mjs && node public/vibecomics.mjs"
+    "cli": "node scripts/extract-docs.mjs && node scripts/build-cli.mjs && node public/vibecomics.mjs",
+    "http-storage": "node http-storage/start.ts"
   },
   "lint-staged": {
     "*.{js,ts,json,css,html,md}": "prettier --write"
