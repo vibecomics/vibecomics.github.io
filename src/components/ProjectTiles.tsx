@@ -96,7 +96,7 @@ export default function ProjectTiles({ folders }: { folders: ProjectFolder[] }) 
   const [showNewModal, setShowNewModal] = useState(false);
 
   return (
-    <div className="min-vh-100 bg-light">
+    <div className="min-vh-100 bg-body-tertiary">
       <div className="container py-4">
         <h1 className="h4 mb-4">Your comics</h1>
         <div className="row g-3">

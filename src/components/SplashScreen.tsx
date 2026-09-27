@@ -7,7 +7,7 @@ export default function SplashScreen({ deviceCode }: { deviceCode: DeviceCodeInf
   const [whyOpen, setWhyOpen] = useState(false);
 
   return (
-    <div className="min-vh-100 d-flex align-items-center justify-content-center bg-light p-3">
+    <div className="min-vh-100 d-flex align-items-center justify-content-center bg-body-tertiary p-3">
       <div className="card shadow" style={{ maxWidth: 540, width: '100%' }}>
         <div className="card-body p-4">
           <img
@@ -31,7 +31,7 @@ export default function SplashScreen({ deviceCode }: { deviceCode: DeviceCodeInf
             Why do we need this access?
           </button>
           <div className={`collapse${whyOpen ? ' show' : ''}`}>
-            <div className="card card-body bg-light small mb-3">
+            <div className="card card-body bg-body-tertiary small mb-3">
               <p>
                 VibeComics is a static website: it has no server and no database of its own. Your
                 comic's <code>project.json</code> and every artwork file live in a folder on{' '}

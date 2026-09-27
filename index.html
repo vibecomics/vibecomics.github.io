@@ -6,7 +6,19 @@
     <link rel="apple-touch-icon" href="%BASE_URL%logo.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="google-site-verification" content="GUBZmRr6TcJ-H3GU6fFYoszMKIuF9AD5imbLE4zMVqc" />
+    <meta name="color-scheme" content="light dark" />
     <title>VibeComics</title>
+    <script>
+      // Follow the system's light or dark theme (Bootstrap reads data-bs-theme), before first paint.
+      (function () {
+        var query = window.matchMedia('(prefers-color-scheme: dark)');
+        function apply() {
+          document.documentElement.setAttribute('data-bs-theme', query.matches ? 'dark' : 'light');
+        }
+        apply();
+        query.addEventListener('change', apply);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

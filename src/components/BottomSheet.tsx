@@ -69,7 +69,7 @@ export default function BottomSheet({ snap, onSnapChange: setSnap, title, childr
   });
 
   return (
-    <div className="border-top bg-white shadow-sm">
+    <div className="border-top bg-body shadow-sm">
       <div
         className="px-3 pt-1 pb-2"
         style={{ touchAction: 'none', cursor: 'grab' }}

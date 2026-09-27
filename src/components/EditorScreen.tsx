@@ -38,7 +38,7 @@ export default function EditorScreen({
   onRefresh,
 }: Props) {
   return (
-    <div className="position-fixed top-0 bottom-0 start-0 end-0 d-flex flex-column bg-light">
+    <div className="position-fixed top-0 bottom-0 start-0 end-0 d-flex flex-column bg-body-tertiary">
       <EditorNavbar
         title={project.title}
         tab={tab}
@@ -49,7 +49,7 @@ export default function EditorScreen({
         onRefresh={onRefresh}
       />
 
-      <ul className="nav nav-tabs px-3 pt-2 bg-white border-bottom d-none d-md-flex mb-0">
+      <ul className="nav nav-tabs px-3 pt-2 bg-body border-bottom d-none d-md-flex mb-0">
         {EDITOR_TABS.map((t) => (
           <li className="nav-item" key={t.id}>
             <button

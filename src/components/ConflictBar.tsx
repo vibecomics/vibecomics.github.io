@@ -48,7 +48,7 @@ export default function ConflictBar({ project, conflicts, onShow, onResolve }: P
 
   return (
     <section
-      className="conflict-bar border-top border-danger border-2 bg-white flex-shrink-0"
+      className="conflict-bar border-top border-danger border-2 bg-body flex-shrink-0"
       aria-label="Conflict"
       style={{ maxHeight: '45vh', overflowY: 'auto' }}
     >
@@ -100,7 +100,7 @@ export default function ConflictBar({ project, conflicts, onShow, onResolve }: P
             ))}
           </div>
           <pre
-            className="small border rounded p-2 mb-2 bg-light"
+            className="small border rounded p-2 mb-2 bg-body-tertiary"
             style={{ whiteSpace: 'pre-wrap', maxHeight: 140, overflow: 'auto' }}
             aria-label={`${VIEWS.find((v) => v.side === view)!.label} version`}
           >

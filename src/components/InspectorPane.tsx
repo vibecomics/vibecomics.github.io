@@ -19,7 +19,7 @@ interface Props {
  */
 export default function InspectorPane({ wide, snap, onSnapChange, summary, children }: Props) {
   return wide ? (
-    <aside className="inspector col-md-4 col-xl-3 bg-white border-start overflow-auto">
+    <aside className="inspector col-md-4 col-xl-3 bg-body border-start overflow-auto">
       {children}
     </aside>
   ) : (

@@ -85,7 +85,7 @@ export default function PagesTab({ pages, pageIndex, pageSize, media, conflictPa
     <div className="d-flex flex-column flex-grow-1" style={{ minHeight: 0 }}>
       <div className="d-flex flex-grow-1" style={{ minHeight: 0 }}>
         <div
-          className="d-none d-md-flex flex-column border-end bg-white py-2"
+          className="d-none d-md-flex flex-column border-end bg-body py-2"
           style={{ width: 64, flexShrink: 0 }}
         >
           <div
@@ -184,7 +184,7 @@ export default function PagesTab({ pages, pageIndex, pageSize, media, conflictPa
         </main>
       </div>
 
-      <div className="d-md-none d-flex align-items-center gap-2 border-top bg-white py-2 px-3">
+      <div className="d-md-none d-flex align-items-center gap-2 border-top bg-body py-2 px-3">
         <div className="d-flex flex-grow-1 gap-2" style={{ minWidth: 0, overflowX: 'auto' }}>
           <PageButtons
             pages={pages}
