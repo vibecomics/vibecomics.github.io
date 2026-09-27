@@ -3,6 +3,8 @@ import type { Ref } from 'react';
 import { cb } from '../ai/actions';
 import type { ComicPage } from '../types/comic';
 import { usePointerDrag } from '../utils/drag';
+import { useDragGhost } from '../utils/dragGhost';
+import type { Point } from '../utils/dragGhost';
 import { moved, slotAt } from '../utils/reorder';
 import ConflictDot from './ConflictDot';
 
@@ -25,8 +27,8 @@ interface ButtonProps {
   conflicted: boolean;
   buttonRef: Ref<HTMLButtonElement>;
   reorder: {
-    begin: () => void;
-    update: (pointer: number) => void;
+    begin: (point: Point) => void;
+    update: (point: Point) => void;
     commit: () => void;
     cancel: () => void;
   };
@@ -53,9 +55,9 @@ function PageButton({
       if (!state.active) {
         if (Math.hypot(event.clientX - state.x, event.clientY - state.y) < DRAG_SLOP_PX) return;
         state.active = true;
-        reorder.begin();
+        reorder.begin(event);
       }
-      reorder.update(axis === 'y' ? event.clientY : event.clientX);
+      reorder.update(event);
     },
     end: (_, state) => {
       if (!state.active) return;
@@ -112,11 +114,12 @@ export default function PageButtons({ pages, pageIndex, className, axis, conflic
   const [drag, setDrag] = useState<{ id: string; over: number } | null>(null);
   const buttons = useRef(new Map<string, HTMLElement>());
   const midpoints = useRef<Array<{ id: string; mid: number }>>([]);
+  const ghost = useDragGhost();
 
   const movable = pages.slice(1);
   const shown = drag ? [pages[0], ...moved(movable, drag.id, drag.over)] : pages;
 
-  function begin(id: string) {
+  function begin(id: string, point: Point) {
     midpoints.current = movable.map((page) => {
       const box = buttons.current.get(page.id)!.getBoundingClientRect();
       return {
@@ -124,10 +127,13 @@ export default function PageButtons({ pages, pageIndex, className, axis, conflic
         mid: axis === 'y' ? (box.top + box.bottom) / 2 : (box.left + box.right) / 2,
       };
     });
+    ghost.start(buttons.current.get(id)!, point);
     setDrag({ id, over: movable.findIndex((page) => page.id === id) });
   }
 
-  function update(id: string, pointer: number) {
+  function update(id: string, point: Point) {
+    ghost.move(point);
+    const pointer = axis === 'y' ? point.clientY : point.clientX;
     const others = midpoints.current.filter((entry) => entry.id !== id);
     setDrag({
       id,
@@ -138,13 +144,18 @@ export default function PageButtons({ pages, pageIndex, className, axis, conflic
     });
   }
 
+  function cancel() {
+    ghost.stop();
+    setDrag(null);
+  }
+
   function commit() {
     if (drag) {
       const from = pages.findIndex((page) => page.id === drag.id);
       const to = drag.over + 1; // over counts the pages after the cover
       if (to !== from) cb().page.move(from, to);
     }
-    setDrag(null);
+    cancel();
   }
 
   return pages.map((page, index) => (
@@ -164,10 +175,10 @@ export default function PageButtons({ pages, pageIndex, className, axis, conflic
         else buttons.current.delete(page.id);
       }}
       reorder={{
-        begin: () => begin(page.id),
-        update: (pointer) => update(page.id, pointer),
+        begin: (point) => begin(page.id, point),
+        update: (point) => update(page.id, point),
         commit,
-        cancel: () => setDrag(null),
+        cancel,
       }}
     />
   ));

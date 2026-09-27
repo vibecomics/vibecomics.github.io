@@ -1,12 +1,13 @@
 import { cb } from '../ai/actions';
 import type { Layer, MediaItem } from '../types/comic';
 import { usePointerDrag } from '../utils/drag';
+import type { Point } from '../utils/dragGhost';
 import LayerDetails from './LayerDetails';
 import { DeleteButton, ExpandButton } from './RowButtons';
 
 interface Reorder {
-  begin: () => void;
-  update: (clientY: number) => void;
+  begin: (point: Point) => void;
+  update: (point: Point) => void;
   commit: () => void;
   cancel: () => void;
   dragging: boolean;
@@ -40,11 +41,11 @@ export default function LayerRow({
   reorder,
 }: Props) {
   const handle = usePointerDrag<object>({
-    start: () => {
-      reorder?.begin();
+    start: (event) => {
+      reorder?.begin(event);
       return reorder ? {} : null;
     },
-    move: (event) => reorder?.update(event.clientY),
+    move: (event) => reorder?.update(event),
     end: () => reorder?.commit(),
     cancel: () => reorder?.cancel(),
   });

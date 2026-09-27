@@ -1,5 +1,7 @@
 import { useRef, useState } from 'react';
 import { cb } from '../ai/actions';
+import { useDragGhost } from '../utils/dragGhost';
+import type { Point } from '../utils/dragGhost';
 import { moved, slotAt } from '../utils/reorder';
 import type { MediaItem, Panel } from '../types/comic';
 import LayerRow from './LayerRow';
@@ -19,29 +21,37 @@ export default function LayersSection({ panel, media, selection, onSelect, expan
   const [drag, setDrag] = useState<{ id: string; over: number } | null>(null);
   const rows = useRef(new Map<string, HTMLElement>());
   const midpoints = useRef<Array<{ id: string; mid: number }>>([]);
+  const ghost = useDragGhost();
 
   const foreground = panel.layers.filter((layer) => layer.kind !== 'background');
   const topFirst = [...foreground].reverse();
   const allOpen = foreground.length > 0 && foreground.every((layer) => expansion.isOpen(layer.id));
   const shown = drag ? moved(topFirst, drag.id, drag.over) : topFirst;
 
-  function begin(id: string) {
+  function begin(id: string, point: Point) {
     midpoints.current = topFirst.map((layer) => {
       const box = rows.current.get(layer.id)!.getBoundingClientRect();
       return { id: layer.id, mid: (box.top + box.bottom) / 2 };
     });
+    ghost.start(rows.current.get(id)!, point);
     setDrag({ id, over: topFirst.findIndex((layer) => layer.id === id) });
   }
 
-  function update(id: string, clientY: number) {
+  function update(id: string, point: Point) {
+    ghost.move(point);
     const others = midpoints.current.filter((row) => row.id !== id);
     setDrag({
       id,
       over: slotAt(
         others.map((row) => row.mid),
-        clientY
+        point.clientY
       ),
     });
+  }
+
+  function cancel() {
+    ghost.stop();
+    setDrag(null);
   }
 
   function commit() {
@@ -52,7 +62,7 @@ export default function LayersSection({ panel, media, selection, onSelect, expan
         cb().layers.move(panel.id, drag.id, panel.layers.indexOf(slot));
       }
     }
-    setDrag(null);
+    cancel();
   }
 
   /** Add an empty layer, open it, and let the user type its prompt; the image comes after. */
@@ -112,10 +122,10 @@ export default function LayersSection({ panel, media, selection, onSelect, expan
                 else rows.current.delete(layer.id);
               }}
               reorder={{
-                begin: () => begin(layer.id),
-                update: (clientY) => update(layer.id, clientY),
+                begin: (point) => begin(layer.id, point),
+                update: (point) => update(layer.id, point),
                 commit,
-                cancel: () => setDrag(null),
+                cancel,
                 dragging: drag?.id === layer.id,
               }}
             />
