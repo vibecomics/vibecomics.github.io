@@ -1,7 +1,23 @@
 import { downloadFile } from '../drive/driveClient';
 import type { MediaItem } from '../types/comic';
+import { createBlobStore } from '../utils/blobStore';
 
 const blobUrls = new Map<string, Promise<string>>();
+
+// Images already fetched from Drive are kept in the browser's Cache API, so a reload or a later
+// visit does not fetch them again. The oldest go when the total passes the limit.
+const store = createBlobStore(typeof caches === 'undefined' ? undefined : caches, {
+  // One cache per app, since every GitHub Pages project of a user shares one origin.
+  cacheName: `vibecomics-media:${import.meta.env.BASE_URL}`,
+  maxBytes: 250 * 1024 * 1024,
+  maxFileBytes: 30 * 1024 * 1024,
+});
+
+/** Forget every image kept in the browser: the next person to use it must not see this one's pictures. */
+export async function clearMediaCache(): Promise<void> {
+  blobUrls.clear();
+  await store.clear();
+}
 
 // Downloads go through a small queue: a picker with dozens of images must not fire them all at once
 // (Drive answers a burst with rate-limit errors). Images on screen jump ahead of background work.
@@ -73,9 +89,14 @@ export function loadBlobUrl(driveFileId: string, priority: Priority = 'high'): P
     }
     return url;
   }
-  url = schedule(driveFileId, priority, () => downloadWithRetry(driveFileId)).then((blob) =>
-    URL.createObjectURL(blob)
-  );
+  url = (async () => {
+    // A kept copy needs no download, so it does not wait in the download queue.
+    const kept = await store.get(driveFileId);
+    if (kept) return URL.createObjectURL(kept);
+    const blob = await schedule(driveFileId, priority, () => downloadWithRetry(driveFileId));
+    void store.put(driveFileId, blob);
+    return URL.createObjectURL(blob);
+  })();
   url.catch(() => blobUrls.delete(driveFileId));
   blobUrls.set(driveFileId, url);
   return url;

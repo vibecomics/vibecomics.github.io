@@ -6,6 +6,7 @@ import ConflictBar from './components/ConflictBar';
 import EditorScreen from './components/EditorScreen';
 import { initialTab } from './components/editorTabs';
 import type { EditorTab } from './components/editorTabs';
+import { clearMediaCache } from './components/mediaImages';
 import PreviewScreen from './components/PreviewScreen';
 import ProjectTiles from './components/ProjectTiles';
 import SplashScreen from './components/SplashScreen';
@@ -233,6 +234,7 @@ export default function App() {
         setDeviceCode(null);
         await saver.save();
         await disconnectDrive();
+        await clearMediaCache();
         dropProject();
         setFolders([]);
         setScreen('splash');
