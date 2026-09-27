@@ -8,7 +8,7 @@ import { uploadImage } from './panelActions';
 import { useTask } from './useTask';
 
 interface Props {
-  kind: 'characters' | 'scenes';
+  kind: 'characters' | 'scenes' | 'objects';
   entryId: string;
   imageIds: string[];
   media: MediaItem[];

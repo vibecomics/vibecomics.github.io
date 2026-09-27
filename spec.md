@@ -63,8 +63,9 @@ Google Drive API ◄── OAuth token (page memory) ── saveProjectJson()
    (Open project, Preview this page, Close project) and a picker at the
    right showing the current tab. On desktop the tabs are a tab bar. Below
    the navbar the editor has four tabs — **Outline** (page-size preset and
-   story outline), **Characters** (each with reference-image thumbnails and
-   an upload button), **Scenes**, **Pages**. The Pages tab has a page-number
+   story outline), **Cast & Props** (two lists, Characters and
+   Objects, whose entries each have a description and reference-image
+   thumbnails with an upload button), **Scenes**, **Pages**. The Pages tab has a page-number
    rail on the left for desktop with a `+` button pinned to its bottom, and a
    horizontally scrolling page-number footer on mobile with the `+` button
    at its far right. Page numbers are plain (`0`, `1`, `2`); `+` calls
@@ -164,7 +165,17 @@ Google Drive API ◄── OAuth token (page memory) ── saveProjectJson()
      new image…" button; picking or uploading closes it and shows a spinner on the thumbnail
      while it works. Images are ordered by what they are for. For a background: "Fits this
      panel" (opaque, aspect ratio within 5% of the panel's), then "Other backgrounds" (opaque),
-     then "Other images". For a layer: "Transparent images" first, then "Other images". Shape and
+     then "Other images". For a layer: "Transparent images" first, then "Other images". When the
+     layer has a **subject** (its "Shows" dropdown: a character or object) the subject's art
+     comes before all of these: "Art of Mara, not used yet" (images tagged `subjectId` = the
+     subject that no layer uses), "Art of Mara, in use" (tagged, and on some layer), then the
+     usual groups below, and last "Reference images of Mara" (the entity's `imageIds`); an image
+     both tagged and in `imageIds` counts as art. A background layer has a **scene** (its "Scene" dropdown) in place of a subject, and the picker lists that scene's art first in the same way (images tagged `sceneId`; the scene's `imageIds` are its reference images). A search box at the top (focused, debounced) filters every page: all words
+     must appear in the image's name, the names of the characters, objects and scenes it is art or
+     reference art of, or the names of layers using it (a layer still called "Layer" or
+     "Background" does not count), ignoring case and accents. Thumbnails load only when their
+     tile scrolls into view. An image uploaded from the picker of a layer with a subject is
+     tagged as that subject's art. Shape and
      transparency are read from the pixels once per file (`mediaImages.ts`), from the thumbnail when
      there is one, and not stored. The list is paged, 24 images at a time (Previous / Next and
      "Page 2 of 5" in the footer, opening on the page that holds the current image); a group cut
@@ -207,7 +218,7 @@ project folder holds exactly one `project.json`.
   panels gets one full-page panel, and panels without rectangles are stacked
   as equal rows (`normalizeProject`).
 - `Layer` — `{ id, name, kind: "background" | "foreground", src, mediaId?,
-prompt?, aspectRatio?, visible, x, y, width, rotation, opacity, flipX? }`. A layer
+prompt?, aspectRatio?, subjectId?, sceneId?, visible, x, y, width, rotation, opacity, flipX? }`. `subjectId` is the character or object a foreground layer shows and `sceneId` the scene a background is set in (`layers.update(..., { subjectId: null })` clears it); deleting that entity clears the link everywhere. A layer
   is a `prompt` (what its art should show, for whoever generates the image)
   and optionally an image, so it can exist as just a prompt (`src` is `""`)
   and get its image later. `aspectRatio` (width / height) shapes a layer
@@ -242,7 +253,7 @@ objects[], media[] }`: the story bible plus the media registry.
 - `Character` / `ComicObject` — `{ id, name, description, imageIds[],
 sceneIds[] }`. The description carries visual continuity guidance.
 - `Scene` — `{ id, name, description, characterIds[], imageIds[] }`.
-- `MediaItem` — `{ id, name, driveFileId, url, mimeType, thumbnailDriveFileId? }`. The thumbnail is a small Drive file (about 256px on the long side; PNG if the image has transparency, else JPEG) that the UI shows instead of the full image. `media.upload` documents that the caller (an LLM) should resize the image and pass `thumbnailDataUrl`, so the media picker never has to download full images; if it is omitted the browser makes one; `media.uploadThumbnail(id, dataUrl)` adds or replaces one. `media.delete(id)` trashes both files on Drive, then removes the item, empties the `src`/`mediaId` of layers using it and drops it from `imageIds` (`src/state/media.ts`). `url` values
+- `MediaItem` — `{ id, name, driveFileId, url, mimeType, thumbnailDriveFileId?, subjectId?, sceneId? }`. `subjectId` is the character or object, and `sceneId` the scene, the image is art of (reference art stays in the entity's `imageIds`); `media.upload(..., { subjectId, sceneId })` and `media.update(id, { name?, subjectId?, sceneId? })` set them (`null` clears), and each must name an existing entity. `media.update` also renames the image (the Drive file keeps its uploaded name). The thumbnail is a small Drive file (about 256px on the long side; PNG if the image has transparency, else JPEG) that the UI shows instead of the full image. `media.upload` documents that the caller (an LLM) should resize the image and pass `thumbnailDataUrl`, so the media picker never has to download full images; if it is omitted the browser makes one; `media.uploadThumbnail(id, dataUrl)` adds or replaces one. `media.delete(id)` trashes both files on Drive, then removes the item, empties the `src`/`mediaId` of layers using it and drops it from `imageIds` (`src/state/media.ts`). `url` values
   require a valid Drive access token to fetch bytes.
 
 Structural validation lives in `src/state/project.ts` (`assertValidProject`,
@@ -388,7 +399,7 @@ they cannot drift from the code.
   `uploadImage()` and registered as `MediaItem`s; every image is a Drive file. Layers store its
   Drive URL. Because Drive needs the access token, `useDriveImage` fetches
   the bytes once (`loadBlobUrl`) and shows them from a blob URL. Character
-  reference images are uploaded from the Characters and Scenes tabs via
+  reference images are uploaded from the Cast & Props and Scenes tabs via
   `media.upload` and shown as blob-URL thumbnails (the media thumbnail, `thumbnailDriveFileId`).
 - **One implementation for the page and the CLI:** the Drive REST calls
   (`driveRest.ts`) and the OAuth device-flow requests (`deviceOAuth.ts`) use no
@@ -444,7 +455,7 @@ mutation marks the project dirty (`markDirty`, called from `updateProject` and
   conflict is settled (autosave pauses; `storage.save()` returns
   `{ ok: false, error }` naming them; closing the project is refused).
 - **Where conflicts show (browser):** a red **dot** on the page number of a page
-  that holds one (also on the Pages, Characters, Scenes or Outline tab), the Save
+  that holds one (also on the Pages, Cast & Props, Scenes or Outline tab), the Save
   button turns red, and a **conflict footer** (`ConflictBar`) appears under the
   editor. It shows one conflict at a time (‹ › to move between them), takes the
   editor to its tab and page, and offers **Base**, **Ours** and **Theirs**: each

@@ -11,9 +11,15 @@ async function imageAspect(item: MediaItem): Promise<number> {
   return Math.round((image.naturalWidth / image.naturalHeight) * 1000) / 1000;
 }
 
-/** Upload an image file to the project's media (on Drive). */
-export async function uploadImage(file: File): Promise<MediaItem> {
-  return cb().media.upload(file.name, await readFileAsDataUrl(file), { mimeType: file.type });
+/** Upload an image file to the project's media (on Drive), tagged as art of a subject or scene when given. */
+export async function uploadImage(
+  file: File,
+  links: { subjectId?: string; sceneId?: string } = {}
+): Promise<MediaItem> {
+  return cb().media.upload(file.name, await readFileAsDataUrl(file), {
+    mimeType: file.type,
+    ...links,
+  });
 }
 
 /** Add a media item to a panel as a new layer; a new foreground layer starts centred at half the panel's width. */

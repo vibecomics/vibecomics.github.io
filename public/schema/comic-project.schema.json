@@ -142,6 +142,14 @@
         "id": {
           "type": "string"
         },
+        "sceneId": {
+          "description": "Optional id of the scene (metadata.scenes) a background layer is the setting of. The media picker lists that scene's art first. May name a scene that has since been deleted.",
+          "type": "string"
+        },
+        "subjectId": {
+          "description": "Optional id of the character or object (metadata.characters or metadata.objects) this layer shows. The media picker lists that subject's art first. May name an entity that has since been deleted.",
+          "type": "string"
+        },
         "kind": {
           "enum": ["background", "foreground"],
           "type": "string"
@@ -214,6 +222,14 @@
           "type": "string"
         },
         "name": {
+          "type": "string"
+        },
+        "sceneId": {
+          "description": "Optional id of the scene this image is art of (a background), not its reference art (the scene's imageIds).",
+          "type": "string"
+        },
+        "subjectId": {
+          "description": "Optional id of the character or object this image is art of (not its reference art, which is the entity's imageIds).",
           "type": "string"
         },
         "thumbnailDriveFileId": {

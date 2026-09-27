@@ -27,7 +27,7 @@ type Item = Rec & { id: string };
 
 /** Which tab of the editor shows a conflict, and which page and panel it is on. */
 export interface Where {
-  tab: 'outline' | 'characters' | 'scenes' | 'pages';
+  tab: 'outline' | 'cast' | 'scenes' | 'pages';
   pageId?: string;
   panelId?: string;
 }
@@ -101,8 +101,8 @@ const PROJECT: Shape = {
 
 /** The editor tab that shows things kept in this list of the project's metadata. */
 const metadataTab = (key: string): Where =>
-  key === 'characters'
-    ? { tab: 'characters' }
+  key === 'characters' || key === 'objects'
+    ? { tab: 'cast' }
     : key === 'scenes'
       ? { tab: 'scenes' }
       : { tab: 'outline' };

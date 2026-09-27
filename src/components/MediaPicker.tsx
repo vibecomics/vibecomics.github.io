@@ -1,12 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cb } from '../ai/actions';
 import type { MediaItem } from '../types/comic';
 import { errorMessage } from '../utils/errors';
 import { ExternalIcon, TrashIcon } from './Icons';
 import { openInNewTab } from './mediaImages';
-import { groupMedia, pageOfGroups, pageOfItem, type MediaPreference } from './mediaOrder';
+import {
+  groupMedia,
+  MEDIA_BATCH_SIZE,
+  firstOfGroups,
+  initialCount,
+  searchMedia,
+  searchTextByMedia,
+  subjectOf,
+  type MediaShapePreference,
+} from './mediaOrder';
+import { useProject } from './ProjectContext';
 import { useMediaInfos } from './useMediaInfos';
+import { useSeen } from './useInView';
 import { useMediaUrl } from './useMediaUrl';
 
 interface Props {
@@ -14,7 +25,9 @@ interface Props {
   /** Every image uploaded to the project. */
   media: MediaItem[];
   /** Decides which images are listed first. */
-  prefer: MediaPreference;
+  prefer: MediaShapePreference;
+  /** The character or object the image is for: its art is listed first. */
+  subjectId?: string;
   /** The image in use now, marked in the grid. */
   currentId?: string;
   onUpload: (file: File) => void;
@@ -32,9 +45,11 @@ interface TileProps {
 }
 
 function Tile({ item, current, deleting, onPick, onPreview, onDelete }: TileProps) {
-  const { url, failed, error } = useMediaUrl(item);
+  // The image is fetched only once its tile has scrolled into view.
+  const [ref, seen] = useSeen<HTMLDivElement>();
+  const { url, failed, error } = useMediaUrl(seen ? item : null);
   return (
-    <div className="media-tile-wrap">
+    <div className="media-tile-wrap" ref={ref}>
       <button
         type="button"
         className={`media-tile${current ? ' current' : ''}`}
@@ -87,27 +102,55 @@ function Tile({ item, current, deleting, onPick, onPreview, onDelete }: TileProp
 
 /**
  * A popup showing every uploaded image as a thumbnail, so an image is picked by sight. Images that
- * suit `prefer` come first, a page at a time; a button uploads a new one. Each thumbnail can be
+ * suit `prefer` come first, more loading as the list is scrolled; a button uploads a new one. Each thumbnail can be
  * opened full size in a new tab or deleted. Picking or uploading closes the popup.
  */
 export default function MediaPicker({
   title,
   media,
   prefer,
+  subjectId,
   currentId,
   onUpload,
   onPick,
   onClose,
 }: Props) {
   const fileInput = useRef<HTMLInputElement>(null);
-  const [page, setPage] = useState<number | null>(null);
+  // How many images are listed; null until the first list is known, then it only grows.
+  const [count, setCount] = useState<number | null>(null);
+  const more = useRef<HTMLDivElement>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const project = useProject();
   const { infos, ready } = useMediaInfos(media);
-  // Until every image's shape is known they are listed as they come; then they are sorted into groups.
-  const groups = ready ? groupMedia(media, infos, prefer) : [{ title: 'Images', items: media }];
-  // Opens on the page that holds the current image, then follows the arrows.
-  const shown = pageOfGroups(groups, page ?? pageOfItem(groups, currentId));
+  const [text, setText] = useState('');
+  const [query, setQuery] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setQuery(text), 150);
+    return () => clearTimeout(timer);
+  }, [text]);
+  const searchText = useMemo(() => searchTextByMedia(project), [project]);
+  const subject = useMemo(() => subjectOf(project, subjectId), [project, subjectId]);
+  const found = searchMedia(media, searchText, query);
+  // Until every image's shape is known the subject's art is listed first and the rest as they come;
+  // then the rest is sorted into groups.
+  const groups = groupMedia(found, ready ? infos : null, { ...prefer, subject });
+  // Opens with the current image on screen; scrolling to the bottom lists more.
+  const listed = count ?? initialCount(groups, currentId);
+  const shown = firstOfGroups(groups, listed);
+  const hasMore = listed < found.length;
+
+  useEffect(() => {
+    const end = more.current;
+    if (!hasMore || !end || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        setCount(listed + MEDIA_BATCH_SIZE);
+      }
+    });
+    observer.observe(end);
+    return () => observer.disconnect();
+  }, [hasMore, listed]);
 
   useEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
@@ -179,19 +222,36 @@ export default function MediaPicker({
                   onUpload(file);
                 }}
               />
-              <button
-                type="button"
-                className="btn btn-outline-primary btn-sm mb-3"
-                onClick={() => fileInput.current?.click()}
-              >
-                Upload new image…
-              </button>
+              <div className="d-flex gap-2 mb-3">
+                <input
+                  type="search"
+                  className="form-control form-control-sm"
+                  placeholder="Search by image, character, object or layer name"
+                  aria-label="Search images"
+                  autoFocus
+                  value={text}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    setCount(MEDIA_BATCH_SIZE);
+                  }}
+                />
+                <button
+                  type="button"
+                  className="btn btn-outline-primary btn-sm text-nowrap"
+                  onClick={() => fileInput.current?.click()}
+                >
+                  Upload new image…
+                </button>
+              </div>
               {error && <div className="text-danger small mb-3">{error}</div>}
               {media.length === 0 && (
                 <p className="text-muted mb-0">No images uploaded to this project yet.</p>
               )}
+              {media.length > 0 && found.length === 0 && (
+                <p className="text-muted">No images match “{query.trim()}”.</p>
+              )}
               {media.length > 0 && !ready && <p className="text-muted small">Sorting images…</p>}
-              {shown.groups.map((group) => (
+              {shown.map((group) => (
                 <section key={group.title} className="mb-3" aria-label={group.title}>
                   <h3 className="h6 text-muted">{group.title}</h3>
                   <div className="media-grid">
@@ -209,33 +269,15 @@ export default function MediaPicker({
                   </div>
                 </section>
               ))}
+              {hasMore && <div ref={more} style={{ height: 1 }} aria-hidden="true" />}
             </div>
-            {shown.pages > 1 && (
-              <div className="modal-footer justify-content-between">
-                <span className="text-muted small">{media.length} images</span>
-                <nav className="d-flex align-items-center gap-2" aria-label="Pages of images">
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    disabled={shown.page === 0}
-                    onClick={() => setPage(shown.page - 1)}
-                  >
-                    Previous
-                  </button>
-                  <span className="small">
-                    Page {shown.page + 1} of {shown.pages}
-                  </span>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    disabled={shown.page === shown.pages - 1}
-                    onClick={() => setPage(shown.page + 1)}
-                  >
-                    Next
-                  </button>
-                </nav>
-              </div>
-            )}
+            <div className="modal-footer justify-content-start">
+              <span className="text-muted small">
+                {found.length === media.length
+                  ? `${media.length} images`
+                  : `${found.length} of ${media.length} images`}
+              </span>
+            </div>
           </div>
         </div>
       </div>

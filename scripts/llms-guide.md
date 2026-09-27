@@ -114,6 +114,14 @@ objects (props). It is the single source of truth for every image.
   to the character. For key places or props do the same. From then on that art
   is the reference for every later image. The user may also have uploaded
   reference images already, so look before you make your own.
+- **Art versus reference art:** a character's or object's `imageIds` are its
+  reference art, the images you attach to every generation. Do not add the
+  pictures you generate of it to `imageIds`. Tag them instead: upload with
+  `media.upload(..., { subjectId })`, or `media.update(id, { subjectId })` (use
+  `sceneId` for a scene's background art), so the editor's media picker lists
+  them first for a layer that shows that character or object, or is set in
+  that scene. Give images and layers clear names too (`media.update`
+  renames an image), because the picker's search reads them.
 
 ### 3. Plan the pages and their layouts
 
@@ -157,6 +165,10 @@ only what belongs to it, so the parts add up when they are stitched together
   - one **foreground** layer per character or prop that appears, so each can be
     moved, resized and reused separately (see step 6);
   - give each layer a clear name ("Mara, running", "Lab background");
+  - set each foreground layer's `subjectId` to the character or object it
+    shows (`layers.update(panelId, layerId, { subjectId })`, `null` clears it);
+  - set each background layer's `sceneId` to the scene it is the setting of
+    (`layers.update(panelId, layerId, { sceneId })`, `null` clears it);
   - a layer prompt is about that one image: the pose, action, expression and
     gaze of the character, or the look of the background. The setting and the
     character descriptions are not repeated here: they come from the story

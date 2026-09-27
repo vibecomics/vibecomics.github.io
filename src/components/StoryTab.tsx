@@ -3,13 +3,19 @@ import { cb } from '../ai/actions';
 import type { ComicProject, MediaItem } from '../types/comic';
 import ReferenceImages from './ReferenceImages';
 
-type StoryKind = 'characters' | 'scenes';
+type StoryKind = 'characters' | 'objects' | 'scenes';
 
 const STORY_TABS = {
   characters: {
     title: 'Characters',
     singular: 'character',
     placeholder: 'Visual description + continuity notes…',
+    referenceImages: true,
+  },
+  objects: {
+    title: 'Objects',
+    singular: 'object',
+    placeholder: 'Shape, size, material, colours, markings, continuity notes…',
     referenceImages: true,
   },
   scenes: {
@@ -73,7 +79,7 @@ function EntryCard({ kind, entry, media }: EntryCardProps) {
   );
 }
 
-/** The characters or scenes of the story bible: add, rename, describe, delete. */
+/** The characters, objects or scenes of the story bible: add, rename, describe, delete. */
 export default function StoryTab({ project, kind }: { project: ComicProject; kind: StoryKind }) {
   const { title, singular } = STORY_TABS[kind];
   const [newName, setNewName] = useState('');

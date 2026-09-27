@@ -103,6 +103,37 @@ export function mutate<T>(deps: ComicBuilderDeps, mutation: (p: ComicProject) =>
   return result;
 }
 
+/** A layer's or image's subject must be an existing character or object. */
+export function assertSubject(project: ComicProject, id: string): void {
+  const { characters, objects } = project.metadata;
+  if (![...characters, ...objects].some((entry) => entry.id === id)) {
+    throw new Error(`Subject "${id}" not found: it must be a character or object id.`);
+  }
+}
+
+/** A background layer's or image's scene must be an existing scene. */
+export function assertScene(project: ComicProject, id: string): void {
+  if (!project.metadata.scenes.some((scene) => scene.id === id)) {
+    throw new Error(`Scene "${id}" not found: it must be a scene id.`);
+  }
+}
+
+/** Layers and images that showed this character or object, or were set in this scene, lose that link. */
+export function clearLinksTo(project: ComicProject, id: string): void {
+  for (const item of project.metadata.media) {
+    if (item.subjectId === id) delete item.subjectId;
+    if (item.sceneId === id) delete item.sceneId;
+  }
+  for (const page of project.pages) {
+    for (const panel of page.panels) {
+      for (const layer of panel.layers) {
+        if (layer.subjectId === id) delete layer.subjectId;
+        if (layer.sceneId === id) delete layer.sceneId;
+      }
+    }
+  }
+}
+
 /** list/get/add/update/delete for the layers or bubbles of a panel. */
 export function panelItemsApi<K extends keyof PanelItemTypes>(
   deps: ComicBuilderDeps,
@@ -134,12 +165,15 @@ export function panelItemsApi<K extends keyof PanelItemTypes>(
       });
       return snapshot(item);
     },
-    update: (panelId: string, id: string, patch: Partial<Item>): Item =>
+    /** `clear` names optional fields to remove from the item, since `undefined` in a patch means "leave alone". */
+    update: (panelId: string, id: string, patch: Partial<Item>, clear: string[] = []): Item =>
       snapshot(
         mutate(deps, (p) => {
           const item = itemsOf(requirePanel(p, panelId)).find((i) => i.id === id);
           if (!item) throw new Error(`${label} "${id}" not found.`);
-          return Object.assign(item, definedFields(patch));
+          Object.assign(item, definedFields(patch));
+          for (const field of clear) delete (item as unknown as Record<string, unknown>)[field];
+          return item;
         })
       ),
     delete: (panelId: string, id: string): boolean =>
@@ -187,7 +221,12 @@ export function storyApi<K extends keyof StoryTypes>(deps: ComicBuilderDeps, key
         })
       );
     },
-    delete: (id: string): boolean => mutate(deps, (p) => removeById(entriesOf(p), id)),
+    delete: (id: string): boolean =>
+      mutate(deps, (p) => {
+        const removed = removeById(entriesOf(p), id);
+        if (removed) clearLinksTo(p, id);
+        return removed;
+      }),
   };
 }
 

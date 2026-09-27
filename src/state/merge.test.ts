@@ -345,7 +345,7 @@ test('story bible: additions on both sides combine; the same description changed
   result = mergeProjects(b, mine, theirs);
   assert.equal(result.conflicts.length, 1);
   assert.equal(result.conflicts[0].label, 'Character "Otto" › description');
-  assert.deepEqual(result.conflicts[0].where, { tab: 'characters' });
+  assert.deepEqual(result.conflicts[0].where, { tab: 'cast' });
 });
 
 test('outline, page size and project title: conflicts point at the outline tab', () => {
@@ -476,4 +476,38 @@ test('property: merging is the same whichever side is "ours" when nothing confli
     assert.deepEqual(ab.merged.pages, ba.merged.pages, `seed ${seed}`);
     assert.deepEqual(ab.merged.metadata, ba.merged.metadata, `seed ${seed}`);
   }
+});
+
+test('a layer or image subject merges like any other field, and can be cleared', () => {
+  const b = base();
+  b.metadata.media = [
+    { id: 'm1', name: 'run.png', driveFileId: 'F1', url: 'u', mimeType: 'image/png' },
+  ];
+  const mine = clone(b);
+  const theirs = clone(b);
+  mine.pages[1].panels[0].layers[0].subjectId = 'c1';
+  theirs.pages[1].panels[0].layers[0].name = 'Mira';
+  mine.metadata.media[0].subjectId = 'c1';
+  let result = mergeProjects(b, mine, theirs);
+  assert.deepEqual(result.conflicts, []);
+  assert.equal(result.merged.pages[1].panels[0].layers[0].subjectId, 'c1');
+  assert.equal(result.merged.pages[1].panels[0].layers[0].name, 'Mira');
+  assert.equal(result.merged.metadata.media[0].subjectId, 'c1');
+
+  theirs.pages[1].panels[0].layers[0].subjectId = 'c2';
+  result = mergeProjects(b, mine, theirs);
+  assert.equal(result.conflicts.length, 1);
+  assert.equal(result.conflicts[0].label, 'Page 1 "Chase" › Panel 1 › Layer "Hero" › subjectId');
+
+  // Cleared on one side (the key is removed), untouched on the other
+  const withSubject = clone(b);
+  withSubject.pages[1].panels[0].layers[0].subjectId = 'c1';
+  const cleared = clone(withSubject);
+  delete cleared.pages[1].panels[0].layers[0].subjectId;
+  const renamed = clone(withSubject);
+  renamed.pages[1].panels[0].layers[0].name = 'Mira';
+  result = mergeProjects(withSubject, cleared, renamed);
+  assert.deepEqual(result.conflicts, []);
+  assert.equal('subjectId' in result.merged.pages[1].panels[0].layers[0], false);
+  assert.equal(result.merged.pages[1].panels[0].layers[0].name, 'Mira');
 });

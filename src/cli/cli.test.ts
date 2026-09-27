@@ -699,3 +699,92 @@ test('reading and writing keep the Drive version in step, so a lone CLI never co
   await run('page', 'current');
   assert.equal(google.versionOf(folderId), before + 8);
 });
+
+test('layers and images can say what they show, and names can be changed', async () => {
+  const { run, login, google, work } = setup();
+  await login();
+  const { id: folderId } = (await run('storage', 'createProject', 'Cast')).json();
+  const saved = () => google.projectIn(folderId);
+  const mara = (await run('characters', 'create', '{"name":"Mara"}')).json();
+  const scooter = (await run('objects', 'create', '{"name":"Red scooter"}')).json();
+  const panelId = saved().pages[0].panels[0].id;
+
+  // A layer's subject: set, change, clear, and never an id that does not exist
+  const layer = (
+    await run('layers', 'add', panelId, JSON.stringify({ prompt: 'Mara', subjectId: mara.id }))
+  ).json();
+  assert.equal(layer.subjectId, mara.id);
+  assert.equal(
+    (
+      await run('layers', 'update', panelId, layer.id, JSON.stringify({ subjectId: scooter.id }))
+    ).json().subjectId,
+    scooter.id
+  );
+  const cleared = (await run('layers', 'update', panelId, layer.id, '{"subjectId":null}')).json();
+  assert.equal('subjectId' in cleared, false);
+  assert.equal('subjectId' in saved().pages[0].panels[0].layers[0], false);
+  const bad = await run('layers', 'update', panelId, layer.id, '{"subjectId":"char-nope"}');
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /Subject "char-nope" not found/);
+
+  // An image uploaded as a subject's art, renamed, re-tagged and cleared
+  fs.writeFileSync(path.join(work, 'run.png'), PNG);
+  const art = (await run('media', 'upload', 'run.png', '--subject', mara.id)).json();
+  assert.equal(art.subjectId, mara.id);
+  const renamed = (
+    await run('media', 'update', art.id, JSON.stringify({ name: 'mara-running.png' }))
+  ).json();
+  assert.equal(renamed.name, 'mara-running.png');
+  assert.equal(renamed.subjectId, mara.id);
+  assert.equal(
+    (await run('media', 'update', art.id, JSON.stringify({ subjectId: scooter.id }))).json()
+      .subjectId,
+    scooter.id
+  );
+  assert.equal((await run('media', 'update', art.id, '{"name":"  "}')).code, 1);
+  assert.equal((await run('media', 'upload', 'run.png', '--subject', 'char-nope')).code, 1);
+
+  // Deleting a character or object lets go of everything it was the subject of
+  await run('layers', 'update', panelId, layer.id, JSON.stringify({ subjectId: scooter.id }));
+  await run('objects', 'delete', scooter.id);
+  assert.equal('subjectId' in saved().pages[0].panels[0].layers[0], false);
+  assert.equal('subjectId' in saved().metadata.media[0], false);
+  assert.equal(saved().metadata.media[0].name, 'mara-running.png');
+});
+
+test('a background says which scene it is set in, and images can be art of a scene', async () => {
+  const { run, login, google, work } = setup();
+  await login();
+  const { id: folderId } = (await run('storage', 'createProject', 'Scenes')).json();
+  const saved = () => google.projectIn(folderId);
+  const roof = (await run('scenes', 'create', '{"name":"Rooftop"}')).json();
+  const mara = (await run('characters', 'create', '{"name":"Mara"}')).json();
+  const panelId = saved().pages[0].panels[0].id;
+
+  const bg = (
+    await run(
+      'layers',
+      'add',
+      panelId,
+      JSON.stringify({ kind: 'background', prompt: 'Roof at dusk', sceneId: roof.id })
+    )
+  ).json();
+  assert.equal(bg.sceneId, roof.id);
+  assert.equal(saved().pages[0].panels[0].layers[0].sceneId, roof.id);
+  const bad = await run('layers', 'update', panelId, bg.id, JSON.stringify({ sceneId: mara.id }));
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /Scene .* not found/);
+
+  fs.writeFileSync(path.join(work, 'roof.png'), PNG);
+  const art = (await run('media', 'upload', 'roof.png', '--scene', roof.id)).json();
+  assert.equal(art.sceneId, roof.id);
+  assert.equal('subjectId' in art, false);
+  const cleared = (await run('media', 'update', art.id, '{"sceneId":null}')).json();
+  assert.equal('sceneId' in cleared, false);
+  await run('media', 'update', art.id, JSON.stringify({ sceneId: roof.id }));
+
+  // Deleting the scene lets go of the background and the image
+  await run('scenes', 'delete', roof.id);
+  assert.equal('sceneId' in saved().pages[0].panels[0].layers[0], false);
+  assert.equal('sceneId' in saved().metadata.media[0], false);
+});

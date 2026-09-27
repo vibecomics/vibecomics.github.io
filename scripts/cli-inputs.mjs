@@ -171,7 +171,8 @@ export const INPUTS = {
     layerId: LAYER_ID,
     patch: {
       type: 'json',
-      example: '{ "mediaId": "media_ab12cd", "x": 10, "y": 20, "width": 60, "opacity": 1 }',
+      example:
+        '{ "mediaId": "media_ab12cd", "subjectId": "char-ab12cd", "sceneId": "scene-ab12cd", "x": 10, "y": 20, "width": 60, "opacity": 1 }',
     },
   },
   'layers.flip': { panelId: PANEL_ID, layerId: LAYER_ID },
@@ -242,6 +243,20 @@ export const INPUTS = {
           help: "Left out, the file's type is used (from its extension).",
           fromFile: { param: 'dataUrl', use: 'type' },
         },
+        subjectId: {
+          type: 'string',
+          optional: true,
+          flag: 'subject',
+          example: 'char-ab12cd',
+          help: 'Id of the character or object this image is art of (not reference art).',
+        },
+        sceneId: {
+          type: 'string',
+          optional: true,
+          flag: 'scene',
+          example: 'scene-ab12cd',
+          help: 'Id of the scene this image is art of, for a background (not reference art).',
+        },
         thumbnailDataUrl: {
           ...IMAGE,
           optional: true,
@@ -249,6 +264,13 @@ export const INPUTS = {
           help: 'Path of a thumbnail: the image resized to about 256px on its long side (PNG if it has transparency, else JPEG). Strongly recommended: the CLI cannot make one itself, and an image without one is slow to list in the editor.',
         },
       },
+    },
+  },
+  'media.update': {
+    id: { type: 'string', example: 'media_ab12cd' },
+    patch: {
+      type: 'json',
+      example: '{ "name": "mara-running.png", "subjectId": "char-ab12cd", "sceneId": null }',
     },
   },
   'media.uploadThumbnail': { id: { type: 'string', example: 'media_ab12cd' }, dataUrl: IMAGE },

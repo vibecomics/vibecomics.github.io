@@ -7,6 +7,7 @@ import { EDITOR_TABS } from './editorTabs';
 import type { EditorTab } from './editorTabs';
 import OutlineTab from './OutlineTab';
 import PagesTab from './PagesTab';
+import { ProjectContext } from './ProjectContext';
 import StoryTab from './StoryTab';
 
 interface Props {
@@ -38,50 +39,55 @@ export default function EditorScreen({
   onRefresh,
 }: Props) {
   return (
-    <div className="position-fixed top-0 bottom-0 start-0 end-0 d-flex flex-column bg-body-tertiary">
-      <EditorNavbar
-        title={project.title}
-        tab={tab}
-        onTabChange={onTabChange}
-        saveState={saveState}
-        dirty={dirty}
-        conflictTabs={conflictTabs}
-        onRefresh={onRefresh}
-      />
-
-      <ul className="nav nav-tabs px-3 pt-2 bg-body border-bottom d-none d-md-flex mb-0">
-        {EDITOR_TABS.map((t) => (
-          <li className="nav-item" key={t.id}>
-            <button
-              className={`nav-link${t.id === tab ? ' active' : ''}`}
-              onClick={() => onTabChange(t.id)}
-            >
-              {t.label}
-              {conflictTabs.has(t.id) && <ConflictDot className="ms-1 align-middle" />}
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      {tab === 'pages' ? (
-        <PagesTab
-          pages={project.pages}
-          pageIndex={pageIndex}
-          pageSize={project.metadata.pageSize}
-          media={project.metadata.media}
-          conflictPageIds={conflictPageIds}
+    <ProjectContext.Provider value={project}>
+      <div className="position-fixed top-0 bottom-0 start-0 end-0 d-flex flex-column bg-body-tertiary">
+        <EditorNavbar
+          title={project.title}
+          tab={tab}
+          onTabChange={onTabChange}
+          saveState={saveState}
+          dirty={dirty}
+          conflictTabs={conflictTabs}
+          onRefresh={onRefresh}
         />
-      ) : (
-        <div className="flex-grow-1 overflow-auto" style={{ minHeight: 0 }}>
-          {tab === 'outline' && <OutlineTab key={project.id} project={project} />}
-          {tab === 'characters' && (
-            <StoryTab key={project.id} project={project} kind="characters" />
-          )}
-          {tab === 'scenes' && <StoryTab key={project.id} project={project} kind="scenes" />}
-        </div>
-      )}
 
-      {conflictBar}
-    </div>
+        <ul className="nav nav-tabs px-3 pt-2 bg-body border-bottom d-none d-md-flex mb-0">
+          {EDITOR_TABS.map((t) => (
+            <li className="nav-item" key={t.id}>
+              <button
+                className={`nav-link${t.id === tab ? ' active' : ''}`}
+                onClick={() => onTabChange(t.id)}
+              >
+                {t.label}
+                {conflictTabs.has(t.id) && <ConflictDot className="ms-1 align-middle" />}
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        {tab === 'pages' ? (
+          <PagesTab
+            pages={project.pages}
+            pageIndex={pageIndex}
+            pageSize={project.metadata.pageSize}
+            media={project.metadata.media}
+            conflictPageIds={conflictPageIds}
+          />
+        ) : (
+          <div className="flex-grow-1 overflow-auto" style={{ minHeight: 0 }}>
+            {tab === 'outline' && <OutlineTab key={project.id} project={project} />}
+            {tab === 'cast' && (
+              <>
+                <StoryTab key={`${project.id}-characters`} project={project} kind="characters" />
+                <StoryTab key={`${project.id}-objects`} project={project} kind="objects" />
+              </>
+            )}
+            {tab === 'scenes' && <StoryTab key={project.id} project={project} kind="scenes" />}
+          </div>
+        )}
+
+        {conflictBar}
+      </div>
+    </ProjectContext.Provider>
   );
 }

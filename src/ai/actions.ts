@@ -24,6 +24,8 @@ import {
   LAYER_MOVES,
   artSize,
   assertKind,
+  assertScene,
+  assertSubject,
   assertOptionalText,
   definedFields,
   findPanel,
@@ -42,7 +44,7 @@ import type {
   BubblePatch,
   ComicBuilderDeps,
   LayerInput,
-  LayerPatch,
+  LayerUpdate,
 } from './deps';
 import { attachDocs } from './docs';
 
@@ -598,7 +600,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * layer prompt (see the layers namespace). Foreground images
        * should usually be PNGs with a transparent background.
        * @param panelId - The panel id.
-       * @param input - { name?, prompt?, mediaId?, src?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. The image must be on Google Drive: pass mediaId (from media.upload or media.list, preferred) or src as a Drive URL; any other URL throws. Omit both for a layer that is only a prompt so far. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate.
+       * @param input - { name?, prompt?, subjectId?, sceneId?, mediaId?, src?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. The image must be on Google Drive: pass mediaId (from media.upload or media.list, preferred) or src as a Drive URL; any other URL throws. Omit both for a layer that is only a prompt so far. subjectId is the id of the character or object the layer shows (it must exist); the media picker lists that subject's art first. sceneId is the id of the scene a background layer is the setting of (it must exist); the picker lists that scene's art first. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate.
        * @returns A deep-cloned snapshot of the new Layer.
        */
       add: (panelId: string, input: LayerInput): Layer => {
@@ -606,6 +608,8 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         assertKind(kind, LAYER_KINDS, 'Layer kind');
         const project = requireProject(deps);
         const image = resolveLayerImage(project, input);
+        if (input.subjectId !== undefined) assertSubject(project, input.subjectId);
+        if (input.sceneId !== undefined) assertScene(project, input.sceneId);
         const media = project.metadata.media.find((m) => m.id === image.mediaId);
         return layers.add(
           panelId,
@@ -628,18 +632,31 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * Update a layer: move (x/y), resize (width), rotate, change opacity or
-       * visibility, flip it left to right (flipX), rename, edit its prompt, or swap its image (mediaId, or src as a Drive URL).
+       * visibility, flip it left to right (flipX), rename, edit its prompt, set what it shows (subjectId: a character or object id) or, for a background, the scene it is the setting of (sceneId), either null to clear it, or swap its image (mediaId, or src as a Drive URL).
        * Only the given fields change.
        * @param panelId - The panel id.
        * @param layerId - The layer id.
        * @param patch - Partial layer fields.
        * @returns A deep-cloned snapshot of the updated Layer. Throws when the panel or layer is not found.
        */
-      update: (panelId: string, layerId: string, patch: LayerPatch): Layer => {
+      update: (panelId: string, layerId: string, patch: LayerUpdate): Layer => {
         if (patch.kind !== undefined) assertKind(patch.kind, LAYER_KINDS, 'Layer kind');
         const swapsImage = Boolean(patch.src) || patch.mediaId !== undefined;
         const image = swapsImage ? resolveLayerImage(requireProject(deps), patch) : {};
-        return layers.update(panelId, layerId, { ...patch, ...image });
+        const { subjectId, sceneId, ...rest } = patch;
+        if (typeof subjectId === 'string') assertSubject(requireProject(deps), subjectId);
+        if (typeof sceneId === 'string') assertScene(requireProject(deps), sceneId);
+        return layers.update(
+          panelId,
+          layerId,
+          {
+            ...rest,
+            ...image,
+            ...(typeof subjectId === 'string' && { subjectId }),
+            ...(typeof sceneId === 'string' && { sceneId }),
+          },
+          [...(subjectId === null ? ['subjectId'] : []), ...(sceneId === null ? ['sceneId'] : [])]
+        );
       },
 
       /**
@@ -1034,20 +1051,58 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * thumbnail can be fixed later with media.uploadThumbnail.
        * @param name - File name, e.g. "hero-front.png".
        * @param dataUrl - The image bytes as a data: URL (e.g. from a generated PNG).
-       * @param opts - Optional { mimeType, thumbnailDataUrl }: mimeType defaults to "image/png"; thumbnailDataUrl is the image resized to about 256px on its long side, as a data: URL (PNG for transparent images, else JPEG). Strongly recommended.
+       * @param opts - Optional { mimeType, thumbnailDataUrl, subjectId, sceneId }: mimeType defaults to "image/png"; thumbnailDataUrl is the image resized to about 256px on its long side, as a data: URL (PNG for transparent images, else JPEG). Strongly recommended. subjectId is the id of the character or object this image is art of (it must exist): the media picker lists a subject's art first. sceneId is the same for a scene (a background). Do not use either for reference art: put those ids in the character's or scene's imageIds.
        * @returns A promise resolving to the new MediaItem. Its thumbnailDriveFileId is set when a thumbnail was stored; if it is missing, retry with media.uploadThumbnail.
        */
       upload: (
         name: string,
         dataUrl: string,
-        opts?: { mimeType?: string; thumbnailDataUrl?: string }
-      ): Promise<MediaItem> =>
-        deps.uploadStorageMedia(
+        opts?: {
+          mimeType?: string;
+          thumbnailDataUrl?: string;
+          subjectId?: string;
+          sceneId?: string;
+        }
+      ): Promise<MediaItem> => {
+        if (opts?.subjectId !== undefined) assertSubject(requireProject(deps), opts.subjectId);
+        if (opts?.sceneId !== undefined) assertScene(requireProject(deps), opts.sceneId);
+        return deps.uploadStorageMedia(
           name,
           dataUrl,
           opts?.mimeType || 'image/png',
-          opts?.thumbnailDataUrl
-        ),
+          opts?.thumbnailDataUrl,
+          { subjectId: opts?.subjectId, sceneId: opts?.sceneId }
+        );
+      },
+
+      /**
+       * Rename an image or say what it shows. Only the registry entry changes:
+       * the file on Drive keeps the name it was uploaded with.
+       * @param id - The media id.
+       * @param patch - { name?, subjectId?, sceneId? }: name is the new display name (not empty); subjectId is the id of the character or object the image is art of and sceneId the scene it is art of (each must exist), or null to clear it.
+       * @returns A deep-cloned snapshot of the updated MediaItem. Throws when the media id is not found.
+       */
+      update: (
+        id: string,
+        patch: { name?: string; subjectId?: string | null; sceneId?: string | null }
+      ): MediaItem => {
+        const project = requireProject(deps);
+        if (patch.name !== undefined && !patch.name.trim()) throw new Error('Name is required.');
+        if (typeof patch.subjectId === 'string') assertSubject(project, patch.subjectId);
+        if (typeof patch.sceneId === 'string') assertScene(project, patch.sceneId);
+        return snapshot(
+          mutate(deps, (p) => {
+            const item = p.metadata.media.find((m) => m.id === id);
+            if (!item) throw new Error(`Media "${id}" not found.`);
+            if (patch.name !== undefined) item.name = patch.name.trim();
+            if (typeof patch.subjectId === 'string') item.subjectId = patch.subjectId;
+            else if (patch.subjectId === null) delete item.subjectId;
+            if (typeof patch.sceneId === 'string') item.sceneId = patch.sceneId;
+            else if (patch.sceneId === null) delete item.sceneId;
+            return item;
+          })
+        );
+      },
 
       /**
        * Upload the thumbnail of an image already in the registry, replacing

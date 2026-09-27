@@ -41,8 +41,7 @@ export default function PageDetails({ page, pageIndex }: Props) {
             id="page-prompt"
             label="Page prompt"
             hideLabel
-            placeholder="What happens on this page, its mood and pacing"
-            help="The intent of the whole page. It comes first in the prompt for every image on it."
+            placeholder="What happens on this page, its mood and pacing. Comes first in the prompt for every image on it."
             value={page.prompt ?? ''}
             onChange={(prompt) => cb().page.update({ prompt }, pageIndex)}
           />

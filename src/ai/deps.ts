@@ -37,7 +37,8 @@ export interface ComicBuilderDeps {
     name: string,
     dataUrl: string,
     mimeType: string,
-    thumbnailDataUrl?: string
+    thumbnailDataUrl?: string,
+    links?: { subjectId?: string; sceneId?: string }
   ): Promise<MediaItem>;
   /** Store (or replace) the thumbnail of a registered image. */
   uploadStorageThumbnail(id: string, dataUrl: string): Promise<MediaItem>;
@@ -51,6 +52,11 @@ export interface ComicBuilderDeps {
 export type LayerInput = Partial<Omit<Layer, 'id'>>;
 /** Patch for layers.update(). Only the given fields change. */
 export type LayerPatch = Partial<Omit<Layer, 'id'>>;
+/** A LayerPatch as the API takes it: `subjectId` or `sceneId` set to null clears it. */
+export type LayerUpdate = Omit<LayerPatch, 'subjectId' | 'sceneId'> & {
+  subjectId?: string | null;
+  sceneId?: string | null;
+};
 /** Input for bubbles.add(). Position and size are in % of panel size. */
 export type BubbleInput = Partial<Omit<Bubble, 'id'>> & { text: string };
 /** Patch for bubbles.update(). Only the given fields change. */

@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
-import type { LayerPatch } from '../ai/deps';
+import type { LayerUpdate } from '../ai/deps';
 import type { Layer, MediaItem } from '../types/comic';
 import { uploadImage, setLayerMedia } from './panelActions';
 import MediaPicker from './MediaPicker';
 import MediaSlot from './MediaSlot';
+import { useProject } from './ProjectContext';
 import SliderRow from './SliderRow';
 import { useTask } from './useTask';
 
@@ -17,9 +18,14 @@ interface Props {
 /** The editable properties of one layer: name, prompt, image and opacity. Place, size and turn it on the page. */
 export default function LayerDetails({ panelId, layer, media }: Props) {
   const task = useTask();
-  const update = (patch: LayerPatch) => cb().layers.update(panelId, layer.id, patch);
+  const update = (patch: LayerUpdate) => cb().layers.update(panelId, layer.id, patch);
   const [picking, setPicking] = useState(false);
   const background = layer.kind === 'background';
+  const { characters, objects, scenes } = useProject().metadata;
+  const known = [...characters, ...objects].some((entry) => entry.id === layer.subjectId);
+  const sceneKnown = scenes.some((scene) => scene.id === layer.sceneId);
+  // A foreground layer shows a character or object; a background is the setting of a scene.
+  const linkedId = background ? layer.sceneId : layer.subjectId;
 
   return (
     <div className="mt-2">
@@ -38,6 +44,56 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         autoFocus={!layer.prompt && !layer.src}
         onChange={(e) => update({ prompt: e.target.value })}
       />
+      {background ? (
+        <select
+          className="form-select form-select-sm mb-2"
+          aria-label="The scene this background is set in"
+          title="The media picker lists this scene's images first"
+          value={layer.sceneId ?? ''}
+          onChange={(e) => update({ sceneId: e.target.value || null })}
+        >
+          <option value="">Scene: none in particular</option>
+          {layer.sceneId && !sceneKnown && (
+            <option value={layer.sceneId}>Scene: a deleted scene</option>
+          )}
+          {scenes.map((scene) => (
+            <option key={scene.id} value={scene.id}>
+              Scene: {scene.name}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <select
+          className="form-select form-select-sm mb-2"
+          aria-label="What this layer shows"
+          title="The media picker lists this character's or object's images first"
+          value={layer.subjectId ?? ''}
+          onChange={(e) => update({ subjectId: e.target.value || null })}
+        >
+          <option value="">Shows: nothing in particular</option>
+          {layer.subjectId && !known && (
+            <option value={layer.subjectId}>Shows: a deleted character or object</option>
+          )}
+          {characters.length > 0 && (
+            <optgroup label="Characters">
+              {characters.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  Shows: {entry.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+          {objects.length > 0 && (
+            <optgroup label="Objects">
+              {objects.map((entry) => (
+                <option key={entry.id} value={entry.id}>
+                  Shows: {entry.name}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+      )}
       <div className="mb-2">
         <MediaSlot
           src={layer.src}
@@ -56,9 +112,19 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
               ? { kind: 'background', aspectRatio: cb().panels.size(panelId)?.aspectRatio }
               : { kind: 'layer' }
           }
+          subjectId={linkedId}
           currentId={layer.mediaId}
           onUpload={(file) =>
-            void task.run(async () => setLayerMedia(panelId, layer.id, await uploadImage(file)))
+            void task.run(async () =>
+              setLayerMedia(
+                panelId,
+                layer.id,
+                await uploadImage(
+                  file,
+                  background ? { sceneId: layer.sceneId } : { subjectId: layer.subjectId }
+                )
+              )
+            )
           }
           onPick={(item) => void task.run(() => setLayerMedia(panelId, layer.id, item))}
           onClose={() => setPicking(false)}

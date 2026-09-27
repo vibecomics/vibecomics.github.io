@@ -12,6 +12,10 @@ export interface Layer {
   src: string;
   /** Id of the MediaItem this layer's artwork came from. */
   mediaId?: string;
+  /** Id of the character or object this layer shows; the media picker lists that subject's art first. */
+  subjectId?: string;
+  /** Id of the scene a background layer is the setting of; the media picker lists that scene's art first. */
+  sceneId?: string;
   /**
    * What this layer's art shows: its own part of the image prompt, or a plain
    * description. The page prompt, the panel prompt and the story bible supply
@@ -107,6 +111,13 @@ export interface MediaItem {
    * in lists and pickers instead of the full file. Absent when none was made.
    */
   thumbnailDriveFileId?: string;
+  /**
+   * Id of the character or object this image is art of (not its reference art: that is the
+   * entity's `imageIds`). The media picker lists a subject's art first.
+   */
+  subjectId?: string;
+  /** Id of the scene this image is art of (a background), not its reference art. */
+  sceneId?: string;
 }
 
 /** Shared shape of the story-bible entries: visual description plus reference art. */

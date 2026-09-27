@@ -70,7 +70,7 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
       return { name: item.name, mimeType: item.mimeType, dataUrl };
     },
 
-    uploadStorageMedia: async (name, dataUrl, mimeType, thumbnailDataUrl) => {
+    uploadStorageMedia: async (name, dataUrl, mimeType, thumbnailDataUrl, links) => {
       const folderId = requireFolder();
       const file = dataUrlToFile(dataUrl, name, mimeType);
       const given = thumbnailDataUrl
@@ -83,6 +83,8 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
         driveFileId: uploaded.id,
         url: driveFileUrl(uploaded.id),
         mimeType: uploaded.mimeType || mimeType,
+        ...(links?.subjectId && { subjectId: links.subjectId }),
+        ...(links?.sceneId && { sceneId: links.sceneId }),
       };
       try {
         const thumbnail = given ?? (await host.makeThumbnail?.(file, name)) ?? undefined;

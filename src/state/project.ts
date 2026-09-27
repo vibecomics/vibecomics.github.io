@@ -68,6 +68,8 @@ function checkMetadata(value: unknown, path: string): void {
     const record = expectRecord(item, mediaPath);
     expectStrings(record, mediaPath, ['id', 'name', 'driveFileId', 'url', 'mimeType']);
     optionalString(record, mediaPath, 'thumbnailDriveFileId');
+    optionalString(record, mediaPath, 'subjectId');
+    optionalString(record, mediaPath, 'sceneId');
   });
 }
 
@@ -147,6 +149,8 @@ function checkLayer(value: unknown, path: string): void {
   }
   optionalString(layer, path, 'driveFileId');
   optionalString(layer, path, 'mediaId');
+  optionalString(layer, path, 'subjectId');
+  optionalString(layer, path, 'sceneId');
   optionalString(layer, path, 'prompt');
   if (
     layer.aspectRatio !== undefined &&

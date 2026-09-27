@@ -51,8 +51,7 @@ export default function PanelInspector({ page, panel, media, selection, onSelect
       <PromptField
         id="panel-prompt"
         label="Panel prompt"
-        placeholder="The moment this panel shows: camera, mood, what it must get across"
-        help="The intent of this panel. It follows the page prompt and precedes each layer prompt."
+        placeholder="The moment this panel shows: camera, mood, what it must get across. Follows the page prompt and precedes each layer prompt."
         value={panel.prompt ?? ''}
         onChange={(prompt) => cb().panels.update(panel.id, { prompt })}
       />
