@@ -14,7 +14,10 @@ Browser (React UI) ──window.ComicBuilder──> state (React useState + refs
         │                                          │
         │ actions.ts delegates                     │ every 60s, if changed
         ▼                                          ▼
-Google Drive API ◄── OAuth token (page memory) ── saveProjectJson()
+storage/activeBackend.ts ──────────────────── saveProjectJson()
+        │                                    (routes to whichever is active)
+        ▼
+Google Drive API (OAuth token, page memory)   — or —   http-storage server (plain fetch, no auth)
 ```
 
 - **One code path.** The UI and any AI agent call the same functions on
@@ -26,24 +29,32 @@ Google Drive API ◄── OAuth token (page memory) ── saveProjectJson()
   closures never go stale. `updateProject(mut)` clones the project,
   applies the mutation, stamps `updatedAt`, sets state, and marks the
   project as having unsaved changes.
-- **Drive is the only store.** There is no local-storage copy of the comic.
-  `drive.file` scope means the app can only see folders/files it created.
+- **One project store, picked per session.** There is no local-storage copy
+  of the comic. The store is either Google Drive (`drive.file` scope: the
+  app can only see folders/files it created) or a self-hosted HTTP storage
+  server (`http-storage/`), chosen once on the splash screen and held as
+  `storage/activeBackend.ts`'s module-level `active` flag for the rest of
+  the session. Everything that reads or writes project data — `App.tsx`,
+  `useProjectSaver`, `mediaImages.ts` — goes through that module's
+  functions instead of importing a backend directly, so it behaves the same
+  either way. See §6a.
 
 ## 2. Screens
 
 `App.tsx` has exactly three screens plus one overlay:
 
-1. **Splash** (`splash`) — hard gate. Title "Connect to Google Drive",
-   a two-line reason, a React-controlled expander ("Why do we need this
-   access?") that explains `drive.file` scope, memory-only tokens, and —
-   explicitly — that the app cannot work at all without connecting. Two
-   buttons: "Connect with Google Drive", which calls
-   `ComicBuilder.storage.connect()` (GIS popup, human click), and
-   "Connect with a code (for AI assistants)", which calls
-   `ComicBuilder.storage.connectWithDevice()` — the OAuth device flow
-   for headless browsers, showing a verification URL + user code for the
-   user to approve on any other device.
-2. **Tiles** (`tiles`) — one Bootstrap card per Drive project folder plus a
+1. **Splash** (`splash`) — hard gate, kept deliberately short. Title "Pick
+   where to store your comic", then one section per backend: Drive has a
+   "Connect with Google Drive" button that calls
+   `ComicBuilder.storage.connectWithDevice()` (the OAuth device flow, showing
+   a verification URL + user code to approve on any other device; it works
+   the same from a real click or an injected script, so it is the only Drive
+   connect method, no separate popup flow); the server section is a URL
+   field (prefilled from whatever was remembered in `localStorage`, never
+   auto-submitted) plus a Connect button that calls
+   `ComicBuilder.storage.connectWithServer(url)`. Every page load lands on
+   this screen: neither backend reconnects on its own.
+2. **Tiles** (`tiles`) — one Bootstrap card per project folder plus a
    dashed "New project" tile. The new-project name and page size (preset:
    US Comic, US Trade, Manga B5, A4, Square, Portrait 4:5, Landscape 16:9)
    are collected in a Bootstrap modal and stored in
@@ -332,12 +343,14 @@ Semantics:
 - **One mutation path.** Every mutation goes through `deps.updateProject`,
   which marks the project as having unsaved changes for the autosave (§7).
   The navbar's save button calls `storage.save()`, like any agent would.
-- **Two OAuth flows.** The GIS popup (`storage.connect()`) requires a real
-  human click — browsers block popups from injected scripts, so an agent
-  calling it alone cannot complete the flow. The device flow
-  (`storage.connectWithDevice()`) works headless: it returns a
-  verification URL + user code for the user to approve on any device, and
-  the agent polls `storage.status()` until connected.
+- **One Drive connect method.** `storage.connectWithDevice()` is the OAuth
+  device flow: it returns a verification URL + user code for the user to
+  approve on any device, and the caller polls `storage.status()` until
+  connected. It works headless (no popup, no user gesture), so the same
+  button and the same call serve a human click and an AI assistant alike;
+  there is no separate popup flow. `storage.connectWithServer(url)` is the
+  other option, connecting to a self-hosted HTTP storage server instead
+  (§6a) — no OAuth at all, just a reachability check.
 
 ## 5. Runtime docs generation (the LLM skill)
 
@@ -404,20 +417,67 @@ they cannot drift from the code.
 - **One implementation for the page and the CLI:** the Drive REST calls
   (`driveRest.ts`) and the OAuth device-flow requests (`deviceOAuth.ts`) use no
   browser APIs; the access token and `fetch` are injected. `driveClient.ts` binds
-  them to the page's in-memory token and adds the GIS popup flow. The CLI
-  (section 13) binds the same code to a token kept in its state file.
-- **Client IDs:** `GOOGLE_CLIENT_ID` (Web application, GIS popup) and
-  `GOOGLE_DEVICE_CLIENT_ID` + `GOOGLE_DEVICE_CLIENT_SECRET`
-  ("TVs and Limited Input devices", device flow) at build time. They are
-  read only from the dotenv files (`.env`, `.env.local`) by
-  `scripts/read-env.mjs` (used by `vite.config.js` and `scripts/build-cli.mjs`);
-  shell env vars are ignored. CI writes `.env.local`
-  from the repo secrets of the same names before building.
-  The web client is a public OAuth client with no secret anywhere. The
-  device client secret ships in the bundle by design: Google's
-  device-client model assumes distributed apps cannot keep secrets (the
-  same model rclone uses); it only identifies the client, scope stays
-  `drive.file`, and access tokens remain memory-only.
+  them to the page's in-memory token. There is no popup flow — the device
+  flow is the only way in, for the page and for the CLI (section 13) alike,
+  which binds the same code to a token kept in its state file.
+- **Client IDs:** `GOOGLE_DEVICE_CLIENT_ID` + `GOOGLE_DEVICE_CLIENT_SECRET`
+  ("TVs and Limited Input devices", device flow) at build time — the only
+  Google client the app needs. Read only from the dotenv files (`.env`,
+  `.env.local`) by `scripts/read-env.mjs` (used by `vite.config.js` and
+  `scripts/build-cli.mjs`); shell env vars are ignored. CI writes
+  `.env.local` from the repo secrets of the same names before building. The
+  secret ships in the bundle by design: Google's device-client model
+  assumes distributed apps cannot keep secrets (the same model rclone
+  uses); it only identifies the client, scope stays `drive.file`, and
+  access tokens remain memory-only.
+
+## 6a. The HTTP storage server (the other backend)
+
+`http-storage/` is a standalone Node server (`server.ts` + `store.ts` +
+`start.ts`) that plays Drive's role over plain CORS-enabled REST instead of
+OAuth: one folder per project under a configurable root, `project.json` with
+the same optimistic-concurrency versioning (an `If-Match` header instead of
+Drive's file `version`, a 412 response instead of `ProjectChangedError`), and
+media files alongside it. File ids are global (a `.files-index.json` at the
+root maps id to project), so `GET /files/:id` and `DELETE /files/:id` never
+need a project name, mirroring how a Drive file id is addressable without its
+folder. `scripts/build-http-storage.mjs` bundles it (esbuild, no
+dependencies) to `http-storage/dist/http-storage.mjs`; `npm run http-storage`
+runs it locally (default `0.0.0.0:8081`; `npm run dev` is fixed to
+`0.0.0.0:8080`, both bound to every interface).
+
+**Pluggable backends.** `src/storage/backend.ts` defines `StorageBackendImpl`:
+the shape any project store must implement (`listProjectFolders`,
+`ensureProjectFolder`, `uploadImage`, `trashFile`, `downloadFile`,
+`saveProjectJson`, `loadProjectFile`, `fileUrl`, `hasAccess`, `disconnect`,
+plus a display `label`). Each backend's own module builds and exports one:
+`driveClient.ts`'s `driveBackend` binds it to Drive's REST calls and the
+page's in-memory token; `serverClient.ts`'s `serverBackend` binds it to
+`serverRest.ts`'s calls and a base URL checked once against `GET /health`
+(remembered in `localStorage` since it is not a secret, but only to prefill
+the connect screen's field next time; the app never reconnects on its own).
+`src/storage/activeBackend.ts` holds a `REGISTRY: Record<StorageBackend,
+StorageBackendImpl>`, a module-level flag for which key is active, and one
+function per storage call that looks up `REGISTRY[active]` and delegates.
+That registry is the only place that knows both backends exist: everything
+else (`App.tsx`, `useProjectSaver`, `mediaImages.ts`, `storage/projectStore.ts`)
+imports `activeBackend.ts`'s functions instead of a backend directly, so
+adding a third backend means writing a new module that implements
+`StorageBackendImpl`, adding one line to `REGISTRY` and to the `StorageBackend`
+union, and giving the splash screen a way to connect it. Nothing else changes.
+
+One seam outside that registry: `MediaHost.fileUrl` (`src/ai/storageDeps.ts`)
+is the URL wrapper an uploaded file's `MediaItem.url` gets, since Drive's and
+a server's canonical file URLs behave differently. Drive's `driveFileUrl(id)`
+string is never fetched literally (`useDriveImage` extracts the id back out
+of it and downloads with the access token); a server's is a plain URL it
+answers directly with no auth, so `useDriveImage` returns it unchanged for
+anything that is not a recognized Drive URL, no fetch needed. App.tsx passes
+`activeBackend.ts`'s `fileUrl` in; the CLI (Drive-only) leaves it out and gets
+`driveFileUrl` by default.
+
+The CLI does not support the server backend (`connectStorageWithServer` is a
+stub there that points at `vibecomics auth login`): it stays Drive-only.
 
 ## 7. Autosave
 
@@ -432,19 +492,22 @@ mutation marks the project dirty (`markDirty`, called from `updateProject` and
   stamped. Edits made while the write is in flight keep the project dirty for
   the next round; a failed write keeps it dirty too, shows an error toast and
   turns the button red.
-- **Two systems, one file (optimistic concurrency).** Drive keeps a `version`
-  counter on every file (metadata, not a field of `project.json`; the schema is
-  unchanged). The saver remembers, in memory, the **base** (the copy it loaded or
-  last wrote) and the Drive version of it; `driveRest.saveProjectJson` reads the
-  current version on the request that already finds the file and refuses to
-  write (`ProjectChangedError`) if it moved. Then, before pushing, the saver
-  **pulls** the newer copy and does a three-way merge of base, ours and theirs
-  (`src/state/merge.ts`, a pure function shared with the CLI). Everything has an
-  id, so changes to different things, or to different fields of one thing,
-  combine; the merged project is written on top of their version, and the merge
-  repeats (up to three times) if yet another save lands meanwhile. There is no
-  polling and no live update: it happens only when saving. Drive cannot make the
-  check and the write atomic, so a save landing in the milliseconds between them
+- **Two systems, one file (optimistic concurrency).** Both backends keep a
+  version outside `project.json` itself (metadata, not a field of the
+  schema): Drive's per-file `version` counter, or the storage server's own
+  counter checked against an `If-Match` header (§6a) — atomically there,
+  unlike Drive. The saver remembers, in memory, the **base** (the copy it
+  loaded or last wrote) and the version of it; `saveProjectJson` (routed
+  through `activeBackend.ts`) reads the current version on the request that
+  already finds the file and refuses to write (`ProjectChangedError`) if it
+  moved. Then, before pushing, the saver **pulls** the newer copy and does a
+  three-way merge of base, ours and theirs (`src/state/merge.ts`, a pure
+  function shared with the CLI). Everything has an id, so changes to
+  different things, or to different fields of one thing, combine; the merged
+  project is written on top of their version, and the merge repeats (up to
+  three times) if yet another save lands meanwhile. There is no polling and
+  no live update: it happens only when saving. On Drive, the check and the
+  write are not atomic, so a save landing in the milliseconds between them
   can still slip through.
 - **What is a conflict:** the same field of the same thing changed differently on
   both sides; a thing deleted on one side and changed on the other; both sides
@@ -541,11 +604,12 @@ it's drawn comic content, it's custom CSS.
 
 ## 11. Agent testing constraints
 
-- Drive OAuth during automated testing: the GIS popup (`storage.connect()`)
-  needs the user's real click and cannot be completed headless. The device
-  flow (`storage.connectWithDevice()`) is the headless path — the agent
-  relays the URL + code to the user, who approves on any device; no
-  throwaway credentials exist, so use the real user gesture.
+- Drive OAuth during automated testing: `storage.connectWithDevice()` (the
+  only connect method — no popup flow exists) is headless-friendly, but no
+  throwaway credentials exist, so completing it for real still needs the
+  agent to relay the URL + code to the user, who approves on any device.
+  `storage.connectWithServer(url)` (§6a) needs no OAuth at all — it works
+  headless outright against a storage server the agent can start itself.
 - Static checks (tsc, vite build, prettier, extractor) are the automated
   gate. Live-browser verification — visual inspection and console
   injection of `window.ComicBuilder` — needs a real browser session and is
@@ -556,7 +620,7 @@ it's drawn comic content, it's custom CSS.
 
 ## 12. Source layout
 
-- `src/App.tsx` — screen state, Drive wiring (`ComicBuilderDeps`), toast.
+- `src/App.tsx` — screen state, storage wiring (`ComicBuilderDeps`), toast.
 - `src/cli/` — the command line (section 13).
 - `src/components/` — one file per screen or widget, grouped by role:
   screens (`SplashScreen`, `ProjectTiles`, `EditorScreen`, `PreviewScreen`),
@@ -571,13 +635,20 @@ it's drawn comic content, it's custom CSS.
   the JSDoc there is the source of the LLM docs), `builders.ts` (the shared
   list/get/add/update/delete builders and validation it is assembled from),
   `deps.ts` (`ComicBuilderDeps` and the input/patch types), `storageDeps.ts`
-  (the Drive-backed deps the page and the CLI share: media upload, download and
-  delete, create or open a project), `docs.ts`, generated `actions.docs.gen.ts`.
-  `createComicBuilder(deps)` uses no browser APIs, so it runs in Node too.
+  (the storage-backed deps the page and the CLI share: media upload, download
+  and delete, create or open a project — generic over `MediaHost.drive` /
+  `.fileUrl`), `docs.ts`, generated `actions.docs.gen.ts`. `createComicBuilder(deps)`
+  uses no browser APIs, so it runs in Node too.
 - `src/drive/` — `driveRest.ts` (Drive REST, token and `fetch` injected),
-  `deviceOAuth.ts` (device flow and refresh, no browser APIs), `driveClient.ts`
-  (the page's token, the GIS popup flow, and the two above bound together),
-  `projectStore.ts` (load, validate and normalize a project).
+  `deviceOAuth.ts` (device flow, refresh and revoke, no browser APIs),
+  `driveClient.ts` (the page's token and the device flow bound to it).
+- `src/server/` — the storage-server counterpart (§6a): `serverRest.ts`
+  (REST calls, base URL and `fetch` injected) and `serverClient.ts` (the
+  page's base URL, remembered in `localStorage`, bound to it).
+- `src/storage/` — `backend.ts` (the `StorageBackendImpl` interface),
+  `activeBackend.ts` (the registry that dispatches to whichever backend is
+  active; see §6a) and `projectStore.ts` (load, validate and normalize a
+  project, through whichever is active).
 - `src/state/` — project validation/creation/normalization (`project.ts`),
   project lint (`lint.ts`: `lintProject` returns findings `{ code, severity,
 message, where, fix? }`, errors first; exposed as `project.lint()` and the
@@ -616,8 +687,9 @@ generated from the JSDoc.
 - **Login** is the OAuth device flow (`deviceOAuth.ts`), split in two so it fits
   an agent's tool calls: `auth login` prints the URL and code and returns;
   `auth status` finishes it (one poll) once the user has approved. Later runs
-  refresh the access token from the refresh token. `storage.connect` (the GIS
-  popup) is unavailable in the CLI.
+  refresh the access token from the refresh token. `storage.connectWithServer`
+  (the HTTP storage server backend) is unavailable in the CLI, which only
+  supports Drive.
 - **Per command** (`src/cli/nodeSession.ts`): refresh the login, load the open
   project from Drive (skipped for commands that do not need it), call the API,
   and save `project.json` back if anything changed (`savedAt`/`updatedAt`

@@ -1,8 +1,8 @@
 /**
- * The Drive-backed parts of ComicBuilderDeps that do not depend on where the
+ * The storage-backed parts of ComicBuilderDeps that do not depend on where the
  * project state lives: media upload, download and delete, and creating or
  * opening a project folder. The page (App.tsx) and the CLI both build their
- * deps from these, so the two behave the same. No browser APIs: the Drive
+ * deps from these, so the two behave the same. No browser APIs: the storage
  * calls and the optional thumbnail maker are injected.
  */
 import type { DriveRest, ProjectFolder } from '../drive/driveRest';
@@ -27,10 +27,10 @@ export function parseProject(raw: unknown): ComicProject {
 
 export interface MediaHost {
   getProject(): ComicProject | null;
-  /** The Drive folder of the open project, or null when none is open. */
   getFolderId(): string | null;
   updateProject(mut: (p: ComicProject) => void): void;
   drive: Pick<DriveRest, 'uploadImage' | 'trashFile' | 'downloadFile'>;
+  fileUrl?(fileId: string): string;
   /** Makes a thumbnail when the caller gave none; null when it cannot (e.g. no canvas in Node). */
   makeThumbnail?(image: File, name: string): Promise<File | null>;
 }
@@ -81,7 +81,7 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
         id: newId('media'),
         name: uploaded.name,
         driveFileId: uploaded.id,
-        url: driveFileUrl(uploaded.id),
+        url: (host.fileUrl ?? driveFileUrl)(uploaded.id),
         mimeType: uploaded.mimeType || mimeType,
         ...(links?.subjectId && { subjectId: links.subjectId }),
         ...(links?.sceneId && { sceneId: links.sceneId }),

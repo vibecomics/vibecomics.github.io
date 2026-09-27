@@ -349,13 +349,13 @@ export function createNodeSession(options: NodeSessionOptions) {
     },
     setStatus: () => undefined,
 
-    connectStorage: () => {
+    connectStorageWithDevice: startLogin,
+    connectStorageWithServer: () => {
       throw new Error(
-        'storage.connect opens a Google sign-in popup, which needs a browser. From the CLI use ' +
-          '"vibecomics auth login" (or storage connectWithDevice).'
+        'The CLI does not support a storage server yet: it only works against Google Drive. Use ' +
+          '"vibecomics auth login".'
       );
     },
-    connectStorageWithDevice: startLogin,
     disconnectStorage: async () => {
       await save();
       await auth.logout();

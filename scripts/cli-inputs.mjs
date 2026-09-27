@@ -93,6 +93,7 @@ export const INPUTS = {
     pageSize: { ...PAGE_SIZE, optional: true },
   },
   'storage.openProject': { idOrName: { type: 'string', example: 'My first comic' } },
+  'storage.connectWithServer': { url: { type: 'string', example: 'http://localhost:4000' } },
 
   'project.lint': {},
   'project.load': {

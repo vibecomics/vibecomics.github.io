@@ -18,7 +18,6 @@ export function readDotenv() {
 /** The compile-time constants for the Google client (declared in src/globals.d.ts). */
 export function googleDefines(env = readDotenv()) {
   return {
-    GOOGLE_CLIENT_ID: JSON.stringify(env.GOOGLE_CLIENT_ID || ''),
     GOOGLE_DEVICE_CLIENT_ID: JSON.stringify(env.GOOGLE_DEVICE_CLIENT_ID || ''),
     GOOGLE_DEVICE_CLIENT_SECRET: JSON.stringify(env.GOOGLE_DEVICE_CLIENT_SECRET || ''),
   };

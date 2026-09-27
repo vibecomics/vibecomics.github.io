@@ -3,7 +3,10 @@
  * comic project (mirroring the Drive backend's "one Drive folder per comic" shape), each with a
  * project.json and a `files/` directory of uploaded media blobs.
  *
- * Layout of one project directory:
+ * Layout:
+ *   <root>/.files-index.json  - { [fileId]: projectName }, so a file can be read or trashed by its id
+ *                                alone, without knowing its project - mirrors Drive, where a file id
+ *                                is globally addressable regardless of which folder holds it.
  *   <root>/<project name>/
  *     project.json      - the comic project, written atomically
  *     .meta.json         - { projectVersion, files: { [id]: { name, mimeType, size, createdAt } } }
@@ -39,7 +42,10 @@ const PROJECT_FILE = 'project.json';
 const META_FILE = '.meta.json';
 const FILES_DIR = 'files';
 const TRASH_DIR = '.trash';
+const INDEX_FILE = '.files-index.json';
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+type FileIndex = Record<string, string>;
 
 export interface ProjectFolder {
   id: string;
@@ -126,6 +132,7 @@ export function createStore(root: string) {
   const projectJsonPath = (name: string) => path.join(projectDir(name), PROJECT_FILE);
   const filesDir = (name: string) => path.join(projectDir(name), FILES_DIR);
   const trashDir = (name: string) => path.join(projectDir(name), TRASH_DIR);
+  const indexPath = path.join(root, INDEX_FILE);
 
   async function readMeta(name: string): Promise<ProjectMeta> {
     try {
@@ -146,6 +153,26 @@ export function createStore(root: string) {
     if (!(await exists(projectDir(name)))) {
       throw new NotFoundError(`No project folder named "${name}".`);
     }
+  }
+
+  async function readIndex(): Promise<FileIndex> {
+    try {
+      return JSON.parse(await fsReadFile(indexPath, 'utf8')) as FileIndex;
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ENOENT') return {};
+      throw e;
+    }
+  }
+
+  async function writeIndex(index: FileIndex): Promise<void> {
+    await writeFileAtomic(indexPath, JSON.stringify(index));
+  }
+
+  /** The project a file id belongs to, or throws NotFoundError. */
+  async function projectOfFile(id: string): Promise<string> {
+    const project = (await readIndex())[id];
+    if (!project) throw new NotFoundError(`No file "${id}".`);
+    return project;
   }
 
   return {
@@ -258,17 +285,19 @@ export function createStore(root: string) {
       };
       meta.files[id] = entry;
       await writeMeta(name, meta);
+      const index = await readIndex();
+      index[id] = name;
+      await writeIndex(index);
       return { id, name: entry.name, mimeType: entry.mimeType, version: entry.version };
     },
 
-    /** Read back an uploaded blob's bytes and metadata. */
-    async readFile(rawName: unknown, rawId: unknown): Promise<{ buffer: Buffer; meta: FileMeta }> {
-      const name = sanitizeProjectName(rawName);
+    /** Read back an uploaded blob's bytes and metadata, by id alone (mirrors Drive's global file ids). */
+    async readFile(rawId: unknown): Promise<{ buffer: Buffer; meta: FileMeta }> {
       const id = sanitizeFileId(rawId);
-      await requireProject(name);
+      const name = await projectOfFile(id);
       const meta = await readMeta(name);
       const entry = meta.files[id];
-      if (!entry) throw new NotFoundError(`No file "${id}" in "${name}".`);
+      if (!entry) throw new NotFoundError(`No file "${id}".`);
       const buffer = await fsReadFile(path.join(filesDir(name), id));
       return {
         buffer,
@@ -276,24 +305,30 @@ export function createStore(root: string) {
       };
     },
 
-    /** Move a file to the project's trash (recoverable there) and drop it from the file listing. */
-    async trashFile(rawName: unknown, rawId: unknown): Promise<void> {
-      const name = sanitizeProjectName(rawName);
+    /** Move a file to its project's trash (recoverable there) and drop it from the file listing. */
+    async trashFile(rawId: unknown): Promise<void> {
       const id = sanitizeFileId(rawId);
-      await requireProject(name);
+      const name = await projectOfFile(id);
       const meta = await readMeta(name);
       const entry = meta.files[id];
-      if (!entry) throw new NotFoundError(`No file "${id}" in "${name}".`);
+      if (!entry) throw new NotFoundError(`No file "${id}".`);
       await mkdir(trashDir(name), { recursive: true });
       await rename(path.join(filesDir(name), id), path.join(trashDir(name), id));
       delete meta.files[id];
       await writeMeta(name, meta);
+      const index = await readIndex();
+      delete index[id];
+      await writeIndex(index);
     },
 
     /** Permanently delete a project folder and everything in it. Used by tests and admin cleanup. */
     async deleteProject(rawName: unknown): Promise<void> {
       const name = sanitizeProjectName(rawName);
       await requireProject(name);
+      const meta = await readMeta(name);
+      const index = await readIndex();
+      for (const id of Object.keys(meta.files)) delete index[id];
+      await writeIndex(index);
       await rm(projectDir(name), { recursive: true, force: true });
     },
   };

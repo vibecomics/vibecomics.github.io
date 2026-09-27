@@ -1,12 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import { parseProject } from '../ai/storageDeps';
-import {
-  ProjectChangedError,
-  getAccessToken,
-  loadProjectFile,
-  saveProjectJson,
-} from '../drive/driveClient';
+import { ProjectChangedError } from '../drive/driveRest';
+import { hasStorageAccess, loadProjectFile, saveProjectJson } from '../storage/activeBackend';
 import type { ComicProject } from '../types/comic';
 import { errorMessage } from '../utils/errors';
 import { mergeProjects } from './merge';
@@ -32,12 +28,12 @@ interface Options {
 }
 
 /**
- * Tracks unsaved changes and writes project.json to Drive: every minute while a
+ * Tracks unsaved changes and writes project.json to storage: every minute while a
  * project is open, but only when something changed, plus on demand via save().
  *
  * It also guards against overwriting somebody else's save (another browser, the
- * CLI). It remembers the copy it last loaded or saved (the "base") and the Drive
- * version of it. Before it writes, Drive is asked to refuse if the file has a
+ * CLI). It remembers the copy it last loaded or saved (the "base") and the storage
+ * version of it. Before it writes, storage is asked to refuse if the file has a
  * newer version; then the newer copy is pulled and merged with ours (see
  * merge.ts) and, when nothing clashes, the merged project is what gets written.
  * Real clashes are not written: they wait in `conflicts`, for the editor to show
@@ -75,7 +71,7 @@ export function useProjectSaver({
 
   /**
    * Forget unsaved changes, conflicts and the last save result (a project was opened or closed).
-   * When a project was opened, pass it with its Drive version: they are what the next save is
+   * When a project was opened, pass it with its storage version: they are what the next save is
    * checked against and merged from.
    */
   function reset(opened?: { project: ComicProject; version: string | null }) {
@@ -89,7 +85,7 @@ export function useProjectSaver({
   }
 
   /**
-   * Write the open project. If Drive has a newer version, pull it, merge it into ours and write the
+   * Write the open project. If storage has a newer version, pull it, merge it into ours and write the
    * merged project instead. Resolves to what was written, or to null when the two clash (the
    * conflicts are then in `conflicts` and the merged project, with our side for each, is open).
    */
@@ -131,8 +127,8 @@ export function useProjectSaver({
       return false;
     }
     if (!dirtyRef.current) return true;
-    if (!getAccessToken()) {
-      onError('Could not save: not connected to Google Drive.');
+    if (!hasStorageAccess()) {
+      onError('Could not save: not connected to storage.');
       return false;
     }
 

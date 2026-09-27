@@ -231,8 +231,8 @@ export function storyApi<K extends keyof StoryTypes>(deps: ComicBuilderDeps, key
 }
 
 /**
- * A layer's image as the Drive URL it is stored under, from a media id or a
- * Drive URL, or '' when it has none yet. Layers cannot use any other image source.
+ * A layer's image as the canonical URL it is registered under, from a media id or that same URL, or
+ * '' when it has none yet. Layers cannot use any other image source.
  */
 export function resolveLayerImage(
   project: ComicProject,
@@ -249,7 +249,7 @@ export function resolveLayerImage(
   const fileId = driveFileIdFromUrl(src);
   if (!fileId) {
     throw new Error(
-      'Layer images must be Google Drive URLs. Upload the image with media.upload and pass the returned id as mediaId.'
+      'Layer images must be registered media URLs. Upload the image with media.upload and pass the returned id as mediaId.'
     );
   }
   return { src: driveFileUrl(fileId), mediaId: media.find((m) => m.driveFileId === fileId)?.id };

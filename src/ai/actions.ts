@@ -70,15 +70,16 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
   /**
    * Top-level command API for VibeComics: every UI control calls these same
-   * functions (one code path, no drift). Namespaces: storage (Drive OAuth,
-   * project folders, project.json IO), project (whole-project replace), page
-   * (navigation, preview, adding pages), panels (page layout), layers, bubbles,
-   * metadata (story bible), characters, scenes, objects, media. Reads return
-   * deep-cloned snapshots. Changes are saved to Drive automatically within a
-   * minute (only when something changed); storage.save() saves immediately.
-   * Everything except storage and help() needs an open project: without one,
-   * page.count/select/current and layers/bubbles list/get return 0 or null, and
-   * every other call throws "No project is open".
+   * functions (one code path, no drift). Namespaces: storage (connect to
+   * Google Drive or a self-hosted HTTP server, project folders, project.json
+   * IO), project (whole-project replace), page (navigation, preview, adding
+   * pages), panels (page layout), layers, bubbles, metadata (story bible),
+   * characters, scenes, objects, media. Reads return deep-cloned snapshots.
+   * Changes are saved automatically within a minute (only when something
+   * changed); storage.save() saves immediately. Everything except storage and
+   * help() needs an open project: without one, page.count/select/current and
+   * layers/bubbles list/get return 0 or null, and every other call throws
+   * "No project is open".
    */
   const ComicBuilder = {
     /**
@@ -88,74 +89,69 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     help: (): string => HELP_TEXT,
 
     /**
-     * Google Drive storage: OAuth, project folders, and project.json IO.
-     * Drive is the only project store. Scope is drive.file, so the app only
-     * sees folders and files it created — listProjects() is the complete list.
+     * Project storage: either Google Drive or a self-hosted HTTP server (see
+     * http-storage/), picked once per session on the connect screen. Whichever
+     * is active, the app only sees folders and files it created there;
+     * listProjects() is the complete list.
      */
     storage: {
       /**
-       * Start the Google Drive OAuth flow (GIS popup).
-       * MUST be called from a real human click: browsers block OAuth popups
-       * from injected scripts, so an agent calling this alone cannot complete
-       * the flow. Ask the user to click the "Connect with Google Drive" button.
-       * The promise resolves when the popup flow finishes, whether or not it
-       * succeeded (a failure shows as a message in the app and does not reject),
-       * so check storage.status().connected afterwards. The token is kept only in
-       * page memory: reloading the page drops it, and connecting again opens
-       * Google's popup once more (which closes itself when the user has
-       * already granted access, or shows an account chooser).
-       * @returns A promise that resolves when the popup flow has finished; check storage.status().connected.
-       */
-      connect: (): Promise<void> => deps.connectStorage(),
-
-      /**
-       * Start the Google Drive OAuth device flow — for headless browsers
-       * and AI assistants that cannot complete the GIS popup.
-       * Resolves promptly with { url, code, expiresInSeconds }: show the
-       * user the URL and code (they open the URL on any device — a phone
-       * works — enter the code, and approve). Then poll storage.status()
-       * until connected is true and continue. If the user denies the request or
-       * the code expires, status().connected simply stays false (the app shows
-       * the reason). Rejects immediately if the device client is not configured.
-       * Works from injected scripts: no popup, no user gesture needed.
-       * The device client secret ships in the app bundle by design
-       * (Google's device-client model: distributed apps cannot keep
-       * secrets; scope stays limited to drive.file, and the access token
-       * itself is memory-only).
+       * Connect to Google Drive via the OAuth device flow. Resolves promptly
+       * with { url, code, expiresInSeconds }: show the user the URL and code
+       * (they open the URL on any device, a phone works, enter the code, and
+       * approve). Then poll storage.status() until connected is true and
+       * continue. If the user denies the request or the code expires,
+       * status().connected simply stays false (the app shows the reason).
+       * Rejects immediately if the device client is not configured. Works from
+       * injected scripts: no popup, no user gesture needed, so the same button
+       * works for a human or an AI assistant. The device client secret ships in
+       * the app bundle by design (Google's device-client model: distributed
+       * apps cannot keep secrets; scope stays limited to drive.file, and the
+       * access token itself is memory-only).
        * @returns The verification URL, user code, and code expiry.
        */
       connectWithDevice: (): Promise<DeviceCodeInfo> => deps.connectStorageWithDevice(),
 
       /**
-       * Disconnect Drive: save any unsaved changes, then revoke the grant at
-       * Google and return to the connect screen. Full sign-out — the next
-       * connect asks for permission again. (Reloading the page alone does NOT
-       * revoke the grant; it only drops the in-memory token.)
+       * Connect to a self-hosted HTTP storage server at this base URL (see
+       * http-storage/). The server has no login: this just checks it answers
+       * GET /health, then makes it the active store. The URL is remembered
+       * only to prefill the connect screen's field next time; it does not
+       * reconnect on its own.
+       * @param url - The server's base URL, e.g. "http://localhost:8081".
+       * @returns A promise that resolves once connected; check storage.status().connected.
+       */
+      connectWithServer: (url: string): Promise<void> => deps.connectStorageWithServer(url),
+
+      /**
+       * Disconnect storage: save any unsaved changes, then drop the connection
+       * (revoking the grant at Google, if that is what is connected) and return
+       * to the connect screen. The next connect starts fresh.
        * @returns A promise that resolves when disconnection is complete.
        */
       disconnect: (): Promise<void> => deps.disconnectStorage(),
 
       /**
-       * Report Drive connection state.
-       * @returns { connected, configured }: connected means an unexpired token is in memory; configured means a Google OAuth client ID is set.
+       * Report the storage connection state.
+       * @returns { connected, configured }: connected means storage has a live connection; configured means Drive's device OAuth client is set (irrelevant once a server is connected).
        */
       status: (): { connected: boolean; configured: boolean } => deps.getStorageStatus(),
 
       /**
-       * List every project folder this app created on Drive (files.list under
-       * the drive.file scope), sorted by name, at most 100. The app is blind to
-       * everything else on the user's Drive.
+       * List every project folder in the active store (on Drive: files.list
+       * under the drive.file scope, so the app is blind to everything else on
+       * the user's Drive), sorted by name, at most 100.
        * @returns A promise resolving to [{ id, name }] of project folders.
        */
       listProjects: (): Promise<ProjectFolder[]> => deps.listStorageProjects(),
 
       /**
-       * Create a new project and open it: create a Drive folder named after the
-       * project, write a blank project.json (a cover page with one panel, empty
+       * Create a new project and open it: create a project folder named after
+       * it, write a blank project.json (a cover page with one panel, empty
        * metadata) into it, and show it in the editor. If a folder with that name
        * already exists, its project is opened instead and nothing is overwritten.
        * The project appears in listProjects().
-       * @param name - The project name; becomes the Drive folder name.
+       * @param name - The project name; becomes the project folder name.
        * @param pageSize - Optional { label, widthIn, heightIn } physical page
        *   dimensions (see the page size presets in the data model). Defaults to
        *   US Comic (6.625" × 10.25").
@@ -183,7 +179,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       /**
        * Close the current project: save any unsaved changes, drop it from the
        * editor and return to the project tiles. If saving fails the project
-       * stays open. Does not delete anything on Drive.
+       * stays open. Does not delete anything in storage.
        * @returns A promise that resolves once the project is closed or saving has failed.
        */
       closeProject: (): Promise<void> => deps.closeStorageProject(),
@@ -196,14 +192,14 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       showProjects: (): Promise<ProjectFolder[]> => deps.showProjectTiles(),
 
       /**
-       * Save to Drive right now. The app already saves by itself every minute
-       * when there are changes; this only hurries it. Does nothing when
-       * everything is already saved. Fails ({ ok: false }) when no project is
-       * open or Drive is not connected.
+       * Save right now. The app already saves by itself every minute when
+       * there are changes; this only hurries it. Does nothing when everything
+       * is already saved. Fails ({ ok: false }) when no project is open or
+       * storage is not connected.
        *
        * If somebody else (another browser, the command line) saved the project
-       * on Drive since it was opened, their changes are pulled and merged with
-       * yours first, and the merged project is saved: changes to different things
+       * since it was opened, their changes are pulled and merged with yours
+       * first, and the merged project is saved: changes to different things
        * (or different fields of one thing) just combine. If the two clash (the
        * same field changed differently, or something deleted on one side and
        * changed on the other), nothing is written: the app shows the conflicts at
@@ -223,7 +219,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * Validation follows public/schema/comic-project.schema.json; the error
        * names the failing path (e.g. project.pages[2].panels[0].layers[1]).
        * Required: id, title, savedAt, pages and metadata (outline, characters,
-       * scenes, objects, media). Layer images must be Google Drive URLs (or empty).
+       * scenes, objects, media). Layer images must be registered media URLs (or empty).
        * This is the primary editing path for bulk changes: read snapshots via
        * page/panels/layers/bubbles/metadata, modify client-side, load the result.
        * Geometry (x/y/width/rotation/opacity) is preserved exactly. Pages
@@ -632,7 +628,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * layer prompt (see the layers namespace). Foreground images
        * should usually be PNGs with a transparent background.
        * @param panelId - The panel id.
-       * @param input - { name?, prompt?, subjectId?, sceneId?, mediaId?, src?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. The image must be on Google Drive: pass mediaId (from media.upload or media.list, preferred) or src as a Drive URL; any other URL throws. Omit both for a layer that is only a prompt so far. subjectId is the id of the character or object the layer shows (it must exist); the media picker lists that subject's art first. sceneId is the id of the scene a background layer is the setting of (it must exist); the picker lists that scene's art first. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate. dirty is set automatically (true when there's a prompt and no image yet) unless you pass it explicitly.
+       * @param input - { name?, prompt?, subjectId?, sceneId?, mediaId?, src?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. The image must already be registered: pass mediaId (from media.upload or media.list, preferred) or src as a registered media URL; any other URL throws. Omit both for a layer that is only a prompt so far. subjectId is the id of the character or object the layer shows (it must exist); the media picker lists that subject's art first. sceneId is the id of the scene a background layer is the setting of (it must exist); the picker lists that scene's art first. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate. dirty is set automatically (true when there's a prompt and no image yet) unless you pass it explicitly.
        * @returns A deep-cloned snapshot of the new Layer.
        */
       add: (panelId: string, input: LayerInput): Layer => {
@@ -665,7 +661,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * Update a layer: move (x/y), resize (width), rotate, change opacity or
-       * visibility, flip it left to right (flipX), rename, edit its prompt, set what it shows (subjectId: a character or object id) or, for a background, the scene it is the setting of (sceneId), either null to clear it, or swap its image (mediaId, or src as a Drive URL).
+       * visibility, flip it left to right (flipX), rename, edit its prompt, set what it shows (subjectId: a character or object id) or, for a background, the scene it is the setting of (sceneId), either null to clear it, or swap its image (mediaId, or src as a registered media URL).
        * Only the given fields change. dirty tracks itself: editing prompt,
        * subjectId or sceneId turns it on (off again if that leaves no prompt);
        * setting mediaId or src turns it off, even in the same call.
@@ -1045,9 +1041,10 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     },
 
     /**
-     * The project's media registry: image files in the Drive project folder.
-     * Layers (via mediaId) and characters/scenes/objects (via imageIds) refer
-     * to these entries instead of raw URLs.
+     * The project's media registry: image files in the project's storage
+     * folder (Drive, or a self-hosted server). Layers (via mediaId) and
+     * characters/scenes/objects (via imageIds) refer to these entries instead
+     * of raw URLs.
      */
     media: {
       /**
@@ -1059,7 +1056,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       /**
        * Get one media entry.
        * @param id - The media id.
-       * @returns A deep-cloned MediaItem snapshot, or null when not found. Read-only. url is the image's Drive URL, which cannot be fetched without the user's Drive access token (kept private to the page): use media.download(id) to read the image itself.
+       * @returns A deep-cloned MediaItem snapshot, or null when not found. Read-only. url is the image's internal storage reference, not something you can fetch yourself: use media.download(id) to read the image itself.
        */
       get: (id: string): MediaItem | null => {
         const item = requireProject(deps).metadata.media.find((m) => m.id === id);
@@ -1067,22 +1064,23 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       },
 
       /**
-       * Read a registered image: the bytes of a media file, fetched from Drive
-       * with the app's access token and returned as a data URL. Use it to get
-       * reference images (a character's imageIds, or a layer's mediaId) to pass
-       * to an image generator that accepts reference or input images, so a new
-       * image can match existing art. The counterpart of upload().
+       * Read a registered image: the bytes of a media file, fetched from
+       * storage and returned as a data URL. Use it to get reference images (a
+       * character's imageIds, or a layer's mediaId) to pass to an image
+       * generator that accepts reference or input images, so a new image can
+       * match existing art. The counterpart of upload().
        * @param id - The media id (from media.list, characters.get(id).imageIds, or a layer's mediaId).
-       * @returns A promise resolving to { name, mimeType, dataUrl }. Rejects when the media id is not found or Drive is not connected.
+       * @returns A promise resolving to { name, mimeType, dataUrl }. Rejects when the media id is not found or storage is not connected.
        */
       download: (id: string) => deps.downloadStorageMedia(id),
 
       /**
-       * Upload image bytes to the current project folder on Drive and register
-       * the file in metadata.media. All images live on Drive: upload art and
-       * character reference images with this, then wire the returned id into a
-       * layer (layers.add with mediaId) or a character / scene / object (imageIds).
-       * The returned url is the image's Drive URL.
+       * Upload image bytes to the current project's storage folder and register
+       * the file in metadata.media. All images live in the project's storage:
+       * upload art and character reference images with this, then wire the
+       * returned id into a layer (layers.add with mediaId) or a character /
+       * scene / object (imageIds). The returned url is the image's internal
+       * storage reference.
        *
        * Always send a thumbnail with the image. The editor's media picker
        * lists every image in the project as a thumbnail, and an image with
@@ -1124,7 +1122,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * Rename an image or say what it shows. Only the registry entry changes:
-       * the file on Drive keeps the name it was uploaded with.
+       * the stored file keeps the name it was uploaded with.
        * @param id - The media id.
        * @param patch - { name?, subjectId?, sceneId? }: name is the new display name (not empty); subjectId is the id of the character or object the image is art of and sceneId the scene it is art of (each must exist), or null to clear it.
        * @returns A deep-cloned snapshot of the updated MediaItem. Throws when the media id is not found.
@@ -1167,13 +1165,13 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         deps.uploadStorageThumbnail(id, dataUrl),
 
       /**
-       * Delete an image: its file and its thumbnail move to the Drive trash
+       * Delete an image: its file and its thumbnail are trashed in storage
        * (recoverable there) and it leaves the registry. Anything using it
        * lets go of it: layers showing it stay but lose their image (they are
        * prompt-only layers again), and characters, scenes and objects drop it
        * from their imageIds.
        * @param id - The media id.
-       * @returns A promise resolving to { layers, entries }: how many layers lost their image and how many story-bible entries lost a reference image. Rejects when the media id is not found or Drive is not connected.
+       * @returns A promise resolving to { layers, entries }: how many layers lost their image and how many story-bible entries lost a reference image. Rejects when the media id is not found or storage is not connected.
        */
       delete: (id: string): Promise<{ layers: number; entries: number }> =>
         deps.deleteStorageMedia(id),

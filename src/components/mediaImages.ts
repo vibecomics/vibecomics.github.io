@@ -1,10 +1,10 @@
-import { downloadFile } from '../drive/driveClient';
+import { downloadFile } from '../storage/activeBackend';
 import type { MediaItem } from '../types/comic';
 import { createBlobStore } from '../utils/blobStore';
 
 const blobUrls = new Map<string, Promise<string>>();
 
-// Images already fetched from Drive are kept in the browser's Cache API, so a reload or a later
+// Images already fetched from storage are kept in the browser's Cache API, so a reload or a later
 // visit does not fetch them again. The oldest go when the total passes the limit.
 const store = createBlobStore(typeof caches === 'undefined' ? undefined : caches, {
   // One cache per app, since every GitHub Pages project of a user shares one origin.

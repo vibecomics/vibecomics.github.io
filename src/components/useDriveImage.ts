@@ -3,15 +3,15 @@ import { driveFileIdFromUrl } from '../utils/driveUrl';
 import { loadBlobUrl } from './mediaImages';
 
 /**
- * A Drive image URL as something an <img> can show: Drive needs the user's
- * access token, so the bytes are fetched once and served from a blob URL.
- * Null until loaded (or when the URL is not a Drive URL).
+ * A layer image URL as something an <img> can show. A Drive URL needs the user's access token, so
+ * its bytes are fetched once and served from a blob URL; null until that load finishes. Anything
+ * else (a storage-server URL, which needs no auth and answers CORS GETs directly) is returned as-is.
  */
 export function useDriveImage(src: string): string | null {
   const [loaded, setLoaded] = useState<{ src: string; url: string } | null>(null);
+  const fileId = driveFileIdFromUrl(src);
 
   useEffect(() => {
-    const fileId = driveFileIdFromUrl(src);
     if (!fileId) return;
     let current = true;
     loadBlobUrl(fileId).then(
@@ -21,7 +21,9 @@ export function useDriveImage(src: string): string | null {
     return () => {
       current = false;
     };
-  }, [src]);
+  }, [src, fileId]);
 
+  if (!src) return null;
+  if (!fileId) return src;
   return loaded?.src === src ? loaded.url : null;
 }

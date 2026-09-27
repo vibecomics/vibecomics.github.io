@@ -15,8 +15,10 @@
  *   GET    /projects/:name/files                        -> [{ id, name, mimeType, version }]
  *   POST   /projects/:name/files                        body: raw bytes
  *                                                        headers: X-File-Name (required), Content-Type
- *   GET    /projects/:name/files/:id                     -> raw bytes, Content-Type set from stored mimeType
- *   DELETE /projects/:name/files/:id                     moves the file to that project's trash
+ *   GET    /files/:id                                    -> raw bytes, Content-Type set from stored mimeType
+ *   DELETE /files/:id                                     moves the file to its project's trash
+ *
+ * File ids are global (like Drive's), so reading or trashing one never needs its project name.
  */
 import http from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
@@ -184,26 +186,27 @@ export function createRequestListener({
             sendJson(res, 201, saved);
             return;
           }
-          // /projects/:name/files/:id
-          if (segments.length === 4) {
-            const id = segments[3];
-            if (req.method === 'GET') {
-              const { buffer, meta } = await store.readFile(name, id);
-              res.writeHead(200, {
-                'Content-Type': meta.mimeType || 'application/octet-stream',
-                'Content-Length': buffer.length,
-                ETag: meta.version,
-              });
-              res.end(buffer);
-              return;
-            }
-            if (req.method === 'DELETE') {
-              await store.trashFile(name, id);
-              res.writeHead(204);
-              res.end();
-              return;
-            }
-          }
+        }
+      }
+
+      // /files/:id (global, like a Drive file id: no project name needed)
+      if (segments[0] === 'files' && segments.length === 2) {
+        const id = segments[1];
+        if (req.method === 'GET') {
+          const { buffer, meta } = await store.readFile(id);
+          res.writeHead(200, {
+            'Content-Type': meta.mimeType || 'application/octet-stream',
+            'Content-Length': buffer.length,
+            ETag: meta.version,
+          });
+          res.end(buffer);
+          return;
+        }
+        if (req.method === 'DELETE') {
+          await store.trashFile(id);
+          res.writeHead(204);
+          res.end();
+          return;
         }
       }
 
@@ -230,8 +233,8 @@ export interface StartServerOptions {
 
 /** Start the standalone server. Resolves once it is listening. */
 export async function startServer({
-  port = 4000,
-  host = '127.0.0.1',
+  port = 8081,
+  host = '0.0.0.0',
   root,
   corsOrigin,
   log,

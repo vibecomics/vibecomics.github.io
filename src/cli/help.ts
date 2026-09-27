@@ -115,7 +115,7 @@ export function namespaceHelp(name: string): string {
 
 /** Commands that only make sense in the app; they stay callable but are left out of the overview. */
 const BROWSER_ONLY = new Set([
-  'storage.connect',
+  'storage.connectWithServer',
   'storage.showProjects',
   'page.openPreview',
   'page.closePreview',

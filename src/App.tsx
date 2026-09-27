@@ -12,23 +12,24 @@ import ProjectTiles from './components/ProjectTiles';
 import SplashScreen from './components/SplashScreen';
 import StatusToast from './components/StatusToast';
 import type { Status } from './components/StatusToast';
-import { getGoogleClientId } from './config';
+import { awaitDeviceAccess, isDriveConfigured, requestDeviceAccess } from './drive/driveClient';
+import type { DeviceCodeInfo, ProjectFolder } from './drive/driveClient';
+import { connectToServer } from './server/serverClient';
 import {
-  awaitDeviceAccess,
+  backendLabel,
+  disconnectActiveBackend,
   downloadFile,
-  disconnectDrive,
   ensureProjectFolder,
-  hasDriveAccess,
+  fileUrl,
+  hasStorageAccess,
   listProjectFolders,
   loadProjectFile,
-  requestDeviceAccess,
-  requestDriveAccess,
   saveProjectJson,
+  setActiveBackend,
   trashFile,
   uploadImage,
-} from './drive/driveClient';
-import type { DeviceCodeInfo, ProjectFolder } from './drive/driveClient';
-import { loadProject } from './drive/projectStore';
+} from './storage/activeBackend';
+import { loadProject } from './storage/projectStore';
 import type { Conflict } from './state/merge';
 import { useProjectSaver } from './state/useProjectSaver';
 import type { ComicProject } from './types/comic';
@@ -37,7 +38,7 @@ import { makeThumbnail } from './utils/thumbnail';
 
 type Screen = 'splash' | 'tiles' | 'editor';
 
-/** The Drive calls the ComicBuilder deps make: the page's own token and fetch. */
+/** The storage calls the ComicBuilder deps make: whichever backend is active. */
 const drive = {
   uploadImage,
   trashFile,
@@ -137,7 +138,7 @@ export default function App() {
       setFolders(list);
       return list;
     } catch (e) {
-      setStatus(`Could not list Drive folders: ${errorMessage(e)}`, true);
+      setStatus(`Could not list project folders: ${errorMessage(e)}`, true);
       return [];
     }
   }
@@ -162,23 +163,25 @@ export default function App() {
     }
   }
 
-  /** Replace the open project with the copy on Drive, so changes made elsewhere show without a page reload. */
+  /** Replace the open project with the stored copy, so changes made elsewhere show without a page reload. */
   async function refreshProject() {
     const folderId = folderIdRef.current;
     if (!folderId) return;
     if (
       saver.dirty &&
-      !window.confirm('You have unsaved changes. Refreshing from Google Drive will discard them.')
+      !window.confirm(
+        `You have unsaved changes. Refreshing from ${backendLabel()} will discard them.`
+      )
     ) {
       return;
     }
-    setStatus('Refreshing from Google Drive…');
+    setStatus(`Refreshing from ${backendLabel()}…`);
     try {
       const { project: fresh, version } = await loadProject(folderId);
       if (folderIdRef.current !== folderId) return;
       replaceWithMerged(fresh);
       saver.reset({ project: fresh, version });
-      setStatus('Refreshed from Google Drive.');
+      setStatus(`Refreshed from ${backendLabel()}.`);
     } catch (e) {
       setStatus(`Could not refresh: ${errorMessage(e)}`, true);
     }
@@ -203,16 +206,6 @@ export default function App() {
       setPreview,
       setStatus: (message) => setStatus(message),
 
-      connectStorage: async () => {
-        try {
-          await requestDriveAccess();
-          await showTiles();
-          setStatusState(null);
-        } catch (e) {
-          setStatus(`Could not connect: ${errorMessage(e)}`, true);
-        }
-      },
-
       connectStorageWithDevice: async () => {
         let info: DeviceCodeInfo;
         try {
@@ -223,27 +216,43 @@ export default function App() {
         }
         setDeviceCode(info);
         awaitDeviceAccess()
-          .then(showTiles)
+          .then(() => {
+            setActiveBackend('drive');
+            return showTiles();
+          })
           .then(() => setStatusState(null))
           .catch((e) => setStatus(`Could not connect: ${errorMessage(e)}`, true))
           .finally(() => setDeviceCode(null));
         return info;
       },
 
+      connectStorageWithServer: async (url) => {
+        try {
+          await connectToServer(url);
+        } catch (e) {
+          setStatus(`Could not connect: ${errorMessage(e)}`, true);
+          throw e;
+        }
+        setActiveBackend('server');
+        await showTiles();
+        setStatusState(null);
+      },
+
       disconnectStorage: async () => {
         setDeviceCode(null);
         await saver.save();
-        await disconnectDrive();
+        const label = backendLabel();
+        await disconnectActiveBackend();
         await clearMediaCache();
         dropProject();
         setFolders([]);
         setScreen('splash');
-        setStatus('Disconnected from Google Drive.');
+        setStatus(`Disconnected from ${label}.`);
       },
 
       getStorageStatus: () => ({
-        connected: hasDriveAccess(),
-        configured: getGoogleClientId() !== null,
+        connected: hasStorageAccess(),
+        configured: isDriveConfigured(),
       }),
 
       listStorageProjects: listProjectFolders,
@@ -281,7 +290,7 @@ export default function App() {
           ok: false,
           error: clashes.length
             ? `Not saved: the project was changed elsewhere and ${clashes.length} change${clashes.length === 1 ? '' : 's'} clash${clashes.length === 1 ? 'es' : ''} with yours (${clashes.map((c) => c.label).join('; ')}). Choose which to keep at the bottom of the editor.`
-            : 'Save failed. Check that Drive is still connected.',
+            : 'Save failed. Check that storage is still connected.',
         };
       },
 
@@ -290,6 +299,7 @@ export default function App() {
         getFolderId: () => folderIdRef.current,
         updateProject: (mutation) => deps.updateProject(mutation),
         drive,
+        fileUrl,
         makeThumbnail,
       }),
     };

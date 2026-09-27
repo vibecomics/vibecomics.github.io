@@ -1,7 +1,7 @@
 /**
  * Attach each generated doc string (ACTION_DOCS, keyed by dotted path) as the
  * non-enumerable toString() of its node in the action tree, so
- * `ComicBuilder.storage.connect.toString()` in the console prints its docs.
+ * `ComicBuilder.storage.connectWithDevice.toString()` in the console prints its docs.
  */
 export function attachDocs(root: object, docs: Record<string, string>, rootPath: string): void {
   const seen = new Set<object>();

@@ -6,29 +6,33 @@
  * cookies or the URL), so reloading the page drops it and one click
  * reconnects.
  *
- * Two ways to obtain a token:
- * - Google Identity Services popup (`requestDriveAccess`), which needs a real
- *   user gesture.
- * - The OAuth device flow (RFC 8628, `requestDeviceAccess`) for headless
- *   browsers and AI assistants. It needs the device client's secret, which
- *   ships in the bundle by design: Google's device-client model assumes
- *   distributed apps cannot keep secrets, and the secret only identifies the
- *   client.
+ * The only way in is the OAuth device flow (RFC 8628, `requestDeviceAccess`):
+ * it works from injected scripts (no popup, no user gesture), which is what
+ * lets both a human and an AI assistant use the same "connect with a code"
+ * button. It needs the device client's secret, which ships in the bundle by
+ * design: Google's device-client model assumes distributed apps cannot keep
+ * secrets, and the secret only identifies the client.
  */
 
-import { getGoogleClientId, getGoogleDeviceClientId, getGoogleDeviceClientSecret } from '../config';
-import { DRIVE_FILE_SCOPE, pollDeviceOnce, startDeviceFlow } from './deviceOAuth';
+import { getGoogleDeviceClientId, getGoogleDeviceClientSecret } from '../config';
+import type { StorageBackendImpl } from '../storage/backend';
+import { driveFileUrl } from '../utils/driveUrl';
+import { pollDeviceOnce, revokeToken, startDeviceFlow } from './deviceOAuth';
 import type { DeviceCodeInfo } from './deviceOAuth';
 import { createDriveRest } from './driveRest';
 
-// The REST calls and the device-flow requests live in driveRest.ts and deviceOAuth.ts (no browser
-// APIs, shared with the CLI); these re-exports keep this module the one place the app imports from.
-export { ProjectChangedError, ProjectFileMissingError } from './driveRest';
+// driveRest.ts's own exports (ProjectChangedError, ProjectFileMissingError, ProjectFolder) are
+// generic enough that callers import them straight from there; this module re-exports only what is
+// Drive-specific.
 export type { ProjectFolder } from './driveRest';
 export type { DeviceCodeInfo } from './deviceOAuth';
 
-const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 const TOKEN_EXPIRY_MARGIN_MS = 60_000;
+
+/** True when this build has a Google device OAuth client, so "Connect with Google Drive" can work. */
+export function isDriveConfigured(): boolean {
+  return getGoogleDeviceClientId() !== null && getGoogleDeviceClientSecret() !== null;
+}
 
 // ---------------------------------------------------------------------------
 // Access token
@@ -41,102 +45,20 @@ function storeToken(value: string, expiresInSeconds: number | string | undefined
 }
 
 /** The access token, or null when missing or about to expire. */
-export function getAccessToken(): string | null {
+function getAccessToken(): string | null {
   return token && token.expiresAt > Date.now() + TOKEN_EXPIRY_MARGIN_MS ? token.value : null;
 }
 
-export function hasDriveAccess(): boolean {
+function hasDriveAccess(): boolean {
   return getAccessToken() !== null;
 }
 
-// ---------------------------------------------------------------------------
-// Google Identity Services popup flow
-// ---------------------------------------------------------------------------
-
-interface GisTokenResponse {
-  access_token: string;
-  expires_in: number | string;
-  error?: string;
-  error_description?: string;
-}
-
-interface GisOAuth2 {
-  initTokenClient(config: {
-    client_id: string;
-    scope: string;
-    callback: (response: GisTokenResponse) => void;
-    error_callback: (error: unknown) => void;
-  }): { requestAccessToken(options: { prompt: string }): void };
-  revoke(accessToken: string, done: () => void): void;
-}
-
-declare global {
-  interface Window {
-    google?: { accounts: { oauth2: GisOAuth2 } };
-  }
-}
-
-let gisLoadPromise: Promise<void> | null = null;
-
-function loadGisScript(): Promise<void> {
-  gisLoadPromise ??= new Promise((resolve, reject) => {
-    if (window.google?.accounts?.oauth2) {
-      resolve();
-      return;
-    }
-    const script = document.createElement('script');
-    script.src = GIS_SCRIPT_URL;
-    script.async = true;
-    script.defer = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Failed to load Google Identity Services script.'));
-    document.head.appendChild(script);
-  });
-  return gisLoadPromise;
-}
-
-const toError = (e: unknown): Error => (e instanceof Error ? e : new Error(String(e)));
-
-/** Prompt for Drive access. Must be called from a user gesture (a button click). */
-export async function requestDriveAccess(): Promise<void> {
-  const clientId = getGoogleClientId();
-  if (!clientId) {
-    throw new Error(
-      'Google OAuth client ID is not configured. Set GOOGLE_CLIENT_ID in .env.local.'
-    );
-  }
-  await loadGisScript();
-  return new Promise((resolve, reject) => {
-    try {
-      const client = window.google!.accounts.oauth2.initTokenClient({
-        client_id: clientId,
-        scope: DRIVE_FILE_SCOPE,
-        callback: (response) => {
-          if (response.error) {
-            reject(new Error(response.error_description || response.error));
-            return;
-          }
-          storeToken(response.access_token, response.expires_in);
-          resolve();
-        },
-        error_callback: (error) => reject(toError(error)),
-      });
-      // The default prompt shows Google's consent screen only the first time (and again after a
-      // revoke); later connects are a popup that closes itself, or an account chooser. 'consent'
-      // would force the full screen on every reload for no gain: this flow has no refresh token.
-      client.requestAccessToken({ prompt: '' });
-    } catch (e) {
-      reject(toError(e));
-    }
-  });
-}
-
 /** Revoke the grant at Google and drop the token. */
-export async function disconnectDrive(): Promise<void> {
+async function disconnectDrive(): Promise<void> {
   cancelDeviceAccess();
   const revoked = token;
   token = null;
-  if (revoked) window.google?.accounts?.oauth2.revoke(revoked.value, () => undefined);
+  if (revoked) await revokeToken(revoked.value);
 }
 
 // ---------------------------------------------------------------------------
@@ -216,10 +138,17 @@ export function awaitDeviceAccess(): Promise<void> {
 
 const drive = createDriveRest({ getToken: getAccessToken });
 
-export const listProjectFolders = drive.listProjectFolders;
-export const ensureProjectFolder = drive.ensureProjectFolder;
-export const uploadImage = drive.uploadImage;
-export const trashFile = drive.trashFile;
-export const downloadFile = drive.downloadFile;
-export const saveProjectJson = drive.saveProjectJson;
-export const loadProjectFile = drive.loadProjectFile;
+/** This backend's `StorageBackendImpl`, registered in `storage/activeBackend.ts`. */
+export const driveBackend: StorageBackendImpl = {
+  label: 'Google Drive',
+  listProjectFolders: drive.listProjectFolders,
+  ensureProjectFolder: drive.ensureProjectFolder,
+  uploadImage: drive.uploadImage,
+  trashFile: drive.trashFile,
+  downloadFile: drive.downloadFile,
+  saveProjectJson: drive.saveProjectJson,
+  loadProjectFile: drive.loadProjectFile,
+  fileUrl: driveFileUrl,
+  hasAccess: hasDriveAccess,
+  disconnect: disconnectDrive,
+};

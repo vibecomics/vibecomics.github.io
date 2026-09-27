@@ -317,9 +317,9 @@ test('mistakes are reported clearly and change nothing', async () => {
   assert.equal(content(), before);
 });
 
-test('storage connect explains that the CLI logs in another way', async () => {
+test('storage connectWithServer explains the CLI does not support it yet', async () => {
   const { run } = setup();
-  const result = await run('storage', 'connect');
+  const result = await run('storage', 'connectWithServer', 'http://localhost:4000');
   assert.equal(result.code, 1);
   assert.match(result.err, /auth login/);
 });

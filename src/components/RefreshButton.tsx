@@ -2,13 +2,13 @@ import { useState } from 'react';
 import { RefreshIcon } from './Icons';
 
 interface Props {
-  /** Reload the open project from Drive. */
+  /** Reload the open project from storage. */
   onRefresh: () => Promise<void>;
   /** True while a save is running: refreshing then would race it. */
   disabled: boolean;
 }
 
-/** Button that fetches the project fresh from Drive; it shows a spinner while loading. */
+/** Button that fetches the project fresh from storage; it shows a spinner while loading. */
 export default function RefreshButton({ onRefresh, disabled }: Props) {
   const [refreshing, setRefreshing] = useState(false);
 
@@ -22,13 +22,13 @@ export default function RefreshButton({ onRefresh, disabled }: Props) {
   }
 
   return (
-    <span title={refreshing ? 'Refreshing…' : 'Refresh from Google Drive'}>
+    <span title={refreshing ? 'Refreshing…' : 'Refresh from storage'}>
       <button
         type="button"
         className="btn btn-sm btn-outline-light d-flex align-items-center justify-content-center"
         style={{ width: 36, height: 31 }}
         disabled={disabled || refreshing}
-        aria-label="Refresh from Google Drive"
+        aria-label="Refresh from storage"
         onClick={() => void refresh()}
       >
         {refreshing ? (

@@ -20,8 +20,8 @@ export interface ComicBuilderDeps {
   setPageIndex(i: number): void;
   setPreview(open: boolean): void;
   setStatus(msg: string): void;
-  connectStorage(): Promise<void>;
   connectStorageWithDevice(): Promise<DeviceCodeInfo>;
+  connectStorageWithServer(url: string): Promise<void>;
   disconnectStorage(): Promise<void>;
   getStorageStatus(): { connected: boolean; configured: boolean };
   listStorageProjects(): Promise<ProjectFolder[]>;

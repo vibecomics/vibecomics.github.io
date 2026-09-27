@@ -14,8 +14,8 @@ const server = await startServer({
   root: process.env.HTTP_STORAGE_PATH
     ? path.resolve(process.env.HTTP_STORAGE_PATH)
     : path.join(here, 'data'),
-  port: process.env.HTTP_STORAGE_PORT ? Number(process.env.HTTP_STORAGE_PORT) : 4000,
-  host: process.env.HTTP_STORAGE_HOST || '127.0.0.1',
+  port: process.env.HTTP_STORAGE_PORT ? Number(process.env.HTTP_STORAGE_PORT) : 8081,
+  host: process.env.HTTP_STORAGE_HOST || '0.0.0.0',
   corsOrigin: process.env.HTTP_STORAGE_CORS_ORIGIN || '*',
 });
 

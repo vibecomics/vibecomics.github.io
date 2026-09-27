@@ -35,8 +35,8 @@ export interface CliIo {
 
 /** Commands that do not need the open project loaded first. */
 const WITHOUT_PROJECT = new Set([
-  'storage.connect',
   'storage.connectWithDevice',
+  'storage.connectWithServer',
   'storage.disconnect',
   'storage.status',
   'storage.listProjects',

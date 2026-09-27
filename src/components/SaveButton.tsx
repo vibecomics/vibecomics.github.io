@@ -3,7 +3,7 @@ import type { SaveState } from '../state/useProjectSaver';
 
 interface Props {
   state: SaveState;
-  /** True when there are changes not yet written to Drive. */
+  /** True when there are changes not yet written to storage. */
   dirty: boolean;
 }
 
@@ -26,7 +26,7 @@ function FloppyDiskIcon() {
   );
 }
 
-/** Floppy-disk button that saves to Drive now; it shows a spinner while saving. */
+/** Floppy-disk button that saves now; it shows a spinner while saving. */
 export default function SaveButton({ state, dirty }: Props) {
   const saving = state === 'saving';
   const title = saving
@@ -36,7 +36,7 @@ export default function SaveButton({ state, dirty }: Props) {
       : state === 'error'
         ? 'Save failed. Click to retry'
         : dirty
-          ? 'Save to Google Drive'
+          ? 'Save now'
           : 'All changes saved';
 
   return (
@@ -48,7 +48,7 @@ export default function SaveButton({ state, dirty }: Props) {
         }`}
         style={{ width: 36, height: 31 }}
         disabled={saving || !dirty}
-        aria-label="Save to Google Drive"
+        aria-label="Save now"
         onClick={() => void cb().storage.save()}
       >
         {saving ? (

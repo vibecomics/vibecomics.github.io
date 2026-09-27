@@ -30,3 +30,4 @@ public/llms.txt
 public/api.txt
 src/cli/commands.gen.ts
 public/vibecomics.mjs
+http-storage/data/
