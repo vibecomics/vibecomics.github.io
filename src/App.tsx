@@ -161,6 +161,28 @@ export default function App() {
     }
   }
 
+  /** Replace the open project with the copy on Drive, so changes made elsewhere show without a page reload. */
+  async function refreshProject() {
+    const folderId = folderIdRef.current;
+    if (!folderId) return;
+    if (
+      saver.dirty &&
+      !window.confirm('You have unsaved changes. Refreshing from Google Drive will discard them.')
+    ) {
+      return;
+    }
+    setStatus('Refreshing from Google Drive…');
+    try {
+      const { project: fresh, version } = await loadProject(folderId);
+      if (folderIdRef.current !== folderId) return;
+      replaceWithMerged(fresh);
+      saver.reset({ project: fresh, version });
+      setStatus('Refreshed from Google Drive.');
+    } catch (e) {
+      setStatus(`Could not refresh: ${errorMessage(e)}`, true);
+    }
+  }
+
   // The ComicBuilder API is installed once; every helper it uses goes through refs and setState.
   useEffect(() => {
     const deps: ComicBuilderDeps = {
@@ -293,6 +315,7 @@ export default function App() {
         onTabChange={setTab}
         saveState={saver.saveState}
         dirty={saver.dirty}
+        onRefresh={refreshProject}
         conflictTabs={new Set(saver.conflicts.map((c) => c.where.tab))}
         conflictPageIds={new Set(saver.conflicts.flatMap((c) => c.where.pageId ?? []))}
         conflictBar={

@@ -21,6 +21,7 @@ interface Props {
   conflictPageIds: Set<string>;
   /** The footer that shows the conflicts, while there are any. */
   conflictBar: ReactNode;
+  onRefresh: () => Promise<void>;
 }
 
 /** Navbar, tab bar and the active tab, laid out to fill the viewport exactly. */
@@ -34,6 +35,7 @@ export default function EditorScreen({
   conflictTabs,
   conflictPageIds,
   conflictBar,
+  onRefresh,
 }: Props) {
   return (
     <div className="position-fixed top-0 bottom-0 start-0 end-0 d-flex flex-column bg-light">
@@ -44,6 +46,7 @@ export default function EditorScreen({
         saveState={saveState}
         dirty={dirty}
         conflictTabs={conflictTabs}
+        onRefresh={onRefresh}
       />
 
       <ul className="nav nav-tabs px-3 pt-2 bg-white border-bottom d-none d-md-flex mb-0">

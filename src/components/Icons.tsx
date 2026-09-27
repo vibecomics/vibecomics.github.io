@@ -28,6 +28,15 @@ export function FlipIcon() {
   );
 }
 
+/** Two arrows chasing each other in a circle: reload. */
+export function RefreshIcon() {
+  return (
+    <svg {...icon}>
+      <path d="M13 8a5 5 0 0 1-8.7 3.4M3 8a5 5 0 0 1 8.7-3.4M12 1.8v3h-3M4 14.2v-3h3" />
+    </svg>
+  );
+}
+
 /** A box with an arrow leaving it: opens something in a new tab. */
 export function ExternalIcon() {
   return (

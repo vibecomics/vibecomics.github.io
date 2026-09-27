@@ -5,6 +5,7 @@ import ConflictDot from './ConflictDot';
 import DropdownMenu, { DropdownItem } from './DropdownMenu';
 import { EDITOR_TABS } from './editorTabs';
 import type { EditorTab } from './editorTabs';
+import RefreshButton from './RefreshButton';
 import SaveButton from './SaveButton';
 
 interface Props {
@@ -15,6 +16,8 @@ interface Props {
   dirty: boolean;
   /** Tabs that hold a conflict with changes made elsewhere. */
   conflictTabs: Set<EditorTab>;
+  /** Reload the project from Drive. */
+  onRefresh: () => Promise<void>;
 }
 
 type OpenMenu = 'main' | 'tabs' | null;
@@ -26,6 +29,7 @@ export default function EditorNavbar({
   saveState,
   dirty,
   conflictTabs,
+  onRefresh,
 }: Props) {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const menuProps = (menu: Exclude<OpenMenu, null>) => ({
@@ -68,6 +72,7 @@ export default function EditorNavbar({
         ))}
       </DropdownMenu>
 
+      <RefreshButton onRefresh={onRefresh} disabled={saveState === 'saving'} />
       <SaveButton state={saveState} dirty={dirty} />
     </nav>
   );
