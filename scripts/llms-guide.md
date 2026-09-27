@@ -308,6 +308,16 @@ to look at a page and tell you what is wrong. Check:
 - **Lettering:** legible, correct spelling, in reading order, pointers aimed
   correctly.
 - **Flow:** the panels read in the intended order and the camera varies.
+- **The project's own checks:** run `project.lint()` (CLI: `project lint`, which
+  exits 1 when there are errors). Fix every error, then the warnings, then run
+  it again until it reports no errors. Each finding names the thing by name and
+  id and says where it is; a `fix`, when there is one, is a safe call you can run
+  as given (`ComicBuilder.<call>(...args)`) that only clears or unlinks
+  something. Findings without a fix need a decision: their message says what to
+  do. Typical ones are a reference to a deleted character or image, an image
+  that is not what its layer says, two entries with the same name, an image with
+  no thumbnail, and layers that do not say which character, object or scene they
+  show.
 
 Fix problems at the source: tighten the part of the prompt that caused it (the
 layer prompt, the panel or page prompt if the fault is shared, or the

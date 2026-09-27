@@ -788,3 +788,49 @@ test('a background says which scene it is set in, and images can be art of a sce
   assert.equal('sceneId' in saved().pages[0].panels[0].layers[0], false);
   assert.equal('sceneId' in saved().metadata.media[0], false);
 });
+
+test('lint reports problems with fixes, exits non-zero on errors, and a fix clears its finding', async () => {
+  const { run, login, google } = setup();
+  await login();
+  const { id: folderId } = (await run('storage', 'createProject', 'Lint')).json();
+  const panelId = google.projectIn(folderId).pages[0].panels[0].id;
+
+  // Nothing wrong yet: an empty list and exit code 0
+  const clean = await run('project', 'lint');
+  assert.equal(clean.code, 0);
+  assert.deepEqual(clean.json(), []);
+
+  // A layer that shows a character, which is then deleted through a project reload (a stale link)
+  const mara = (
+    await run('characters', 'create', '{"name":"Mara","description":"Red hair"}')
+  ).json();
+  const layer = (
+    await run(
+      'layers',
+      'add',
+      panelId,
+      JSON.stringify({ name: 'Mara running', prompt: 'x', subjectId: mara.id })
+    )
+  ).json();
+  const project = JSON.parse(JSON.stringify(google.projectIn(folderId)));
+  project.metadata.characters = [];
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'lint-')), 'project.json');
+  fs.writeFileSync(file, JSON.stringify(project));
+  assert.equal((await run('project', 'load', `@${file}`)).json().ok, true);
+
+  const broken = await run('project', 'lint');
+  assert.equal(broken.code, 1);
+  assert.match(broken.err, /1 error found/);
+  const [finding] = broken.json();
+  assert.equal(finding.code, 'dangling-subject');
+  assert.equal(finding.severity, 'error');
+  assert.equal(finding.where.layerId, layer.id);
+  assert.deepEqual(finding.fix, {
+    call: 'layers.update',
+    args: [panelId, layer.id, { subjectId: null }],
+  });
+
+  // Running the suggested fix through the API clears the finding
+  await run('layers', 'update', panelId, layer.id, JSON.stringify(finding.fix.args[2]));
+  assert.deepEqual((await run('project', 'lint')).json(), []);
+});

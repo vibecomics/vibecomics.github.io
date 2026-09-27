@@ -61,7 +61,7 @@ function saveDownload(
   return { name: result.name, mimeType: result.mimeType, savedTo: target };
 }
 
-async function run(argv: string[], io: CliIo): Promise<void> {
+async function run(argv: string[], io: CliIo): Promise<number | void> {
   const { positional, flags } = parseArgv(argv);
   const [first, second, ...rest] = positional;
 
@@ -143,13 +143,20 @@ async function run(argv: string[], io: CliIo): Promise<void> {
     result = saveDownload(result as Parameters<typeof saveDownload>[0], flags.get('out'), io.cwd);
   }
   io.stdout(result === undefined ? json({ ok: true }) : json(result));
+  if (spec.path === 'project.lint') {
+    const errors = (result as Array<{ severity: string }>).filter((f) => f.severity === 'error');
+    if (errors.length > 0) {
+      io.stderr(`note: ${errors.length} error${errors.length === 1 ? '' : 's'} found.\n`);
+      return 1;
+    }
+  }
+  return 0;
 }
 
 /** Run the CLI; resolves to the process exit code. */
 export async function runCli(argv: string[], io: CliIo): Promise<number> {
   try {
-    await run(argv, io);
-    return 0;
+    return (await run(argv, io)) ?? 0;
   } catch (e) {
     let message = e instanceof Error ? e.message : String(e);
     if (message.includes('Not connected to Google Drive')) message += ` ${LOGIN_HINT}`;

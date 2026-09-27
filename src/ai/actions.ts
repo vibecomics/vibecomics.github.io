@@ -13,6 +13,8 @@
 import type { DeviceCodeInfo } from '../drive/deviceOAuth';
 import type { ProjectFolder } from '../drive/driveRest';
 import { createPanel, defaultPointer } from '../state/layout';
+import { lintProject } from '../state/lint';
+import type { LintFinding } from '../state/lint';
 import { assertValidProject, normalizeProject } from '../state/project';
 import type { Bubble, ComicPage, ComicProject, Layer, MediaItem, PageSize } from '../types/comic';
 import { errorMessage } from '../utils/errors';
@@ -244,6 +246,28 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
           return { ok: false, error: errorMessage(e) };
         }
       },
+
+      /**
+       * Check the open project for problems that do not stop it from opening but
+       * make it wrong or hard to work with, and say how to fix each. Read-only.
+       * Run it after a batch of edits and fix the errors first, then the
+       * warnings, then run it again until no errors are left.
+       *
+       * Errors: references to something that does not exist (a layer's
+       * subjectId, sceneId or mediaId, an image's subjectId or sceneId, a
+       * character's, object's or scene's imageIds, sceneIds or characterIds),
+       * a layer whose src is not the image its mediaId names, an image on a
+       * layer that is not in the project's images, and duplicate ids.
+       * Warnings: two characters, scenes or images with the same name, a
+       * character and an object with the same name, layers and images left with
+       * a default name, an image with no thumbnail, an image used nowhere, and a
+       * character, object or scene that is used on a layer but has no
+       * description or reference images. Info: layers with no subject or
+       * scene, layers with neither image nor prompt, an image that is both a
+       * subject's art and its reference art.
+       * @returns An array of findings, errors first: { code, severity: "error" | "warning" | "info", message, where: { tab, pageId?, panelId?, layerId?, entityId?, mediaId? }, fix? }. `fix`, when present, is a safe API call that only clears or unlinks something: { call: "layers.update", args: [panelId, layerId, { subjectId: null }] }; run it as ComicBuilder.<call>(...args). Findings without a fix need a decision: their message says what to do. An empty array means nothing was found. Throws when no project is open.
+       */
+      lint: (): LintFinding[] => lintProject(requireProject(deps)),
     },
 
     /**

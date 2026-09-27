@@ -94,6 +94,7 @@ export const INPUTS = {
   },
   'storage.openProject': { idOrName: { type: 'string', example: 'My first comic' } },
 
+  'project.lint': {},
   'project.load': {
     data: { type: 'multiline', example: '{ "id": "…", "title": "…", "pages": [] }' },
   },

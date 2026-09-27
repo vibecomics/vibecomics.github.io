@@ -579,6 +579,10 @@ it's drawn comic content, it's custom CSS.
   (the page's token, the GIS popup flow, and the two above bound together),
   `projectStore.ts` (load, validate and normalize a project).
 - `src/state/` — project validation/creation/normalization (`project.ts`),
+  project lint (`lint.ts`: `lintProject` returns findings `{ code, severity,
+message, where, fix? }`, errors first; exposed as `project.lint()` and the
+  CLI's `project lint`, which exits 1 on errors; unlike `assertValidProject` it
+  never blocks opening or saving; a `fix` only clears or unlinks something),
   panel layout geometry (`layout.ts`), the three-way project merge used to
   combine two systems' saves (`merge.ts`) and `useProjectSaver`.
 - `src/types/comic.ts` — the data model; `src/utils/` — small shared helpers
