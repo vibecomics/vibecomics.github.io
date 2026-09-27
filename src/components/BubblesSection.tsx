@@ -8,6 +8,7 @@ import type { Expansion } from './useExpansion';
 const KINDS: Array<{ kind: BubbleKind; label: string; sample: string }> = [
   { kind: 'speech', label: 'Speech', sample: 'Hello!' },
   { kind: 'thought', label: 'Thought', sample: 'Hmm…' },
+  { kind: 'shout', label: 'Shout', sample: 'Watch out!' },
   { kind: 'caption', label: 'Caption', sample: 'Meanwhile…' },
 ];
 
@@ -79,7 +80,7 @@ function BubbleRow({
   );
 }
 
-/** The panel's speech, thought and caption bubbles. Size and place them on the page itself. */
+/** The panel's speech, thought, shout and caption bubbles. Size and place them on the page itself. */
 export default function BubblesSection({ panel, selection, onSelect, expansion }: Props) {
   function add(kind: BubbleKind, sample: string) {
     const offset = panel.bubbles.length % 4;

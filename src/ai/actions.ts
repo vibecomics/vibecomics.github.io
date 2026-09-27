@@ -763,7 +763,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     },
 
     /**
-     * Speech/thought/caption bubbles inside a panel, addressed by panel id.
+     * Speech/thought/shout/caption bubbles inside a panel, addressed by panel id.
      * Bubbles always render above all layers.
      */
     bubbles: {
@@ -783,7 +783,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       get: bubbles.get,
 
       /**
-       * Add a bubble to a panel. Speech and thought bubbles get a pointer
+       * Add a bubble to a panel. Speech, thought and shout bubbles get a pointer
        * (tail) aimed at tailX/tailY, which by default sits below the
        * bubble; move it later with update(). Captions have no pointer. The
        * text is scaled to fit the bubble's width and height.

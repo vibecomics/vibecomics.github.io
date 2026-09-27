@@ -280,7 +280,8 @@ images. The CLI does not make thumbnails for you.
 After the art is in place, add the words as bubbles, not as text inside images:
 
 - **Speech** bubbles for dialogue, **thought** bubbles for inner voice,
-  **captions** for narration and scene labels.
+  **shout** bubbles (a spiky burst, in bold capitals) for yelling, screams and
+  loud sound effects, **captions** for narration and scene labels.
 - Keep lines short (a dozen words is a lot). Split long speeches across
   bubbles. Put bubbles in reading order, top-left to bottom-right, so the
   first one to be read is the first one placed.

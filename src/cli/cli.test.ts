@@ -421,6 +421,10 @@ test('the rest of the API works through the command line', async () => {
   );
   assert.equal((await run('bubbles', 'get', top.id, bubble.id)).json().text, 'Hello');
   assert.equal((await run('bubbles', 'delete', top.id, bubble.id)).json(), true);
+  const shout = (await run('bubbles', 'add', top.id, '{"text":"HEY","kind":"shout"}')).json();
+  assert.equal(shout.kind, 'shout');
+  assert.equal(typeof shout.tailX, 'number');
+  assert.equal((await run('bubbles', 'delete', top.id, shout.id)).json(), true);
 
   // A thumbnail added later, then the whole project replaced from a file
   fs.writeFileSync(path.join(work, 'art.png'), PNG);

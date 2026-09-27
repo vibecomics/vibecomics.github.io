@@ -11,15 +11,15 @@
           "type": "string"
         },
         "kind": {
-          "enum": ["speech", "thought", "caption"],
+          "enum": ["speech", "thought", "shout", "caption"],
           "type": "string"
         },
         "tailX": {
-          "description": "Where the pointer tip aims, as a percentage of panel width. Speech and thought bubbles only.",
+          "description": "Where the pointer tip aims, as a percentage of panel width. Speech, thought and shout bubbles only.",
           "type": "number"
         },
         "tailY": {
-          "description": "Where the pointer tip aims, as a percentage of panel height. Speech and thought bubbles only.",
+          "description": "Where the pointer tip aims, as a percentage of panel height. Speech, thought and shout bubbles only.",
           "type": "number"
         },
         "text": {

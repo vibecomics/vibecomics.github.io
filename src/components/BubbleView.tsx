@@ -5,7 +5,7 @@ import type { Bubble } from '../types/comic';
 import { usePointerDrag } from '../utils/drag';
 import { CORNERS, clamp, pointerPercent, resizeBox, round1 } from '../utils/geometry';
 import type { Point } from '../utils/geometry';
-import { pointerShape } from './bubbleShape';
+import { burstPoints, pointerShape } from './bubbleShape';
 import CornerHandle from './CornerHandle';
 
 const INK = '#111';
@@ -15,6 +15,7 @@ const MAX_FONT_PX = 60;
 const PADDING: Record<Bubble['kind'], [x: number, y: number]> = {
   speech: [0.05, 0.06],
   thought: [0.16, 0.14],
+  shout: [0.21, 0.21],
   caption: [0.04, 0.06],
 };
 
@@ -53,7 +54,7 @@ function fitText(box: HTMLElement, text: HTMLElement, kind: Bubble['kind']) {
   box.style.fontSize = `${low}px`;
 }
 
-/** Draws the wedge (speech) or trail of circles (thought) from a bubble to its pointer tip. */
+/** Draws the wedge (speech, shout) or trail of circles (thought) from a bubble to its pointer tip. */
 function Pointer({ bubble, canvasSize }: { bubble: Bubble; canvasSize: Props['canvasSize'] }) {
   if (bubble.kind === 'caption' || bubble.tailX === undefined || bubble.tailY === undefined) {
     return null;
@@ -69,7 +70,8 @@ function Pointer({ bubble, canvasSize }: { bubble: Bubble; canvasSize: Props['ca
       width: (bubble.width / 100) * canvasSize.width,
       height: (bubble.height / 100) * canvasSize.height,
     },
-    tip
+    tip,
+    bubble.kind === 'shout'
   );
   if (!shape) return null;
 
@@ -81,7 +83,7 @@ function Pointer({ bubble, canvasSize }: { bubble: Bubble; canvasSize: Props['ca
       height={canvasSize.height}
       aria-hidden="true"
     >
-      {bubble.kind === 'speech' ? (
+      {bubble.kind !== 'thought' ? (
         <>
           <path
             d={`${path([shape.inner[0], shape.base[0], tip, shape.base[1], shape.inner[1]])} Z`}
@@ -108,6 +110,30 @@ function Pointer({ bubble, canvasSize }: { bubble: Bubble; canvasSize: Props['ca
           />
         ))
       )}
+    </svg>
+  );
+}
+
+/** The spiky outline of a shout, stretched over the bubble's box. */
+function Burst() {
+  const points = burstPoints()
+    .map((p) => `${p.x},${p.y}`)
+    .join(' ');
+  return (
+    <svg
+      className="bubble-burst"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <polygon
+        points={points}
+        fill="#fff"
+        stroke={INK}
+        strokeWidth={2.5}
+        strokeLinejoin="round"
+        vectorEffect="non-scaling-stroke"
+      />
     </svg>
   );
 }
@@ -174,6 +200,7 @@ export default function BubbleView({ bubble, canvasRef, canvasSize, editing }: P
         }}
         {...moveDrag}
       >
+        {bubble.kind === 'shout' && <Burst />}
         <span ref={textRef} className="bubble-text">
           {bubble.text}
         </span>

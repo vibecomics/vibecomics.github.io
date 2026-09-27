@@ -171,8 +171,8 @@ function checkLayer(value: unknown, path: string): void {
 function checkBubble(value: unknown, path: string): void {
   const bubble = expectRecord(value, path);
   expectStrings(bubble, path, ['id', 'text']);
-  if (bubble.kind !== 'speech' && bubble.kind !== 'thought' && bubble.kind !== 'caption') {
-    fail(path, '"kind" must be "speech", "thought", or "caption"');
+  if (!['speech', 'thought', 'shout', 'caption'].includes(bubble.kind as string)) {
+    fail(path, '"kind" must be "speech", "thought", "shout", or "caption"');
   }
   expectNumbers(bubble, path, ['x', 'y', 'width']);
   if (bubble.height !== undefined && !(isFiniteNumber(bubble.height) && bubble.height > 0)) {

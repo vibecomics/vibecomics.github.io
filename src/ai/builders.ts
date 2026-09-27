@@ -24,7 +24,7 @@ import { newId } from '../utils/id';
 import type { ComicBuilderDeps, StoryEntryInput, StoryEntryPatch } from './deps';
 
 export const LAYER_KINDS = ['background', 'foreground'] as const;
-export const BUBBLE_KINDS = ['speech', 'thought', 'caption'] as const;
+export const BUBBLE_KINDS = ['speech', 'thought', 'shout', 'caption'] as const;
 const AXES = ['horizontal', 'vertical'] as const;
 const EDGES = ['top', 'bottom', 'left', 'right'] as const;
 export const LAYER_MOVES = ['top', 'bottom', 'up', 'down'] as const;

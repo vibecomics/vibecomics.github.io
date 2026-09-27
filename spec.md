@@ -237,14 +237,14 @@ prompt?, aspectRatio?, subjectId?, sceneId?, visible, x, y, width, rotation, opa
   are created from a `mediaId` or a Drive URL and reject anything else, and
   `normalizeProject` turns older `driveFileId` layers and Drive share links
   into that form. `src` may also be empty (a prompt-only layer).
-- `Bubble` — `{ id, kind: "speech" | "thought" | "caption", text, x, y,
+- `Bubble` — `{ id, kind: "speech" | "thought" | "shout" | "caption", text, x, y,
 width, height, tailX?, tailY? }`. Bubbles always render above all layers.
   `x`/`y` is the bubble's top-left corner and `width`/`height` its size, in
   percent of the panel; the text is scaled to fit that box (older bubbles
-  without a `height` get 20 on load). Speech and thought bubbles have
-  a pointer whose tip is `tailX`/`tailY` (percent of the panel): a wedge from
-  the bubble's edge for speech, a trail of circles for thought; captions
-  have none. `bubbles.add` aims a new pointer below the bubble.
+  without a `height` get 20 on load). Speech, thought and shout bubbles
+  have a pointer whose tip is `tailX`/`tailY` (percent of the panel): a wedge from
+  the bubble's edge for speech and shout, a trail of circles for thought;
+  captions have none. A shout is drawn as a spiky burst with bold capitals. `bubbles.add` aims a new pointer below the bubble.
 - `ProjectMetadata` — `{ outline, pageSize, characters[], scenes[],
 objects[], media[] }`: the story bible plus the media registry.
   `pageSize` is `{ label, widthIn, heightIn }`, chosen at creation from

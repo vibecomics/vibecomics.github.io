@@ -1,5 +1,5 @@
 export type LayerKind = 'background' | 'foreground';
-export type BubbleKind = 'speech' | 'thought' | 'caption';
+export type BubbleKind = 'speech' | 'thought' | 'shout' | 'caption';
 
 export interface Layer {
   id: string;

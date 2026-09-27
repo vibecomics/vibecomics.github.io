@@ -44,7 +44,7 @@ const OPPOSITE: Record<Edge, Edge> = { left: 'right', right: 'left', top: 'botto
 
 export const rectOf = ({ x, y, width, height }: Rect): Rect => ({ x, y, width, height });
 
-/** Where a new speech or thought bubble's pointer aims: below the bubble, in percent of its panel. */
+/** Where a new speech, thought or shout bubble's pointer aims: below the bubble, in percent of its panel. */
 export function defaultPointer(bubble: { x: number; y: number; width: number; height: number }) {
   return { tailX: bubble.x + bubble.width / 2, tailY: Math.min(95, bubble.y + bubble.height + 12) };
 }
