@@ -153,6 +153,60 @@ test('a project persists on Drive and is picked up by the next command', async (
   assert.equal((await run('panels', 'list')).json().length, 1);
 });
 
+test('a layer is dirty while its prompt has no matching image, and clean once one is set', async () => {
+  const { run, login, work } = setup();
+  await login();
+  await run('storage', 'createProject', 'Dirty');
+  const panelId = (await run('panels', 'list')).json()[0].id;
+
+  // A prompt with no image yet: dirty, there is a plan to act on.
+  const layer = await run('layers', 'add', panelId, '{"prompt":"A hero mid-leap"}');
+  assert.equal(layer.json().dirty, true);
+  const layerId = layer.json().id;
+
+  // Setting the image clears it, even though the prompt is unchanged.
+  fs.writeFileSync(path.join(work, 'hero.png'), PNG);
+  const media = (await run('media', 'upload', 'hero.png')).json();
+  const withImage = await run(
+    'layers',
+    'update',
+    panelId,
+    layerId,
+    JSON.stringify({ mediaId: media.id })
+  );
+  assert.equal(withImage.json().dirty, false);
+
+  // Editing the prompt again makes the image stale.
+  const edited = await run(
+    'layers',
+    'update',
+    panelId,
+    layerId,
+    '{"prompt":"A hero mid-leap, cape flying"}'
+  );
+  assert.equal(edited.json().dirty, true);
+
+  // A new image alongside the prompt change clears it in the same call.
+  const media2 = (await run('media', 'upload', 'hero.png', '--name', 'hero2.png')).json();
+  const regenerated = await run(
+    'layers',
+    'update',
+    panelId,
+    layerId,
+    JSON.stringify({ prompt: 'A hero mid-leap, cape flying, redone', mediaId: media2.id })
+  );
+  assert.equal(regenerated.json().dirty, false);
+
+  // Clearing the prompt to nothing leaves nothing to regenerate.
+  const empty = await run('layers', 'update', panelId, layerId, '{"prompt":""}');
+  assert.equal(empty.json().dirty, false);
+
+  // Unrelated edits (geometry, flip) never touch dirty.
+  await run('layers', 'update', panelId, layerId, '{"prompt":"Back to leaping"}');
+  const flipped = await run('layers', 'flip', panelId, layerId);
+  assert.equal(flipped.json().dirty, true);
+});
+
 test('--project opens another project first, and other projects are listed', async () => {
   const { run, login } = setup();
   await login();

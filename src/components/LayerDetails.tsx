@@ -44,6 +44,11 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         autoFocus={!layer.prompt && !layer.src}
         onChange={(e) => update({ prompt: e.target.value })}
       />
+      {layer.dirty && (
+        <div className="text-warning small mb-2">
+          Prompt changed since the image was made — regenerate it to match.
+        </div>
+      )}
       {background ? (
         <select
           className="form-select form-select-sm mb-2"

@@ -594,6 +594,14 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * image), so the parts add up without repeating or contradicting each other.
      * Read them back with page.select (page prompt), panels.get (panel prompt)
      * and layers.get (layer prompt).
+     *
+     * DIRTY. A layer's `dirty` field says whether its image still matches its
+     * prompt. add/update set it automatically: editing the prompt (or, for a
+     * background, its scene; or, for a foreground layer, its subject) turns it
+     * on; setting the image (mediaId or src) turns it off. Check layers.list or
+     * layers.get for `dirty: true` to find which layers or backgrounds need a
+     * new image generated for them, and regenerate just those, not the whole
+     * panel.
      */
     layers: {
       /**
@@ -624,7 +632,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * layer prompt (see the layers namespace). Foreground images
        * should usually be PNGs with a transparent background.
        * @param panelId - The panel id.
-       * @param input - { name?, prompt?, subjectId?, sceneId?, mediaId?, src?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. The image must be on Google Drive: pass mediaId (from media.upload or media.list, preferred) or src as a Drive URL; any other URL throws. Omit both for a layer that is only a prompt so far. subjectId is the id of the character or object the layer shows (it must exist); the media picker lists that subject's art first. sceneId is the id of the scene a background layer is the setting of (it must exist); the picker lists that scene's art first. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate.
+       * @param input - { name?, prompt?, subjectId?, sceneId?, mediaId?, src?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. The image must be on Google Drive: pass mediaId (from media.upload or media.list, preferred) or src as a Drive URL; any other URL throws. Omit both for a layer that is only a prompt so far. subjectId is the id of the character or object the layer shows (it must exist); the media picker lists that subject's art first. sceneId is the id of the scene a background layer is the setting of (it must exist); the picker lists that scene's art first. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate. dirty is set automatically (true when there's a prompt and no image yet) unless you pass it explicitly.
        * @returns A deep-cloned snapshot of the new Layer.
        */
       add: (panelId: string, input: LayerInput): Layer => {
@@ -648,6 +656,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
             ...definedFields(input),
             ...image,
             kind,
+            dirty: input.dirty ?? (Boolean(input.prompt?.trim()) && !image.src),
             name: input.name ?? media?.name ?? (kind === 'background' ? 'Background' : 'Layer'),
           },
           kind === 'background'
@@ -657,7 +666,9 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       /**
        * Update a layer: move (x/y), resize (width), rotate, change opacity or
        * visibility, flip it left to right (flipX), rename, edit its prompt, set what it shows (subjectId: a character or object id) or, for a background, the scene it is the setting of (sceneId), either null to clear it, or swap its image (mediaId, or src as a Drive URL).
-       * Only the given fields change.
+       * Only the given fields change. dirty tracks itself: editing prompt,
+       * subjectId or sceneId turns it on (off again if that leaves no prompt);
+       * setting mediaId or src turns it off, even in the same call.
        * @param panelId - The panel id.
        * @param layerId - The layer id.
        * @param patch - Partial layer fields.
@@ -670,12 +681,24 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         const { subjectId, sceneId, ...rest } = patch;
         if (typeof subjectId === 'string') assertSubject(requireProject(deps), subjectId);
         if (typeof sceneId === 'string') assertScene(requireProject(deps), sceneId);
+        // A new image satisfies whatever prompt asked for it, so it always clears dirty,
+        // even set together with a prompt change (that means "here is the new art for it").
+        // Otherwise, touching the prompt or the linked scene/subject makes the current image
+        // stale (dirty) unless that leaves no prompt at all to act on.
+        const touchesPrompt =
+          patch.prompt !== undefined || subjectId !== undefined || sceneId !== undefined;
+        const dirty = swapsImage
+          ? false
+          : touchesPrompt
+            ? Boolean((patch.prompt ?? layers.get(panelId, layerId)?.prompt ?? '').trim())
+            : undefined;
         return layers.update(
           panelId,
           layerId,
           {
             ...rest,
             ...image,
+            ...(dirty !== undefined && { dirty }),
             ...(typeof subjectId === 'string' && { subjectId }),
             ...(typeof sceneId === 'string' && { sceneId }),
           },

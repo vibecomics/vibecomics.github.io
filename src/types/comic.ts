@@ -40,6 +40,15 @@ export interface Layer {
   opacity: number;
   /** Mirrors the layer's image left to right. Absent means not flipped. */
   flipX?: boolean;
+  /**
+   * True when the prompt (or, for a background, the linked scene; or, for a
+   * foreground layer, the linked subject) has changed since this layer's
+   * image was made, so the image no longer matches what the prompt asks for.
+   * Set automatically: layers.add/update turn it on when the prompt (or
+   * scene/subject) changes and off when the image does. Absent or false
+   * means the image is up to date, including for a layer with no image yet.
+   */
+  dirty?: boolean;
 }
 
 export interface Bubble {

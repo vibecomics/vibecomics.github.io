@@ -326,6 +326,12 @@ description in the bible), stitch the prompt again (quote the descriptions more
 exactly, attach the reference), regenerate that one image, and swap it in. The
 stored prompts then still describe what produced the image.
 
+Editing a layer's prompt (or, for a background, its scene; or, for a
+foreground layer, its subject) marks that layer `dirty` automatically; setting
+its image clears it. After a round of edits, check `layers.list`/`layers.get`
+for `dirty: true` across the pages you touched to find exactly which layers or
+backgrounds still need a new image, and regenerate only those.
+
 ### 10. Keep the bible current, save and report
 
 - If the story changes something on purpose (a new outfit, an injury, a new

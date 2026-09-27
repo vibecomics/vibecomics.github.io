@@ -147,6 +147,9 @@ function checkLayer(value: unknown, path: string): void {
   if (layer.flipX !== undefined && typeof layer.flipX !== 'boolean') {
     fail(path, '"flipX" must be a boolean');
   }
+  if (layer.dirty !== undefined && typeof layer.dirty !== 'boolean') {
+    fail(path, '"dirty" must be a boolean');
+  }
   optionalString(layer, path, 'driveFileId');
   optionalString(layer, path, 'mediaId');
   optionalString(layer, path, 'subjectId');

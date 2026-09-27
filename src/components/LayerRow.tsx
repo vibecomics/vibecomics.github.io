@@ -86,6 +86,16 @@ export default function LayerRow({
             <span className="text-muted ms-2">{layer.src ? layer.name : 'no image'}</span>
           )}
         </button>
+        {layer.dirty && (
+          <span
+            className="text-warning"
+            style={{ fontSize: '0.55rem' }}
+            title="The prompt changed since this image was made; it may need a new one"
+            aria-label="Prompt changed since the image was made"
+          >
+            ●
+          </span>
+        )}
         <DeleteButton
           label={background ? 'background' : layer.name}
           onClick={() => cb().layers.delete(panelId, layer.id)}
