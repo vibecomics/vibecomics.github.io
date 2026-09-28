@@ -1,4 +1,4 @@
-import type { ComicProject } from '../types/comic';
+import type { ComicProject, Layer, StoryEntry } from '../types/comic';
 import { findPanel, layerArtSize } from './builders';
 
 export type ReferenceKind = 'characters' | 'objects' | 'scenes';
@@ -34,6 +34,15 @@ export function buildReferencePrompt(
     .join('\n\n');
 }
 
+/** The story-bible entry a layer shows: a character or object (foreground) or a scene (background). */
+export function layerSubject(project: ComicProject, layer: Layer): StoryEntry | undefined {
+  return layer.kind === 'foreground'
+    ? [...project.metadata.characters, ...project.metadata.objects].find(
+        (e) => e.id === layer.subjectId
+      )
+    : project.metadata.scenes.find((s) => s.id === layer.sceneId);
+}
+
 /**
  * Stitches the prompt for a layer's (or background's) image: STYLE, then, for a background, the
  * page and panel prompts and its scene (it's meant to depict that setting); for a foreground layer,
@@ -49,11 +58,7 @@ export function buildLayerPrompt(project: ComicProject, panelId: string, layerId
   const page = project.pages.find((p) => p.panels.some((pp) => pp.id === panelId));
   const isForeground = layer.kind === 'foreground';
 
-  const subject = isForeground
-    ? [...project.metadata.characters, ...project.metadata.objects].find(
-        (e) => e.id === layer.subjectId
-      )
-    : project.metadata.scenes.find((s) => s.id === layer.sceneId);
+  const subject = layerSubject(project, layer);
 
   const size = layerArtSize(project, panelId, layerId);
   const technical = isForeground

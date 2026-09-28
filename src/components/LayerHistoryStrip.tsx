@@ -46,12 +46,19 @@ interface Props {
 /** A layer's previous images, most recent first: click one to restore it, or its trash icon to
  * delete it (it's removed from the project entirely, not just this layer's history). */
 export default function LayerHistoryStrip({ historyIds, media, onRestore, onDelete }: Props) {
-  const items = historyIds.map((id) => media.find((m) => m.id === id)).filter((m) => m !== undefined);
+  const items = historyIds
+    .map((id) => media.find((m) => m.id === id))
+    .filter((m) => m !== undefined);
   if (items.length === 0) return null;
   return (
     <div className="d-flex gap-1 mb-2" aria-label="Previous images">
       {items.map((item) => (
-        <Thumb key={item.id} item={item} onRestore={() => onRestore(item.id)} onDelete={() => onDelete(item.id)} />
+        <Thumb
+          key={item.id}
+          item={item}
+          onRestore={() => onRestore(item.id)}
+          onDelete={() => onDelete(item.id)}
+        />
       ))}
     </div>
   );

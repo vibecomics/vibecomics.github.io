@@ -44,7 +44,9 @@ export default function GeneratorSettings({ onClose }: Props) {
   const [workflowText, setWorkflowText] = useState(
     existing ? JSON.stringify(existing.comfy.workflow, null, 2) : ''
   );
-  const [fields, setFields] = useState<NodeFields>(nodeFieldsOf(existing?.comfy.nodes ?? QWEN_IMAGE_EDIT_NODES));
+  const [fields, setFields] = useState<NodeFields>(
+    nodeFieldsOf(existing?.comfy.nodes ?? QWEN_IMAGE_EDIT_NODES)
+  );
   const setField = <K extends keyof NodeFields>(key: K, value: NodeFields[K]) =>
     setFields((f) => ({ ...f, [key]: value }));
 
@@ -90,7 +92,10 @@ export default function GeneratorSettings({ onClose }: Props) {
       vae: models.vae[0],
       lora: models.lora[0] ?? '',
     });
-    return { workflowText: JSON.stringify(workflow, null, 2), fields: nodeFieldsOf(QWEN_IMAGE_EDIT_NODES) };
+    return {
+      workflowText: JSON.stringify(workflow, null, 2),
+      fields: nodeFieldsOf(QWEN_IMAGE_EDIT_NODES),
+    };
   }
 
   async function saveConfig(workflowSource: string, nodeFields: NodeFields): Promise<void> {
@@ -146,9 +151,9 @@ export default function GeneratorSettings({ onClose }: Props) {
                 onChange={(e) => setBaseUrl(e.target.value)}
               />
               <div className="form-text mb-2">
-                Uses a built-in Qwen-Image-Edit starter workflow, filled in from whatever models your
-                server has installed, when you test the connection. Open "Advanced" below only if you
-                want to use your own ComfyUI workflow instead.
+                Uses a built-in Qwen-Image-Edit starter workflow, filled in from whatever models
+                your server has installed, when you test the connection. Open "Advanced" below only
+                if you want to use your own ComfyUI workflow instead.
               </div>
               {task.error && <div className="text-danger small mb-2">{task.error}</div>}
 
@@ -180,7 +185,9 @@ export default function GeneratorSettings({ onClose }: Props) {
                       />
                     </div>
                     <div className="col-6">
-                      <label className="form-label small">Prompt field name (optional, default "text")</label>
+                      <label className="form-label small">
+                        Prompt field name (optional, default "text")
+                      </label>
                       <input
                         className="form-control form-control-sm"
                         value={fields.promptField}
@@ -196,7 +203,9 @@ export default function GeneratorSettings({ onClose }: Props) {
                       />
                     </div>
                     <div className="col-6">
-                      <label className="form-label small">Reference image node ids (comma-separated)</label>
+                      <label className="form-label small">
+                        Reference image node ids (comma-separated)
+                      </label>
                       <input
                         className="form-control form-control-sm"
                         value={fields.referenceImageNodeIds}
@@ -235,7 +244,9 @@ export default function GeneratorSettings({ onClose }: Props) {
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
-                disabled={task.busy || !baseUrl || !fields.positivePromptNodeId || !fields.outputNodeId}
+                disabled={
+                  task.busy || !baseUrl || !fields.positivePromptNodeId || !fields.outputNodeId
+                }
                 onClick={save}
               >
                 Save

@@ -3,6 +3,7 @@ import { cb } from '../ai/actions';
 import type { LayerUpdate } from '../ai/deps';
 import type { Layer, MediaItem } from '../types/comic';
 import { uploadImage, setLayerMedia } from './panelActions';
+import GenerateButton from './GenerateButton';
 import GenerateImageModal from './GenerateImageModal';
 import { TrashIcon } from './Icons';
 import LayerHistoryStrip from './LayerHistoryStrip';
@@ -10,8 +11,6 @@ import MediaPicker from './MediaPicker';
 import MediaSlot from './MediaSlot';
 import { useProject } from './ProjectContext';
 import SliderRow from './SliderRow';
-import Spinner from './Spinner';
-import { useGeneratorConfig } from './useGeneratorConfig';
 import { useIsGenerating } from './useIsGenerating';
 import { useTask } from './useTask';
 
@@ -28,7 +27,6 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
   const [picking, setPicking] = useState(false);
   const [generatingModal, setGeneratingModal] = useState(false);
   const background = layer.kind === 'background';
-  const generatorConfigured = Boolean(useGeneratorConfig());
   const generating = useIsGenerating(panelId, layer.id);
   const { characters, objects, scenes } = useProject().metadata;
   const known = [...characters, ...objects].some((entry) => entry.id === layer.subjectId);
@@ -110,28 +108,12 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           busy={task.busy}
           onClick={() => setPicking(true)}
         />
-        {/* A disabled <button> doesn't show its own title tooltip in most browsers, so the
-         * disabled-reason title goes on this wrapping span instead. */}
-        <span
-          title={
-            generating
-              ? 'A generation for this layer is already running'
-              : !layer.prompt?.trim()
-                ? 'Write a prompt first'
-                : !generatorConfigured
-                  ? 'Set up an image generator first (menu → Generator settings)'
-                  : 'Generate a new image from this prompt'
-          }
-        >
-          <button
-            type="button"
-            className="btn btn-outline-secondary btn-sm"
-            disabled={generating || !layer.prompt?.trim() || !generatorConfigured}
-            onClick={() => setGeneratingModal(true)}
-          >
-            {generating && <Spinner />}✨ {generating ? 'Generating' : 'Generate'}
-          </button>
-        </span>
+        <GenerateButton
+          generating={generating}
+          blockedReason={layer.prompt?.trim() ? undefined : 'Write a prompt first'}
+          title="Generate a new image from this prompt"
+          onClick={() => setGeneratingModal(true)}
+        />
         {layer.mediaId && (
           <button
             type="button"
@@ -139,7 +121,9 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
             disabled={task.busy}
             title="Delete this image (it stops being this layer's image)"
             aria-label="Delete this layer's image"
-            onClick={() => void task.run(async () => void (await cb().media.delete(layer.mediaId!)))}
+            onClick={() =>
+              void task.run(async () => void (await cb().media.delete(layer.mediaId!)))
+            }
           >
             <TrashIcon />
           </button>
@@ -157,7 +141,9 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           getDefaultPrompt={() => cb().generate.layerPrompt(panelId, layer.id)}
           getDefaultReferences={() => cb().generate.layerReferences(panelId, layer.id)}
           media={media}
-          onGenerate={(prompt, references) => cb().generate.layer(panelId, layer.id, prompt, references)}
+          onGenerate={(prompt, references) =>
+            cb().generate.layer(panelId, layer.id, prompt, references)
+          }
           onUse={(result) => update({ mediaId: result.id, aspectRatio: result.aspectRatio })}
           onClose={() => setGeneratingModal(false)}
         />

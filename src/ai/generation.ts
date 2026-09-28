@@ -12,13 +12,19 @@
  * itself as it goes.
  */
 import { createProvider } from '../generators/types';
+import type { ImageProvider } from '../generators/types';
 import type { Layer, MediaItem } from '../types/comic';
 import { errorMessage } from '../utils/errors';
 import { pngDimensions } from '../utils/image';
 import { dirtyLayerRefs, findPanel, layerArtSize, requireProject } from './builders';
 import type { LayerRef } from './builders';
 import type { ComicBuilderDeps } from './deps';
-import { appendReferenceNotes, buildLayerPrompt, buildReferencePrompt } from './prompt';
+import {
+  appendReferenceNotes,
+  buildLayerPrompt,
+  buildReferencePrompt,
+  layerSubject,
+} from './prompt';
 import type { GenerationReference, ReferenceKind } from './prompt';
 
 export type { GenerationReference, ReferenceKind };
@@ -115,6 +121,33 @@ function enqueue<T>(label: string, task: () => Promise<T>): Promise<T> {
   return run;
 }
 
+function requireProvider(deps: ComicBuilderDeps): ImageProvider {
+  const config = deps.getGeneratorConfig();
+  if (!config) throw new Error('No image generator is configured. Set one up first.');
+  return createProvider(config, deps.generatorFetch);
+}
+
+async function downloadReferences(
+  deps: ComicBuilderDeps,
+  references: GenerationReference[]
+): Promise<string[]> {
+  return Promise.all(
+    references.map(async (r) => (await deps.downloadStorageMedia(r.mediaId)).dataUrl)
+  );
+}
+
+/** Runs a generation in the queue, marking `key` as generating for as long as it runs. */
+function trackedGeneration<T>(key: string, label: string, task: () => Promise<T>): Promise<T> {
+  return enqueue(label, async () => {
+    markGenerating(key, true);
+    try {
+      return await task();
+    } finally {
+      markGenerating(key, false);
+    }
+  });
+}
+
 /** Generates and registers an image for a layer (or background), without setting it as the layer's
  * image. */
 async function runLayerGeneration(
@@ -124,14 +157,11 @@ async function runLayerGeneration(
   promptOverride?: string,
   references?: GenerationReference[]
 ): Promise<GeneratedImage> {
-  const config = deps.getGeneratorConfig();
-  if (!config) throw new Error('No image generator is configured. Set one up first.');
+  const provider = requireProvider(deps);
   const project = requireProject(deps);
-  const panel = findPanel(project, panelId);
-  const layer = panel?.layers.find((l) => l.id === layerId);
-  if (!panel || !layer) throw new Error(`Layer "${layerId}" not found.`);
+  const layer = findPanel(project, panelId)?.layers.find((l) => l.id === layerId);
+  if (!layer) throw new Error(`Layer "${layerId}" not found.`);
 
-  const provider = createProvider(config, deps.generatorFetch);
   const used = (references ?? defaultLayerReferences(deps, panelId, layerId)).slice(
     0,
     provider.maxReferenceImages
@@ -140,9 +170,7 @@ async function runLayerGeneration(
     promptOverride?.trim() || buildLayerPrompt(project, panelId, layerId),
     used
   );
-  const referenceImages = await Promise.all(
-    used.map(async (r) => (await deps.downloadStorageMedia(r.mediaId)).dataUrl)
-  );
+  const referenceImages = await downloadReferences(deps, used);
   // A background must exactly fill its panel, so it's sized to fit precisely. A foreground subject
   // doesn't need to fill its box tightly (it's a transparent cutout; empty margin is fine), so it's
   // left to the workflow's own default canvas rather than squeezed into whatever shape the layer
@@ -181,14 +209,12 @@ async function generateReferenceOne(
   promptOverride?: string,
   references?: GenerationReference[]
 ): Promise<MediaItem> {
-  const config = deps.getGeneratorConfig();
-  if (!config) throw new Error('No image generator is configured. Set one up first.');
+  const provider = requireProvider(deps);
   const project = requireProject(deps);
   const entry = project.metadata[kind].find((e) => e.id === id);
   if (!entry) throw new Error(`"${id}" not found in ${kind}.`);
 
-  const provider = createProvider(config, deps.generatorFetch);
-  const used = (references ?? entry.imageIds.map((mediaId) => ({ mediaId }))).slice(
+  const used = (references ?? defaultEntryReferences(deps, kind, id)).slice(
     0,
     provider.maxReferenceImages
   );
@@ -196,9 +222,7 @@ async function generateReferenceOne(
     promptOverride?.trim() || buildReferencePrompt(project, kind, id),
     used
   );
-  const referenceImages = await Promise.all(
-    used.map(async (r) => (await deps.downloadStorageMedia(r.mediaId)).dataUrl)
-  );
+  const referenceImages = await downloadReferences(deps, used);
   const rawDataUrl = await provider.generate({ prompt, referenceImages });
   const dataUrl =
     kind !== 'scenes' && deps.removeBackground
@@ -216,16 +240,9 @@ export function generateLayerImage(
   prompt?: string,
   references?: GenerationReference[]
 ): Promise<GeneratedImage> {
-  const key = layerKey(panelId, layerId);
-  const label = describeLayer(deps, panelId, layerId);
-  return enqueue(label, async () => {
-    markGenerating(key, true);
-    try {
-      return await runLayerGeneration(deps, panelId, layerId, prompt, references);
-    } finally {
-      markGenerating(key, false);
-    }
-  });
+  return trackedGeneration(layerKey(panelId, layerId), describeLayer(deps, panelId, layerId), () =>
+    runLayerGeneration(deps, panelId, layerId, prompt, references)
+  );
 }
 
 export function generateReferenceImage(
@@ -235,16 +252,9 @@ export function generateReferenceImage(
   prompt?: string,
   references?: GenerationReference[]
 ): Promise<MediaItem> {
-  const key = referenceKey(kind, id);
-  const label = describeReference(deps, kind, id);
-  return enqueue(label, async () => {
-    markGenerating(key, true);
-    try {
-      return await generateReferenceOne(deps, kind, id, prompt, references);
-    } finally {
-      markGenerating(key, false);
-    }
-  });
+  return trackedGeneration(referenceKey(kind, id), describeReference(deps, kind, id), () =>
+    generateReferenceOne(deps, kind, id, prompt, references)
+  );
 }
 
 /** The images a layer's generation sends by default: those of the character/object (foreground) or
@@ -257,13 +267,7 @@ export function defaultLayerReferences(
   const project = requireProject(deps);
   const layer = findPanel(project, panelId)?.layers.find((l) => l.id === layerId);
   if (!layer) throw new Error(`Layer "${layerId}" not found.`);
-  const linked =
-    layer.kind === 'background'
-      ? project.metadata.scenes.find((s) => s.id === layer.sceneId)
-      : [...project.metadata.characters, ...project.metadata.objects].find(
-          (e) => e.id === layer.subjectId
-        );
-  return (linked?.imageIds ?? []).map((mediaId) => ({ mediaId }));
+  return (layerSubject(project, layer)?.imageIds ?? []).map((mediaId) => ({ mediaId }));
 }
 
 /** The images a story-bible entry's reference generation sends by default: its existing ones. */
@@ -311,14 +315,9 @@ export async function generateAllDirty(
     const key = layerKey(ref.panelId, ref.layerId);
     const label = describeLayer(deps, ref.panelId, ref.layerId);
     try {
-      await enqueue(label, async () => {
-        markGenerating(key, true);
-        try {
-          const image = await runLayerGeneration(deps, ref.panelId, ref.layerId);
-          commit(ref.panelId, ref.layerId, image.id, image.aspectRatio);
-        } finally {
-          markGenerating(key, false);
-        }
+      await trackedGeneration(key, label, async () => {
+        const image = await runLayerGeneration(deps, ref.panelId, ref.layerId);
+        commit(ref.panelId, ref.layerId, image.id, image.aspectRatio);
       });
       outcomes.push({ ...ref, ok: true });
     } catch (e) {

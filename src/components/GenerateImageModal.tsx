@@ -30,7 +30,10 @@ interface Props {
 function Preview({ item }: { item: MediaItem }) {
   const { url, failed } = useMediaUrl(item);
   return (
-    <div className="checker rounded d-flex align-items-center justify-content-center mb-2" style={{ minHeight: 200 }}>
+    <div
+      className="checker rounded d-flex align-items-center justify-content-center mb-2"
+      style={{ minHeight: 200 }}
+    >
       {url ? (
         <img src={url} alt="" style={{ maxWidth: '100%', maxHeight: 320 }} />
       ) : (
@@ -59,7 +62,9 @@ export default function GenerateImageModal({
   const task = useTask();
 
   function addReference(mediaId: string) {
-    setReferences((current) => (current.some((r) => r.mediaId === mediaId) ? current : [...current, { mediaId }]));
+    setReferences((current) =>
+      current.some((r) => r.mediaId === mediaId) ? current : [...current, { mediaId }]
+    );
     setPicking(false);
   }
 
@@ -101,15 +106,23 @@ export default function GenerateImageModal({
                 </span>
               </label>
               {max === 0 && (
-                <div className="text-muted small mb-2">This generator's workflow has no reference image inputs.</div>
+                <div className="text-muted small mb-2">
+                  This generator's workflow has no reference image inputs.
+                </div>
               )}
               <div className="d-flex flex-column gap-2 mb-2">
                 {references.map((ref, i) => {
                   const item = media.find((m) => m.id === ref.mediaId);
                   return (
-                    <div key={ref.mediaId} className={`d-flex gap-2 align-items-start${i >= max ? ' opacity-50' : ''}`}>
+                    <div
+                      key={ref.mediaId}
+                      className={`d-flex gap-2 align-items-start${i >= max ? ' opacity-50' : ''}`}
+                    >
                       {item ? (
-                        <MediaThumb item={item} onRemove={() => setReferences(references.filter((_, j) => j !== i))} />
+                        <MediaThumb
+                          item={item}
+                          onRemove={() => setReferences(references.filter((_, j) => j !== i))}
+                        />
                       ) : (
                         <span className="text-muted small">Missing image</span>
                       )}
@@ -124,7 +137,11 @@ export default function GenerateImageModal({
                           placeholder="Say something about this image (optional), e.g. “use this outfit”"
                           aria-label={`Note about reference image ${i + 1}`}
                           onChange={(e) =>
-                            setReferences(references.map((r, j) => (j === i ? { ...r, note: e.target.value } : r)))
+                            setReferences(
+                              references.map((r, j) =>
+                                j === i ? { ...r, note: e.target.value } : r
+                              )
+                            )
                           }
                         />
                       </div>
@@ -146,7 +163,12 @@ export default function GenerateImageModal({
             <div className="modal-footer">
               {result ? (
                 <>
-                  <button type="button" className="btn btn-outline-secondary btn-sm" disabled={task.busy} onClick={generate}>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-sm"
+                    disabled={task.busy}
+                    onClick={generate}
+                  >
                     {task.busy && <Spinner />}✨ Regenerate
                   </button>
                   <button
@@ -161,7 +183,12 @@ export default function GenerateImageModal({
                   </button>
                 </>
               ) : (
-                <button type="button" className="btn btn-primary btn-sm" disabled={task.busy || !prompt.trim()} onClick={generate}>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={task.busy || !prompt.trim()}
+                  onClick={generate}
+                >
                   {task.busy && <Spinner />}✨ Generate
                 </button>
               )}
@@ -174,9 +201,7 @@ export default function GenerateImageModal({
           title="Choose a reference image"
           media={media}
           prefer={{ kind: 'layer' }}
-          onUpload={(file) =>
-            void task.run(async () => addReference((await uploadImage(file)).id))
-          }
+          onUpload={(file) => void task.run(async () => addReference((await uploadImage(file)).id))}
           onPick={(item) => addReference(item.id)}
           onClose={() => setPicking(false)}
         />

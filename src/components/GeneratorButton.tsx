@@ -35,7 +35,10 @@ function QueueButton() {
       align="end"
       toggle={
         <>
-          ✨{queue.length > 0 && <span className="badge bg-light text-dark ms-1">{queue.length}</span>}
+          ✨
+          {queue.length > 0 && (
+            <span className="badge bg-light text-dark ms-1">{queue.length}</span>
+          )}
         </>
       }
       toggleClassName="btn btn-sm btn-outline-light d-flex align-items-center justify-content-center"
@@ -79,7 +82,11 @@ export default function GeneratorButton({ dirtyCount }: Props) {
           onClick={() => void task.run(() => cb().generate.dirty())}
         >
           {task.busy && (
-            <span className="spinner-border spinner-border-sm me-1" role="status" aria-label="Generating" />
+            <span
+              className="spinner-border spinner-border-sm me-1"
+              role="status"
+              aria-label="Generating"
+            />
           )}
           {task.busy ? 'Generating…' : `✨ Generate (${dirtyCount})`}
         </button>

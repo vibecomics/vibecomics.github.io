@@ -137,7 +137,7 @@ export interface MediaItem {
 }
 
 /** Shared shape of the story-bible entries: visual description plus reference art. */
-interface StoryEntry {
+export interface StoryEntry {
   id: string;
   name: string;
   /** Appearance and continuity notes an LLM reads to build image-generation prompts. */

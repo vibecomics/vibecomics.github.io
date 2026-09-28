@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
 import type { MediaItem } from '../types/comic';
+import GenerateButton from './GenerateButton';
 import GenerateImageModal from './GenerateImageModal';
 import ImageLightbox from './ImageLightbox';
 import MediaPicker from './MediaPicker';
 import MediaThumb from './MediaThumb';
 import { uploadImage } from './panelActions';
 import Spinner from './Spinner';
-import { useGeneratorConfig } from './useGeneratorConfig';
 import { useIsGeneratingReference } from './useIsGenerating';
 import { useTask } from './useTask';
 
@@ -26,7 +26,6 @@ export default function ReferenceImages({ kind, entryId, imageIds, media }: Prop
   const [picking, setPicking] = useState(false);
   const [generatingModal, setGeneratingModal] = useState(false);
   const items = imageIds.flatMap((id) => media.find((m) => m.id === id) ?? []);
-  const generatorConfigured = Boolean(useGeneratorConfig());
   const generating = useIsGeneratingReference(kind, entryId);
   const fileInputId = `reference-upload-${kind}-${entryId}`;
 
@@ -56,7 +55,10 @@ export default function ReferenceImages({ kind, entryId, imageIds, media }: Prop
         ))}
       </div>
       <div className="d-flex flex-wrap gap-2 mt-2">
-        <label htmlFor={fileInputId} className={`btn btn-outline-secondary btn-sm mb-0${task.busy ? ' disabled' : ''}`}>
+        <label
+          htmlFor={fileInputId}
+          className={`btn btn-outline-secondary btn-sm mb-0${task.busy ? ' disabled' : ''}`}
+        >
           {task.busy && <Spinner />}
           Upload
           <input
@@ -81,26 +83,11 @@ export default function ReferenceImages({ kind, entryId, imageIds, media }: Prop
         >
           Pick from media
         </button>
-        {/* A disabled <button> doesn't show its own title tooltip in most browsers, so the
-         * disabled-reason title goes on this wrapping span instead. */}
-        <span
-          title={
-            generating
-              ? 'A generation for this entry is already running'
-              : !generatorConfigured
-                ? 'Set up an image generator first (menu → Generator settings)'
-                : 'Generate a new reference image'
-          }
-        >
-          <button
-            type="button"
-            className="btn btn-outline-secondary btn-sm"
-            disabled={generating || !generatorConfigured}
-            onClick={() => setGeneratingModal(true)}
-          >
-            {generating && <Spinner />}✨ {generating ? 'Generating' : 'Generate'}
-          </button>
-        </span>
+        <GenerateButton
+          generating={generating}
+          title="Generate a new reference image"
+          onClick={() => setGeneratingModal(true)}
+        />
       </div>
       {generatingModal && (
         <GenerateImageModal
