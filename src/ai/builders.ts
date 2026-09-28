@@ -304,6 +304,41 @@ export function dirtyLayerRefs(project: ComicProject): LayerRef[] {
   return refs;
 }
 
+export interface PendingGeneration extends LayerRef {
+  /** Zero-based page number, as shown in the UI. */
+  page: number;
+  panelTitle?: string;
+  /** 1-based position of the panel on its page. */
+  panelNumber: number;
+  name: string;
+  kind: 'background' | 'foreground';
+  prompt?: string;
+  /** False when the layer has no image yet; true when its prompt changed since the image was made. */
+  hasImage: boolean;
+}
+
+/** What generate.dirty() would generate, described: dirtyLayerRefs plus where each layer sits and its prompt. */
+export function pendingGenerations(project: ComicProject): PendingGeneration[] {
+  return project.pages.flatMap((page) =>
+    page.panels.flatMap((panel, i) =>
+      panel.layers
+        .filter((layer) => layer.dirty)
+        .map((layer) => ({
+          pageId: page.id,
+          panelId: panel.id,
+          layerId: layer.id,
+          page: page.number,
+          panelTitle: panel.title,
+          panelNumber: i + 1,
+          name: layer.name || layer.id,
+          kind: layer.kind,
+          prompt: layer.prompt,
+          hasImage: Boolean(layer.mediaId),
+        }))
+    )
+  );
+}
+
 /** Panel layout operations. The panels of a page always tile it (see state/layout.ts). */
 export function panelsApi(deps: ComicBuilderDeps) {
   const pageAt = (project: ComicProject, pageIndex = deps.getPageIndex()): ComicPage => {

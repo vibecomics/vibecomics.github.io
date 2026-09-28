@@ -36,12 +36,14 @@ import {
   mutate,
   panelItemsApi,
   panelsApi,
+  pendingGenerations,
   requirePanel,
   requireProject,
   resolveLayerImage,
   snapshot,
   storyApi,
 } from './builders';
+import type { PendingGeneration } from './builders';
 import type {
   ActionResult,
   BubbleInput,
@@ -1331,6 +1333,14 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        */
       layerPrompt: (panelId: string, layerId: string): string =>
         buildLayerPrompt(requireProject(deps), panelId, layerId),
+
+      /**
+       * What generate.dirty() would generate, without generating anything:
+       * every layer and background across the whole project whose dirty is
+       * true. Call this first to see (and confirm) the work, then generate.dirty().
+       * @returns One { pageId, panelId, layerId, page, panelTitle?, panelNumber, name, kind, prompt?, hasImage } per dirty item. hasImage is false for a layer with no image yet.
+       */
+      pending: (): PendingGeneration[] => pendingGenerations(requireProject(deps)),
 
       /**
        * Generate images for every layer and background across the whole

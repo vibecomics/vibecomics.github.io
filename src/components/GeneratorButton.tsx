@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
 import DropdownMenu from './DropdownMenu';
+import GenerateDirtyModal from './GenerateDirtyModal';
+import { useProject } from './ProjectContext';
 import { useBusy } from './useBusy';
 import { useGenerationQueue } from './useIsGenerating';
 
@@ -50,7 +52,9 @@ interface Props {
 /** The generation queue, and, once something is dirty, a button to
  * generate it all. Always visible (not tucked in the mobile-only hamburger menu). */
 export default function GeneratorButton({ dirtyCount }: Props) {
+  const [showDirty, setShowDirty] = useState(false);
   const task = useBusy();
+  const project = useProject();
 
   return (
     <>
@@ -59,7 +63,7 @@ export default function GeneratorButton({ dirtyCount }: Props) {
           type="button"
           className="btn btn-sm btn-outline-light text-nowrap"
           disabled={task.busy}
-          onClick={() => void task.run(() => cb().generate.dirty())}
+          onClick={() => setShowDirty(true)}
         >
           {task.busy && (
             <span
@@ -70,6 +74,16 @@ export default function GeneratorButton({ dirtyCount }: Props) {
           )}
           {task.busy ? 'Generating…' : `✨ Generate (${dirtyCount})`}
         </button>
+      )}
+      {showDirty && (
+        <GenerateDirtyModal
+          project={project}
+          onClose={() => setShowDirty(false)}
+          onGenerate={() => {
+            setShowDirty(false);
+            void task.run(() => cb().generate.dirty());
+          }}
+        />
       )}
       <QueueButton />
     </>

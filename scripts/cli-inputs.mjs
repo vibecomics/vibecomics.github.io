@@ -322,6 +322,7 @@ export const INPUTS = {
   },
   'generate.maxReferenceImages': {},
   'generate.layerPrompt': { panelId: PANEL_ID, layerId: LAYER_ID },
+  'generate.pending': {},
   'generate.dirty': {},
   'generate.getConfig': {},
   'generate.setConfig': {
