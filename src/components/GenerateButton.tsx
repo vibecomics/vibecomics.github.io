@@ -1,5 +1,5 @@
 import Spinner from './Spinner';
-import { useGeneratorConfig } from './useGeneratorConfig';
+import { useGeneratorConfig, useGeneratorConfigProblem } from './useGeneratorConfig';
 
 interface Props {
   /** A generation for this item is already running. */
@@ -15,10 +15,13 @@ interface Props {
  * tooltip) while a generation is running, no generator is set up, or `blockedReason` is given. */
 export default function GenerateButton({ generating, blockedReason, title, onClick }: Props) {
   const configured = Boolean(useGeneratorConfig());
+  const configProblem = useGeneratorConfigProblem();
   const reason = generating
     ? 'A generation for this item is already running'
     : (blockedReason ??
-      (configured ? null : 'Set up an image generator first (menu → Generator settings)'));
+      (configured
+        ? null
+        : (configProblem ?? 'Set up an image generator first (Settings, on the project list)')));
 
   return (
     // A disabled <button> doesn't show its own title tooltip in most browsers, so the tooltip goes

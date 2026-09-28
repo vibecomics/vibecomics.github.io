@@ -30,6 +30,9 @@ export type ComfyWorkflow = Record<string, ComfyWorkflowNode>;
 
 export interface ComfyConfig {
   baseUrl: string;
+  /** A workflow saved in ComfyUI's own workflows folder. When set, the browser keeps only this name
+   * and fetches `workflow` from the server once, on page load (see browserConfigStore). */
+  workflowName?: string;
   workflow: ComfyWorkflow;
   nodes: ComfyNodeMapping;
 }

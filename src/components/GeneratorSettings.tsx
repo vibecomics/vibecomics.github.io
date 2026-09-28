@@ -1,7 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cb } from '../ai/actions';
 import { listComfyQwenModels } from '../generators/comfy';
+import {
+  detectComfyNodes,
+  listComfyWorkflows,
+  loadComfyWorkflow,
+} from '../generators/comfyWorkflows';
 import type { ComfyNodeMapping } from '../generators/comfy';
 import { QWEN_IMAGE_EDIT_NODES, buildQwenImageEditWorkflow } from '../generators/defaultWorkflow';
 import type { GeneratorConfig } from '../generators/types';
@@ -47,6 +52,38 @@ export default function GeneratorSettings({ onClose }: Props) {
   const [fields, setFields] = useState<NodeFields>(
     nodeFieldsOf(existing?.comfy.nodes ?? QWEN_IMAGE_EDIT_NODES)
   );
+  const [workflowName, setWorkflowName] = useState(existing?.comfy.workflowName ?? '');
+  // The workflows saved on the server, listed once a URL is entered (null until then).
+  const [available, setAvailable] = useState<string[] | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setAvailable(null);
+    setListError(null);
+    if (!/^https?:\/\/./.test(baseUrl)) return;
+    let stale = false;
+    const timer = setTimeout(() => {
+      listComfyWorkflows(baseUrl)
+        .then((names) => !stale && setAvailable(names))
+        .catch((e: unknown) => !stale && setListError(e instanceof Error ? e.message : String(e)));
+    }, 400);
+    return () => {
+      stale = true;
+      clearTimeout(timer);
+    };
+  }, [baseUrl]);
+
+  /** Choosing a saved workflow loads it and fills in the node mapping guessed from it. */
+  function chooseWorkflow(name: string) {
+    setWorkflowName(name);
+    if (!name) return;
+    void task.run(async () => {
+      const workflow = await loadComfyWorkflow(baseUrl, name);
+      setWorkflowText(JSON.stringify(workflow, null, 2));
+      setFields(nodeFieldsOf(detectComfyNodes(workflow)));
+    });
+  }
+
   const setField = <K extends keyof NodeFields>(key: K, value: NodeFields[K]) =>
     setFields((f) => ({ ...f, [key]: value }));
 
@@ -61,6 +98,7 @@ export default function GeneratorSettings({ onClose }: Props) {
       provider: 'comfy',
       comfy: {
         baseUrl,
+        ...(workflowName && { workflowName }),
         workflow,
         nodes: {
           positivePromptNodeId: nodeFields.positivePromptNodeId,
@@ -155,6 +193,31 @@ export default function GeneratorSettings({ onClose }: Props) {
                 your server has installed, when you test the connection. Open "Advanced" below only
                 if you want to use your own ComfyUI workflow instead.
               </div>
+              {available && (
+                <>
+                  <label className="form-label small">Workflow</label>
+                  <select
+                    className="form-select form-select-sm mb-2"
+                    value={workflowName}
+                    onChange={(e) => chooseWorkflow(e.target.value)}
+                  >
+                    <option value="">Built-in starter (or the one pasted under Advanced)</option>
+                    {[...new Set([...(workflowName ? [workflowName] : []), ...available])].map(
+                      (name) => (
+                        <option key={name} value={name}>
+                          {name}
+                        </option>
+                      )
+                    )}
+                  </select>
+                  <div className="form-text mb-2">
+                    {available.length === 0
+                      ? 'No workflows saved on that server yet. Save one in ComfyUI ("Save (API Format)" files go in its workflows folder) and reopen this.'
+                      : 'Workflows saved in ComfyUI. Only the name is kept in this browser; the workflow is fetched from the server when the page loads.'}
+                  </div>
+                </>
+              )}
+              {listError && <div className="text-danger small mb-2">{listError}</div>}
               {task.error && <div className="text-danger small mb-2">{task.error}</div>}
 
               <details>
@@ -173,7 +236,10 @@ export default function GeneratorSettings({ onClose }: Props) {
                     className="form-control form-control-sm mb-2 font-monospace"
                     rows={8}
                     value={workflowText}
-                    onChange={(e) => setWorkflowText(e.target.value)}
+                    onChange={(e) => {
+                      setWorkflowText(e.target.value);
+                      setWorkflowName('');
+                    }}
                   />
                   <div className="row g-2 mb-2">
                     <div className="col-6">

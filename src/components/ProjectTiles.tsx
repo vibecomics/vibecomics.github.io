@@ -3,7 +3,9 @@ import type { FormEvent } from 'react';
 import { cb } from '../ai/actions';
 import type { ProjectFolder } from '../drive/driveClient';
 import { PAGE_SIZE_PRESETS } from '../types/comic';
+import GeneratorSettings from './GeneratorSettings';
 import Spinner from './Spinner';
+import { useGeneratorConfig, useGeneratorConfigProblem } from './useGeneratorConfig';
 import { useBusy } from './useBusy';
 import { errorMessage } from '../utils/errors';
 
@@ -93,6 +95,36 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+/** A one-line summary of the image generator and a button to configure it. */
+function GeneratorSettingsCard() {
+  const [editing, setEditing] = useState(false);
+  const config = useGeneratorConfig();
+  const problem = useGeneratorConfigProblem();
+  const summary = config
+    ? `${config.comfy.baseUrl}${config.comfy.workflowName ? ` · ${config.comfy.workflowName}` : ''}`
+    : (problem ?? 'Not set up');
+
+  return (
+    <div className="col-12 col-sm-6 col-md-4">
+      <div className="card h-100 shadow-sm">
+        <div className="card-body d-flex flex-column">
+          <h3 className="card-title h6">Image generator</h3>
+          <p className={`small text-truncate${config ? '' : ' text-muted'}`} title={summary}>
+            {summary}
+          </p>
+          <button
+            className="btn btn-outline-secondary mt-auto align-self-start"
+            onClick={() => setEditing(true)}
+          >
+            {config ? 'Edit' : 'Set up'}
+          </button>
+        </div>
+      </div>
+      {editing && <GeneratorSettings onClose={() => setEditing(false)} />}
+    </div>
+  );
+}
+
 /** One card per Drive project folder, plus a dashed tile that creates a new project. */
 export default function ProjectTiles({ folders }: { folders: ProjectFolder[] }) {
   const [showNewModal, setShowNewModal] = useState(false);
@@ -136,6 +168,11 @@ export default function ProjectTiles({ folders }: { folders: ProjectFolder[] }) 
               <span className="fw-semibold">New project</span>
             </button>
           </div>
+        </div>
+        <h1 className="h4 mt-5 mb-1">Settings</h1>
+        <p className="text-muted small mb-3">Kept in this browser, not in your comics.</p>
+        <div className="row g-3">
+          <GeneratorSettingsCard />
         </div>
       </div>
       {showNewModal && <NewProjectModal onClose={() => setShowNewModal(false)} />}
