@@ -207,21 +207,48 @@ export const INPUTS = {
   },
   'bubbles.delete': { panelId: PANEL_ID, bubbleId: BUBBLE_ID },
 
-  'metadata.setOutline': { text: { type: 'multiline', allowEmpty: true } },
+  'metadata.setStyle': { text: { type: 'multiline', allowEmpty: true } },
   'metadata.setPageSize': { pageSize: PAGE_SIZE },
 
   'characters.get': STORY_ENTRY.get,
   'characters.create': STORY_ENTRY.create,
   'characters.update': STORY_ENTRY.update,
   'characters.delete': STORY_ENTRY.delete,
+  'characters.generateImage': {
+    id: { type: 'string', example: 'character_ab12cd' },
+    prompt: { type: 'multiline', optional: true, allowEmpty: true },
+    references: {
+      type: 'json',
+      optional: true,
+      example: '[{ "mediaId": "media_ab12cd", "note": "use this outfit" }]',
+    },
+  },
   'scenes.get': { id: { type: 'string', example: 'scene_ab12cd' } },
   'scenes.create': STORY_ENTRY.create,
   'scenes.update': { ...STORY_ENTRY.update, id: { type: 'string', example: 'scene_ab12cd' } },
   'scenes.delete': { id: { type: 'string', example: 'scene_ab12cd' } },
+  'scenes.generateImage': {
+    id: { type: 'string', example: 'scene_ab12cd' },
+    prompt: { type: 'multiline', optional: true, allowEmpty: true },
+    references: {
+      type: 'json',
+      optional: true,
+      example: '[{ "mediaId": "media_ab12cd", "note": "use this outfit" }]',
+    },
+  },
   'objects.get': { id: { type: 'string', example: 'object_ab12cd' } },
   'objects.create': STORY_ENTRY.create,
   'objects.update': { ...STORY_ENTRY.update, id: { type: 'string', example: 'object_ab12cd' } },
   'objects.delete': { id: { type: 'string', example: 'object_ab12cd' } },
+  'objects.generateImage': {
+    id: { type: 'string', example: 'object_ab12cd' },
+    prompt: { type: 'multiline', optional: true, allowEmpty: true },
+    references: {
+      type: 'json',
+      optional: true,
+      example: '[{ "mediaId": "media_ab12cd", "note": "use this outfit" }]',
+    },
+  },
 
   'media.get': { id: { type: 'string', example: 'media_ab12cd' } },
   'media.download': { id: { type: 'string', example: 'media_ab12cd' } },
@@ -277,4 +304,37 @@ export const INPUTS = {
   },
   'media.uploadThumbnail': { id: { type: 'string', example: 'media_ab12cd' }, dataUrl: IMAGE },
   'media.delete': { id: { type: 'string', example: 'media_ab12cd' } },
+
+  'generate.layer': {
+    panelId: PANEL_ID,
+    layerId: LAYER_ID,
+    prompt: { type: 'multiline', optional: true, allowEmpty: true },
+    references: {
+      type: 'json',
+      optional: true,
+      example: '[{ "mediaId": "media_ab12cd", "note": "use this outfit" }]',
+    },
+  },
+  'generate.layerReferences': { panelId: PANEL_ID, layerId: LAYER_ID },
+  'generate.entryReferences': {
+    kind: { type: 'enum', options: ['characters', 'scenes', 'objects'] },
+    id: { type: 'string', example: 'character_ab12cd' },
+  },
+  'generate.maxReferenceImages': {},
+  'generate.layerPrompt': { panelId: PANEL_ID, layerId: LAYER_ID },
+  'generate.dirty': {},
+  'generate.getConfig': {},
+  'generate.setConfig': {
+    config: {
+      type: 'json',
+      example: '@comfy-config.json',
+      help: 'The generator config, usually kept in a file: { "provider": "comfy", "comfy": { "baseUrl": "http://localhost:8188", "workflow": { ... }, "nodes": { "positivePromptNodeId": "6", "outputNodeId": "9" } } }.',
+    },
+  },
+  'generate.testConnection': {},
+  'generate.referencePrompt': {
+    kind: { type: 'enum', options: ['characters', 'scenes', 'objects'] },
+    id: { type: 'string', example: 'character_ab12cd' },
+  },
+  'generate.queue': {},
 };

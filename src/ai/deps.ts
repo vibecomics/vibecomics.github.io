@@ -1,6 +1,7 @@
 import type { MediaRemoval } from '../state/media';
 import type { DeviceCodeInfo } from '../drive/deviceOAuth';
 import type { ProjectFolder } from '../drive/driveRest';
+import type { GeneratorConfig } from '../generators/types';
 import type { Bubble, ComicProject, Layer, MediaItem, PageSize } from '../types/comic';
 
 /** Result of an action that can fail. */
@@ -46,6 +47,13 @@ export interface ComicBuilderDeps {
   deleteStorageMedia(id: string): Promise<MediaRemoval>;
   /** Fetch a registered image's bytes from Drive as a data URL. */
   downloadStorageMedia(id: string): Promise<{ name: string; mimeType: string; dataUrl: string }>;
+  /** The image generator config: per-machine, not part of the project. */
+  getGeneratorConfig(): GeneratorConfig | null;
+  setGeneratorConfig(config: GeneratorConfig | null): void;
+  /** Network fetch for the configured image generator. Defaults to the global fetch. */
+  generatorFetch?: typeof fetch;
+  /** Best-effort background removal for a generated foreground image; absent in the CLI (no canvas), same as thumbnail generation. */
+  removeBackground?: (dataUrl: string) => Promise<string>;
 }
 
 /** Input for layers.add(). Geometry is in % of panel size; the image is a mediaId, or omitted for a layer that is only a prompt so far. */

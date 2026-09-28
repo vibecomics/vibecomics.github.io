@@ -39,6 +39,19 @@ export function placedMediaIds(project: ComicProject): Set<string> {
   return placed;
 }
 
+/** How many places each image is used in: layers showing it, plus story-bible entries listing it
+ * as a reference image. Images used nowhere are absent. */
+export function mediaUseCounts(project: ComicProject): Map<string, number> {
+  const counts = new Map<string, number>();
+  const add = (id: string | undefined) => id && counts.set(id, (counts.get(id) ?? 0) + 1);
+  for (const page of project.pages) {
+    for (const panel of page.panels) panel.layers.forEach((layer) => add(layer.mediaId));
+  }
+  const { characters, objects, scenes } = project.metadata;
+  for (const entry of [...characters, ...objects, ...scenes]) entry.imageIds.forEach(add);
+  return counts;
+}
+
 /** The character, object or scene with this id, or undefined when there is none (it may have been deleted). */
 export function subjectOf(project: ComicProject, id: string | undefined): Subject | undefined {
   if (!id) return undefined;

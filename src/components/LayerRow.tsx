@@ -87,14 +87,16 @@ export default function LayerRow({
           )}
         </button>
         {layer.dirty && (
-          <span
-            className="text-warning"
-            style={{ fontSize: '0.55rem' }}
-            title="The prompt changed since this image was made; it may need a new one"
-            aria-label="Prompt changed since the image was made"
+          <button
+            type="button"
+            className="btn btn-link text-warning text-decoration-none p-0"
+            style={{ fontSize: '0.55rem', lineHeight: 1 }}
+            title="The prompt changed since this image was made; click to mark it as up to date"
+            aria-label="Prompt changed since the image was made; click to mark it as up to date"
+            onClick={() => cb().layers.update(panelId, layer.id, { dirty: false })}
           >
             ●
-          </span>
+          </button>
         )}
         <DeleteButton
           label={background ? 'background' : layer.name}

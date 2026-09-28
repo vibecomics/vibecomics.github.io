@@ -12,6 +12,8 @@
 
 import type { DeviceCodeInfo } from '../drive/deviceOAuth';
 import type { ProjectFolder } from '../drive/driveRest';
+import { assertValidGeneratorConfig, createProvider } from '../generators/types';
+import type { GeneratorConfig } from '../generators/types';
 import { createPanel, defaultPointer } from '../state/layout';
 import { lintProject } from '../state/lint';
 import type { LintFinding } from '../state/lint';
@@ -24,13 +26,13 @@ import {
   BUBBLE_KINDS,
   LAYER_KINDS,
   LAYER_MOVES,
-  artSize,
   assertKind,
   assertScene,
   assertSubject,
   assertOptionalText,
   definedFields,
-  findPanel,
+  imageSwapPatch,
+  layerArtSize,
   mutate,
   panelItemsApi,
   panelsApi,
@@ -49,6 +51,18 @@ import type {
   LayerUpdate,
 } from './deps';
 import { attachDocs } from './docs';
+import {
+  defaultEntryReferences,
+  defaultLayerReferences,
+  generateAllDirty,
+  generateLayerImage,
+  generateReferenceImage,
+  getQueue,
+  maxReferenceImages,
+} from './generation';
+import type { GenerationReference } from './generation';
+import type { GeneratedImage, GenerationOutcome, QueueItem, ReferenceKind } from './generation';
+import { buildLayerPrompt, buildReferencePrompt } from './prompt';
 
 declare global {
   interface Window {
@@ -67,6 +81,53 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
   const characters = storyApi(deps, 'characters');
   const scenes = storyApi(deps, 'scenes');
   const objects = storyApi(deps, 'objects');
+
+  /** Shared by layers.update and generate.layer/dirty, which also need to set a layer's image. */
+  function updateLayer(panelId: string, layerId: string, patch: LayerUpdate): Layer {
+    if (patch.kind !== undefined) assertKind(patch.kind, LAYER_KINDS, 'Layer kind');
+    const swapsImage = patch.mediaId !== undefined;
+    let image: Partial<Layer> = {};
+    if (swapsImage) {
+      const project = requireProject(deps);
+      resolveLayerImage(project, patch);
+      const current = layers.get(panelId, layerId);
+      if (!current) throw new Error(`Layer "${layerId}" not found.`);
+      image = imageSwapPatch(current, patch.mediaId!);
+    }
+    const { subjectId, sceneId, ...rest } = patch;
+    if (typeof subjectId === 'string') assertSubject(requireProject(deps), subjectId);
+    if (typeof sceneId === 'string') assertScene(requireProject(deps), sceneId);
+    // A new image satisfies whatever prompt asked for it, so it always clears dirty (image.dirty,
+    // set above), even alongside a prompt change (that means "here is the new art for it").
+    // Otherwise, touching the prompt or the linked scene/subject makes the current image stale
+    // (dirty) unless that leaves no prompt at all to act on.
+    const touchesPrompt =
+      patch.prompt !== undefined || subjectId !== undefined || sceneId !== undefined;
+    const dirty = swapsImage
+      ? undefined
+      : touchesPrompt
+        ? Boolean((patch.prompt ?? layers.get(panelId, layerId)?.prompt ?? '').trim())
+        : undefined;
+    return layers.update(
+      panelId,
+      layerId,
+      {
+        ...rest,
+        ...image,
+        ...(dirty !== undefined && { dirty }),
+        ...(typeof subjectId === 'string' && { subjectId }),
+        ...(typeof sceneId === 'string' && { sceneId }),
+      },
+      [...(subjectId === null ? ['subjectId'] : []), ...(sceneId === null ? ['sceneId'] : [])]
+    );
+  }
+  const setLayerMedia = (
+    panelId: string,
+    layerId: string,
+    mediaId: string,
+    aspectRatio?: number
+  ): Layer =>
+    updateLayer(panelId, layerId, { mediaId, ...(aspectRatio !== undefined && { aspectRatio }) });
 
   /**
    * Top-level command API for VibeComics: every UI control calls these same
@@ -162,7 +223,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * Open a project: load the folder's project.json into the editor. A
-       * project with only its cover opens on the Outline tab; one with more
+       * project with only its cover opens on the Style tab; one with more
        * pages opens on the Pages tab.
        * @param idOrName - The folder id from listProjects(), or the project/folder name.
        * @returns A promise resolving to { ok, error? }.
@@ -218,7 +279,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * Replace the whole open project with validated JSON (object or JSON string).
        * Validation follows public/schema/comic-project.schema.json; the error
        * names the failing path (e.g. project.pages[2].panels[0].layers[1]).
-       * Required: id, title, savedAt, pages and metadata (outline, characters,
+       * Required: id, title, savedAt, pages and metadata (style, characters,
        * scenes, objects, media). A layer's image is set via mediaId (or omitted
        * for a layer that is only a prompt so far).
        * This is the primary editing path for bulk changes: read snapshots via
@@ -580,16 +641,24 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * show, for whoever generates the image. It may exist with only a prompt
      * and get its image later.
      *
-     * HOW THE PROMPT FOR AN IMAGE IS BUILT. The layer prompt is only one part.
-     * To generate the image of a layer (a background too), stitch together, in
-     * this order: the STYLE paragraph (in metadata.outline), the PAGE prompt
-     * (page.update), the PANEL prompt (panels.update), the description of the
-     * scene, the description of each character and object in the image, and
-     * finally the LAYER prompt. Each level says only what belongs to it (the page:
-     * what happens on it; the panel: its moment and camera; the layer: this one
-     * image), so the parts add up without repeating or contradicting each other.
-     * Read them back with page.select (page prompt), panels.get (panel prompt)
-     * and layers.get (layer prompt).
+     * HOW THE PROMPT FOR AN IMAGE IS BUILT. The layer prompt is only one part,
+     * and a background's image is built differently from a foreground layer's:
+     *
+     * - Background: the STYLE paragraph (metadata.style), the PAGE prompt
+     *   (page.update), the PANEL prompt (panels.update), the SCENE description,
+     *   then the LAYER prompt. It is meant to depict that page/panel/scene, so
+     *   all of it belongs in the prompt.
+     * - Foreground: only the STYLE paragraph, the character's or object's
+     *   description, and the LAYER prompt. The page prompt, panel prompt, and
+     *   the panel's background scene are all left out, even as "context only,
+     *   do not draw it": most image generators draw the literal setting the
+     *   moment any place or scene language appears anywhere in the prompt,
+     *   caveat or not, which ruins an isolated cutout. So only the layer's own
+     *   prompt says what this character is doing, never where.
+     *
+     * Each level says only what belongs to it, so the parts add up without
+     * repeating or contradicting each other. Read them back with page.select
+     * (page prompt), panels.get (panel prompt) and layers.get (layer prompt).
      *
      * DIRTY. A layer's `dirty` field says whether its image still matches its
      * prompt. add/update set it automatically: editing the prompt (or, for a
@@ -597,7 +666,8 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * on; setting the image (mediaId) turns it off. Check layers.list or
      * layers.get for `dirty: true` to find which layers or backgrounds need a
      * new image generated for them, and regenerate just those, not the whole
-     * panel.
+     * panel. See the generate namespace to do this automatically with a
+     * configured image generator.
      */
     layers: {
       /**
@@ -670,37 +740,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @param patch - Partial layer fields.
        * @returns A deep-cloned snapshot of the updated Layer. Throws when the panel or layer is not found.
        */
-      update: (panelId: string, layerId: string, patch: LayerUpdate): Layer => {
-        if (patch.kind !== undefined) assertKind(patch.kind, LAYER_KINDS, 'Layer kind');
-        const swapsImage = patch.mediaId !== undefined;
-        const image = swapsImage ? resolveLayerImage(requireProject(deps), patch) : {};
-        const { subjectId, sceneId, ...rest } = patch;
-        if (typeof subjectId === 'string') assertSubject(requireProject(deps), subjectId);
-        if (typeof sceneId === 'string') assertScene(requireProject(deps), sceneId);
-        // A new image satisfies whatever prompt asked for it, so it always clears dirty,
-        // even set together with a prompt change (that means "here is the new art for it").
-        // Otherwise, touching the prompt or the linked scene/subject makes the current image
-        // stale (dirty) unless that leaves no prompt at all to act on.
-        const touchesPrompt =
-          patch.prompt !== undefined || subjectId !== undefined || sceneId !== undefined;
-        const dirty = swapsImage
-          ? false
-          : touchesPrompt
-            ? Boolean((patch.prompt ?? layers.get(panelId, layerId)?.prompt ?? '').trim())
-            : undefined;
-        return layers.update(
-          panelId,
-          layerId,
-          {
-            ...rest,
-            ...image,
-            ...(dirty !== undefined && { dirty }),
-            ...(typeof subjectId === 'string' && { subjectId }),
-            ...(typeof sceneId === 'string' && { sceneId }),
-          },
-          [...(subjectId === null ? ['subjectId'] : []), ...(sceneId === null ? ['sceneId'] : [])]
-        );
-      },
+      update: updateLayer,
 
       /**
        * Flip a layer's image horizontally (mirror it left to right); calling it
@@ -733,18 +773,8 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @param layerId - The layer id.
        * @returns { widthIn, heightIn, aspectRatio, pixels: { width, height } }, or null when the panel or layer is not found.
        */
-      size: (panelId: string, layerId: string) => {
-        const project = requireProject(deps);
-        const panel = findPanel(project, panelId);
-        const layer = panel?.layers.find((l) => l.id === layerId);
-        if (!panel || !layer) return null;
-        const { widthIn, heightIn } = project.metadata.pageSize;
-        const panelWidth = (widthIn * panel.width) / 100;
-        if (layer.kind === 'background')
-          return artSize(panelWidth, (heightIn * panel.height) / 100);
-        const width = (panelWidth * layer.width) / 100;
-        return artSize(width, width / (layer.aspectRatio ?? 1));
-      },
+      size: (panelId: string, layerId: string) =>
+        layerArtSize(requireProject(deps), panelId, layerId),
 
       /**
        * Change a layer's place in the stack. "up" and "down" move it one step;
@@ -858,24 +888,28 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     },
 
     /**
-     * The project's story bible: outline plus the media registry.
+     * The project's story bible: the STYLE paragraph plus the media registry.
      * Use characters/scenes/objects for the individual entries.
      */
     metadata: {
       /**
-       * Read the whole metadata block (outline, characters, scenes, objects, media).
+       * Read the whole metadata block (style, characters, scenes, objects, media).
        * @returns A deep-cloned metadata snapshot. Read-only: mutate via the dedicated functions.
        */
       get: () => snapshot(requireProject(deps).metadata),
 
       /**
-       * Set the story outline / synopsis.
-       * @param text - The new outline text.
+       * Set the STYLE paragraph: a short, fixed description of the visual style (medium, line,
+       * palette, lighting, mood). Stitched, verbatim, into every image's prompt, so keep it to a
+       * few sentences and change it only if the story calls for it. There is no separate synopsis
+       * field: track story notes elsewhere, since stitching a whole synopsis into every prompt
+       * would drown out what is unique to each image.
+       * @param text - The new STYLE paragraph.
        * @returns { ok: true }.
        */
-      setOutline: (text: string): ActionResult => {
+      setStyle: (text: string): ActionResult => {
         deps.updateProject((p) => {
-          p.metadata.outline = text;
+          p.metadata.style = text;
         });
         return { ok: true };
       },
@@ -952,6 +986,25 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @returns True when a character was removed, false when not found.
        */
       delete: characters.delete,
+
+      /**
+       * Generate a reference image for this character with the configured image generator (see the
+       * generate namespace): built from the STYLE paragraph, this character's description and,
+       * unless given, a default prompt for a multi-angle turnaround sheet (see
+       * generate.referencePrompt) on a plain white background, using its existing reference images
+       * (if any) so a new one stays consistent. Registers the image but does not add it to imageIds —
+       * review it, then add it yourself with characters.update(id, { imageIds: [...] }), the same
+       * "register, then link" split as media.upload.
+       * @param id - The character id.
+       * @param prompt - Optional prompt to use instead of the default (e.g. edited by a user before generating).
+       * @param references - Optional reference images to send instead of the entry's own (see generate.entryReferences), each { mediaId, note? }; a note says how to use that image and is added to the prompt.
+       * @returns A promise resolving to the new MediaItem.
+       */
+      generateImage: (
+        id: string,
+        prompt?: string,
+        references?: GenerationReference[]
+      ): Promise<MediaItem> => generateReferenceImage(deps, 'characters', id, prompt, references),
     },
 
     /**
@@ -996,6 +1049,25 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @returns True when a scene was removed, false when not found.
        */
       delete: scenes.delete,
+
+      /**
+       * Generate a reference image for this scene with the configured image generator (see the
+       * generate namespace): built from the STYLE paragraph, this scene's description and, unless
+       * given, a default prompt for an establishing shot of the location itself (no characters; see
+       * generate.referencePrompt), using its existing reference images (if any) so a new one stays
+       * consistent. Registers the image but does not add it to imageIds — review it, then add it
+       * yourself with scenes.update(id, { imageIds: [...] }), the same "register, then link" split as
+       * media.upload.
+       * @param id - The scene id.
+       * @param prompt - Optional prompt to use instead of the default (e.g. edited by a user before generating).
+       * @param references - Optional reference images to send instead of the entry's own (see generate.entryReferences), each { mediaId, note? }; a note says how to use that image and is added to the prompt.
+       * @returns A promise resolving to the new MediaItem.
+       */
+      generateImage: (
+        id: string,
+        prompt?: string,
+        references?: GenerationReference[]
+      ): Promise<MediaItem> => generateReferenceImage(deps, 'scenes', id, prompt, references),
     },
 
     /**
@@ -1038,6 +1110,25 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @returns True when an object was removed, false when not found.
        */
       delete: objects.delete,
+
+      /**
+       * Generate a reference image for this object with the configured image generator (see the
+       * generate namespace): built from the STYLE paragraph, this object's description and, unless
+       * given, a default prompt for a multi-angle turnaround sheet (see generate.referencePrompt) on a
+       * plain white background, using its existing reference images (if any) so a new one stays
+       * consistent. Registers the image but does not add it to imageIds — review it, then add it
+       * yourself with objects.update(id, { imageIds: [...] }), the same "register, then link" split as
+       * media.upload.
+       * @param id - The object id.
+       * @param prompt - Optional prompt to use instead of the default (e.g. edited by a user before generating).
+       * @param references - Optional reference images to send instead of the entry's own (see generate.entryReferences), each { mediaId, note? }; a note says how to use that image and is added to the prompt.
+       * @returns A promise resolving to the new MediaItem.
+       */
+      generateImage: (
+        id: string,
+        prompt?: string,
+        references?: GenerationReference[]
+      ): Promise<MediaItem> => generateReferenceImage(deps, 'objects', id, prompt, references),
     },
 
     /**
@@ -1174,6 +1265,142 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        */
       delete: (id: string): Promise<{ layers: number; entries: number }> =>
         deps.deleteStorageMedia(id),
+    },
+
+    /**
+     * Generate art with the configured image generator (a self-hosted ComfyUI
+     * instance; see setConfig): stitches a layer's prompt the same way the
+     * layers namespace describes and pulls in its linked character's or
+     * scene's reference images. layer() and the characters/scenes/objects
+     * generateImage() functions only register the result, for you to preview
+     * and commit yourself; dirty() (no one to preview a batch for) commits
+     * each result as it goes. Only one generation request runs at a time,
+     * even across overlapping calls (see queue()).
+     */
+    generate: {
+      /**
+       * Generate a new image for one layer (or background), regardless of
+       * dirty. Registers the image but does not set it as the layer's image —
+       * review it, then commit it yourself with layers.update(panelId,
+       * layerId, { mediaId, aspectRatio }) (the previous image, if any, is
+       * kept in the layer's history rather than discarded when you do; see
+       * mediaHistory in the data model).
+       * @param panelId - The panel id.
+       * @param layerId - The layer id.
+       * @param prompt - Optional prompt to use instead of the default (e.g. edited by a user before generating; see generate.layerPrompt).
+       * @param references - Optional reference images to send instead of the defaults (see generate.layerReferences), each { mediaId, note? }; a note says how to use that image and is added to the prompt. Extras beyond generate.maxReferenceImages are ignored.
+       * @returns A promise resolving to the new MediaItem, plus the aspect ratio the image actually came out at. Rejects when no generator is configured, or generation fails.
+       */
+      layer: (
+        panelId: string,
+        layerId: string,
+        prompt?: string,
+        references?: GenerationReference[]
+      ): Promise<GeneratedImage> => generateLayerImage(deps, panelId, layerId, prompt, references),
+
+      /**
+       * The reference images generate.layer sends by default: those of the layer's character/object
+       * (foreground) or scene (background).
+       * @param panelId - The panel id.
+       * @param layerId - The layer id.
+       * @returns The references, in the order they're sent.
+       */
+      layerReferences: (panelId: string, layerId: string): GenerationReference[] =>
+        defaultLayerReferences(deps, panelId, layerId),
+
+      /**
+       * The reference images characters/scenes/objects.generateImage sends by default: the entry's own images.
+       * @param kind - Which story-bible list the entry is in.
+       * @param id - The entry id.
+       * @returns The references, in the order they're sent.
+       */
+      entryReferences: (
+        kind: 'characters' | 'scenes' | 'objects',
+        id: string
+      ): GenerationReference[] => defaultEntryReferences(deps, kind, id),
+
+      /** How many reference images the configured generator uses (0 if none is configured). */
+      maxReferenceImages: (): number => maxReferenceImages(deps),
+
+      /**
+       * The default prompt for a layer's (or background's) image (what generate.layer uses when no
+       * prompt is given). Read this to pre-fill an editable prompt before generating.
+       * @param panelId - The panel id.
+       * @param layerId - The layer id.
+       * @returns The stitched prompt. Throws when the panel or layer is not found.
+       */
+      layerPrompt: (panelId: string, layerId: string): string =>
+        buildLayerPrompt(requireProject(deps), panelId, layerId),
+
+      /**
+       * Generate images for every layer and background across the whole
+       * project whose dirty is true, one request at a time, committing each
+       * result as its layer's image as it goes (unlike generate.layer, there's
+       * no one to preview a batch for). A failure on one item does not stop
+       * the rest.
+       * @returns A promise resolving to one { pageId, panelId, layerId, ok, error? } per dirty item found when it started.
+       */
+      dirty: (): Promise<GenerationOutcome[]> => generateAllDirty(deps, setLayerMedia),
+
+      /**
+       * Read the image generator configuration. Per-machine, not part of the project.
+       * @returns The current config, or null when none is set.
+       */
+      getConfig: (): GeneratorConfig | null => deps.getGeneratorConfig(),
+
+      /**
+       * Set the image generator configuration: currently a self-hosted
+       * ComfyUI instance (provider: "comfy"): its base URL, a workflow
+       * exported from it in "API format", and which node ids hold the
+       * positive prompt, reference image(s), output and, optionally, size and seed.
+       * @param config - { provider: "comfy", comfy: { baseUrl, workflow, nodes: { positivePromptNodeId, outputNodeId, referenceImageNodeIds?, sizeNodeId?, seedNodeId?, seedField? } } }.
+       * @returns { ok, error? }.
+       */
+      setConfig: (config: GeneratorConfig): ActionResult => {
+        try {
+          assertValidGeneratorConfig(config);
+        } catch (e) {
+          return { ok: false, error: errorMessage(e) };
+        }
+        deps.setGeneratorConfig(config);
+        return { ok: true };
+      },
+
+      /**
+       * Check that the configured image generator is reachable.
+       * @returns A promise resolving to { ok, error? }.
+       */
+      testConnection: async (): Promise<ActionResult> => {
+        const config = deps.getGeneratorConfig();
+        if (!config) return { ok: false, error: 'No image generator is configured.' };
+        try {
+          await createProvider(config, deps.generatorFetch).test();
+          return { ok: true };
+        } catch (e) {
+          return { ok: false, error: errorMessage(e) };
+        }
+      },
+
+      /**
+       * The default prompt for a story-bible entry's reference image (what
+       * characters.generateImage / scenes.generateImage / objects.generateImage use when no prompt is
+       * given): the STYLE paragraph, the entry's description, and a technical requirements line (a
+       * multi-angle turnaround sheet for a character or object; an establishing shot for a scene).
+       * Read this to pre-fill an editable prompt before generating.
+       * @param kind - "characters", "scenes", or "objects".
+       * @param id - The entry's id.
+       * @returns The stitched prompt. Throws when the entry is not found.
+       */
+      referencePrompt: (kind: ReferenceKind, id: string): string =>
+        buildReferencePrompt(requireProject(deps), kind, id),
+
+      /**
+       * The generation queue right now: every layer, dirty-batch item and reference-image request
+       * that's running or waiting its turn, in the order it will run (or is running). Empty when
+       * nothing is generating.
+       * @returns [{ id, label, status: "queued" | "running" }].
+       */
+      queue: (): QueueItem[] => getQueue(),
     },
   };
 

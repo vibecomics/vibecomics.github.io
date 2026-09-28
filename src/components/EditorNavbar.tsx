@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
+import { dirtyLayerRefs } from '../ai/builders';
 import type { SaveState } from '../state/useProjectSaver';
 import ConflictDot from './ConflictDot';
 import DropdownMenu, { DropdownItem } from './DropdownMenu';
 import { EDITOR_TABS } from './editorTabs';
 import type { EditorTab } from './editorTabs';
+import GeneratorButton from './GeneratorButton';
+import { useProject } from './ProjectContext';
 import { useBusy } from './useBusy';
 import RefreshButton from './RefreshButton';
 import SaveButton from './SaveButton';
@@ -33,6 +36,7 @@ export default function EditorNavbar({
   onRefresh,
 }: Props) {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
+  const dirtyCount = dirtyLayerRefs(useProject()).length;
   // Opening the project list and closing a project (which saves first) go to Drive.
   const menuTask = useBusy();
   const menuProps = (menu: Exclude<OpenMenu, null>) => ({
@@ -66,6 +70,8 @@ export default function EditorNavbar({
       </DropdownMenu>
 
       <span className="navbar-brand mb-0 h1 fs-5 text-truncate me-auto">{title}</span>
+
+      <GeneratorButton dirtyCount={dirtyCount} />
 
       <DropdownMenu
         {...menuProps('tabs')}

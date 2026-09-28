@@ -24,7 +24,7 @@ const layer = (id: string, name: string, extra: Partial<Layer> = {}): Layer => (
 /** A cover, then "Chase" (two stacked panels, a layer each, a bubble) and "Roof" (one panel). */
 function base(): ComicProject {
   const project = createBlankProject('Test');
-  project.metadata.outline = 'Outline';
+  project.metadata.style = 'Style';
   project.metadata.characters = [
     { id: 'c1', name: 'Mira', description: 'Red hair', imageIds: [], sceneIds: [] },
     { id: 'c2', name: 'Otto', description: 'Tall', imageIds: [], sceneIds: [] },
@@ -347,18 +347,18 @@ test('story bible: additions on both sides combine; the same description changed
   assert.deepEqual(result.conflicts[0].where, { tab: 'cast' });
 });
 
-test('outline, page size and project title: conflicts point at the outline tab', () => {
+test('style, page size and project title: conflicts point at the outline tab', () => {
   const b = base();
   const mine = clone(b);
   const theirs = clone(b);
-  mine.metadata.outline = 'Our outline';
-  theirs.metadata.outline = 'Their outline';
+  mine.metadata.style = 'Our style';
+  theirs.metadata.style = 'Their style';
   mine.metadata.pageSize = { label: 'Square', widthIn: 8, heightIn: 8 };
   theirs.metadata.pageSize = { label: 'Wide', widthIn: 10, heightIn: 6 };
   mine.title = 'Ours';
   theirs.title = 'Theirs';
   const { conflicts } = mergeProjects(b, mine, theirs);
-  assert.deepEqual(conflicts.map((c) => c.label).sort(), ['Outline', 'Page size', 'Project title']);
+  assert.deepEqual(conflicts.map((c) => c.label).sort(), ['Page size', 'Project title', 'Style']);
   assert.ok(conflicts.every((c) => c.where.tab === 'outline'));
 });
 
@@ -379,8 +379,8 @@ test('resolveAll applies one choice per conflict and returns a valid project', (
   const theirs = clone(b);
   panelA(mine).layers[0].prompt = 'Ours';
   panelA(theirs).layers[0].prompt = 'Theirs';
-  mine.metadata.outline = 'Our outline';
-  theirs.metadata.outline = 'Their outline';
+  mine.metadata.style = 'Our style';
+  theirs.metadata.style = 'Their style';
   const { merged, conflicts } = mergeProjects(b, mine, theirs);
   assert.equal(conflicts.length, 2);
   const promptAt = conflicts.findIndex((c) => c.kind === 'value' && c.label.includes('prompt'));
@@ -389,7 +389,7 @@ test('resolveAll applies one choice per conflict and returns a valid project', (
   >;
   const result = resolveAll(merged, conflicts, choices);
   assert.equal(panelA(result).layers[0].prompt, 'Theirs');
-  assert.equal(result.metadata.outline, 'Our outline');
+  assert.equal(result.metadata.style, 'Our style');
 });
 
 test('the inputs are never changed', () => {

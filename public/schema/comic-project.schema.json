@@ -162,6 +162,13 @@
           "description": "Optional id into metadata.media: the MediaItem this layer's artwork came from.",
           "type": "string"
         },
+        "mediaHistory": {
+          "description": "Previous mediaIds, most-recent-first, kept so regenerating or picking a new image never discards the old one.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
         "name": {
           "type": "string"
         },
@@ -301,10 +308,6 @@
           },
           "type": "array"
         },
-        "outline": {
-          "description": "Story outline / synopsis.",
-          "type": "string"
-        },
         "pageSize": {
           "$ref": "#/$defs/PageSize"
         },
@@ -313,9 +316,13 @@
             "$ref": "#/$defs/Scene"
           },
           "type": "array"
+        },
+        "style": {
+          "description": "A short paragraph fixing the visual style (medium, line, palette, lighting, mood), stitched verbatim into every image's prompt. No synopsis field: track story notes elsewhere.",
+          "type": "string"
         }
       },
-      "required": ["outline", "characters", "scenes", "objects", "media"],
+      "required": ["style", "characters", "scenes", "objects", "media"],
       "type": "object"
     },
     "PageSize": {
@@ -370,7 +377,7 @@
   },
   "$id": "schema/comic-project.schema.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "A generic VibeComics project: pages of panels, each panel compositing image layers with speech bubbles on top, plus a story-bible metadata block (outline, characters, scenes, objects, media registry). Page numbers are 0-based and displayed as 0, 1, 2, ...",
+  "description": "A generic VibeComics project: pages of panels, each panel compositing image layers with speech bubbles on top, plus a story-bible metadata block (style, characters, scenes, objects, media registry). Page numbers are 0-based and displayed as 0, 1, 2, ...",
   "properties": {
     "id": {
       "description": "Unique project id.",

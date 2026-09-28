@@ -212,17 +212,17 @@ test('--project opens another project first, and other projects are listed', asy
   await login();
   await run('storage', 'createProject', 'One');
   await run('storage', 'createProject', 'Two');
-  await run('metadata', 'setOutline', 'Outline of two');
+  await run('metadata', 'setStyle', 'Style of two');
 
   const listed = await run('storage', 'listProjects');
   assert.deepEqual(
     listed.json().map((f: { name: string }) => f.name),
     ['One', 'Two']
   );
-  const outline = await run('metadata', 'get', '--project', 'One');
-  assert.equal(outline.json().outline, '');
-  assert.equal((await run('metadata', 'get')).json().outline, '');
-  assert.equal((await run('metadata', 'get', '--project', 'Two')).json().outline, 'Outline of two');
+  const style = await run('metadata', 'get', '--project', 'One');
+  assert.equal(style.json().style, '');
+  assert.equal((await run('metadata', 'get')).json().style, '');
+  assert.equal((await run('metadata', 'get', '--project', 'Two')).json().style, 'Style of two');
 });
 
 test('media: upload a file with a thumbnail, look at it, delete it', async () => {
@@ -263,8 +263,8 @@ test('JSON can come from a file with @', async () => {
   await login();
   const { id } = (await run('storage', 'createProject', 'Files')).json();
   fs.writeFileSync(path.join(work, 'outline.txt'), 'Premise: a cat. Twist: it is a dog.');
-  await run('metadata', 'setOutline', '@outline.txt');
-  assert.equal(google.projectIn(id).metadata.outline, 'Premise: a cat. Twist: it is a dog.');
+  await run('metadata', 'setStyle', '@outline.txt');
+  assert.equal(google.projectIn(id).metadata.style, 'Premise: a cat. Twist: it is a dog.');
 
   const panelId = (await run('page', 'current')).json().panels[0].id;
   fs.writeFileSync(path.join(work, 'bubble.json'), '{"text":"Hi!","kind":"speech"}');
@@ -434,7 +434,7 @@ test('the rest of the API works through the command line', async () => {
   // Page size, outline, page and panel edits (object flags)
   await run('metadata', 'setPageSize', '{"label":"Square","widthIn":8,"heightIn":8}');
   assert.equal(saved().metadata.pageSize.label, 'Square');
-  await run('metadata', 'setOutline', '');
+  await run('metadata', 'setStyle', '');
   const page = (await run('page', 'add')).json();
   assert.equal(page.title, '');
   const [top, bottom] = (
@@ -643,13 +643,13 @@ test('a change made elsewhere is merged in when it does not clash', async () => 
   // Another system edits the outline right after this command has read the project.
   google.afterNextProjectRead(() =>
     google.externalEdit(folderId, (p) => {
-      p.metadata.outline = 'Written elsewhere';
+      p.metadata.style = 'Written elsewhere';
     })
   );
   const result = await run('page', 'update', '1', '--prompt', 'Mine');
   assert.equal(result.code, 0, result.err);
   const saved = google.projectIn(folderId);
-  assert.equal(saved.metadata.outline, 'Written elsewhere'); // theirs survived
+  assert.equal(saved.metadata.style, 'Written elsewhere'); // theirs survived
   assert.equal(saved.pages[1].prompt, 'Mine'); // and so did ours
 
   // A change made between two commands is simply read by the next one.
@@ -725,7 +725,7 @@ test('changes that keep landing while the CLI merges are merged too', async () =
   // One edit after the CLI reads the project, and another right after it re-reads to merge.
   google.afterNextProjectRead(() => {
     google.externalEdit(folderId, (p) => {
-      p.metadata.outline = 'First elsewhere';
+      p.metadata.style = 'First elsewhere';
     });
     google.afterNextProjectRead(() =>
       google.externalEdit(folderId, (p) => {
@@ -736,7 +736,7 @@ test('changes that keep landing while the CLI merges are merged too', async () =
   const result = await run('page', 'update', '1', '--prompt', 'Ours');
   assert.equal(result.code, 0, result.err);
   const saved = google.projectIn(folderId);
-  assert.equal(saved.metadata.outline, 'First elsewhere');
+  assert.equal(saved.metadata.style, 'First elsewhere');
   assert.equal(saved.pages[1].title, 'Second elsewhere');
   assert.equal(saved.pages[1].prompt, 'Ours');
 });
@@ -748,7 +748,7 @@ test('reading and writing keep the Drive version in step, so a lone CLI never co
   const before = google.versionOf(folderId)!;
   for (let i = 0; i < 4; i++) {
     assert.equal((await run('page', 'add', '--title', `P${i}`)).code, 0);
-    assert.equal((await run('metadata', 'setOutline', `outline ${i}`)).code, 0);
+    assert.equal((await run('metadata', 'setStyle', `outline ${i}`)).code, 0);
   }
   assert.equal(google.versionOf(folderId), before + 8); // exactly one write per changing command
   assert.equal(google.projectIn(folderId).pages.length, 5);

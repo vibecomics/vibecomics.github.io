@@ -559,6 +559,23 @@
   min-width: 0;
 }
 
+/* How many places an image is used in: a circle over the top left corner of the thumbnail. */
+.media-tile-uses {
+  position: absolute;
+  top: 0.5rem;
+  left: 0.5rem;
+  min-width: 1.4rem;
+  height: 1.4rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  background: var(--bs-primary);
+  color: #fff;
+  font-size: 0.75rem;
+  line-height: 1.4rem;
+  text-align: center;
+  pointer-events: none;
+}
+
 /* Preview and delete, over the top corner of the thumbnail. */
 .media-tile-actions {
   position: absolute;

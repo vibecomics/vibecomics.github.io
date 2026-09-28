@@ -73,6 +73,25 @@ test('normalizeProject fills in fields added after a project.json was written', 
   assert.ok(old.metadata.pageSize.widthIn > 0);
 });
 
+test('a project.json with only the old outline field is valid, and normalizeProject migrates it to style', () => {
+  const old = projectWith([layer()]);
+  delete (old.metadata as { style?: string }).style;
+  (old.metadata as unknown as { outline: string }).outline =
+    'STYLE: watercolor. Then a long synopsis.';
+
+  assertValidProject(old);
+  normalizeProject(old);
+
+  assert.equal(old.metadata.style, 'STYLE: watercolor. Then a long synopsis.');
+  assert.equal((old.metadata as unknown as { outline?: string }).outline, undefined);
+});
+
+test('a metadata block with neither style nor the old outline field is invalid', () => {
+  const project = projectWith([layer()]);
+  delete (project.metadata as { style?: string }).style;
+  assert.throws(() => assertValidProject(project), /style/);
+});
+
 test('a media item may carry a thumbnail file name, which must be a string', () => {
   const project = createBlankProject('Test');
   project.metadata.media.push({

@@ -9,6 +9,7 @@ import {
   groupMedia,
   MEDIA_BATCH_SIZE,
   firstOfGroups,
+  mediaUseCounts,
   initialCount,
   searchMedia,
   searchTextByMedia,
@@ -38,13 +39,15 @@ interface Props {
 interface TileProps {
   item: MediaItem;
   current: boolean;
+  /** How many places the image is used in. */
+  uses: number;
   deleting: boolean;
   onPick: (item: MediaItem) => void;
   onPreview: (item: MediaItem) => void;
   onDelete: (item: MediaItem) => void;
 }
 
-function Tile({ item, current, deleting, onPick, onPreview, onDelete }: TileProps) {
+function Tile({ item, current, uses, deleting, onPick, onPreview, onDelete }: TileProps) {
   // The image is fetched only once its tile has scrolled into view.
   const [ref, seen] = useSeen<HTMLDivElement>();
   const { url, failed, error } = useMediaUrl(seen ? item : null);
@@ -67,6 +70,15 @@ function Tile({ item, current, deleting, onPick, onPreview, onDelete }: TileProp
         </span>
         <span className="media-tile-name">{item.name}</span>
       </button>
+      {uses > 0 && (
+        <span
+          className="media-tile-uses"
+          title={`Used in ${uses} place${uses === 1 ? '' : 's'}`}
+          aria-label={`Used in ${uses} place${uses === 1 ? '' : 's'}`}
+        >
+          {uses}
+        </span>
+      )}
       <div className="media-tile-actions">
         <button
           type="button"
@@ -129,6 +141,7 @@ export default function MediaPicker({
     const timer = setTimeout(() => setQuery(text), 150);
     return () => clearTimeout(timer);
   }, [text]);
+  const useCounts = useMemo(() => mediaUseCounts(project), [project]);
   const searchText = useMemo(() => searchTextByMedia(project), [project]);
   const subject = useMemo(() => subjectOf(project, subjectId), [project, subjectId]);
   const found = searchMedia(media, searchText, query);
@@ -260,6 +273,7 @@ export default function MediaPicker({
                         key={item.id}
                         item={item}
                         current={item.id === currentId}
+                        uses={useCounts.get(item.id) ?? 0}
                         deleting={item.id === deletingId}
                         onPick={pick}
                         onPreview={preview}

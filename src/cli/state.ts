@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { DeviceCodeInfo } from '../drive/deviceOAuth';
+import type { GeneratorConfig } from '../generators/types';
 
 /** A device login the user has been asked to approve but has not yet. */
 export interface PendingLogin {
@@ -33,6 +34,8 @@ export interface CliState {
   project?: { id: string; name: string };
   /** The current page of the open project (0-based). */
   pageIndex?: number;
+  /** The image generator config (see ComicBuilder.generate). ComfyUI has no login, so it's plain. */
+  generator?: GeneratorConfig;
 }
 
 export function stateDir(env: Record<string, string | undefined>): string {

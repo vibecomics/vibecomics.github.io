@@ -3,10 +3,16 @@ import { cb } from '../ai/actions';
 import type { LayerUpdate } from '../ai/deps';
 import type { Layer, MediaItem } from '../types/comic';
 import { uploadImage, setLayerMedia } from './panelActions';
+import GenerateImageModal from './GenerateImageModal';
+import { TrashIcon } from './Icons';
+import LayerHistoryStrip from './LayerHistoryStrip';
 import MediaPicker from './MediaPicker';
 import MediaSlot from './MediaSlot';
 import { useProject } from './ProjectContext';
 import SliderRow from './SliderRow';
+import Spinner from './Spinner';
+import { useGeneratorConfig } from './useGeneratorConfig';
+import { useIsGenerating } from './useIsGenerating';
 import { useTask } from './useTask';
 
 interface Props {
@@ -20,7 +26,10 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
   const task = useTask();
   const update = (patch: LayerUpdate) => cb().layers.update(panelId, layer.id, patch);
   const [picking, setPicking] = useState(false);
+  const [generatingModal, setGeneratingModal] = useState(false);
   const background = layer.kind === 'background';
+  const generatorConfigured = Boolean(useGeneratorConfig());
+  const generating = useIsGenerating(panelId, layer.id);
   const { characters, objects, scenes } = useProject().metadata;
   const known = [...characters, ...objects].some((entry) => entry.id === layer.subjectId);
   const sceneKnown = scenes.some((scene) => scene.id === layer.sceneId);
@@ -44,11 +53,6 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         autoFocus={!layer.prompt && !layer.mediaId}
         onChange={(e) => update({ prompt: e.target.value })}
       />
-      {layer.dirty && (
-        <div className="text-warning small mb-2">
-          Prompt changed since the image was made — regenerate it to match.
-        </div>
-      )}
       {background ? (
         <select
           className="form-select form-select-sm mb-2"
@@ -99,14 +103,65 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           )}
         </select>
       )}
-      <div className="mb-2">
+      <div className="mb-2 d-flex align-items-start gap-2">
         <MediaSlot
           item={media.find((m) => m.id === layer.mediaId)}
           label={`${layer.mediaId ? 'Change' : 'Add'} ${background ? 'background' : 'layer'} image`}
           busy={task.busy}
           onClick={() => setPicking(true)}
         />
+        {/* A disabled <button> doesn't show its own title tooltip in most browsers, so the
+         * disabled-reason title goes on this wrapping span instead. */}
+        <span
+          title={
+            generating
+              ? 'A generation for this layer is already running'
+              : !layer.prompt?.trim()
+                ? 'Write a prompt first'
+                : !generatorConfigured
+                  ? 'Set up an image generator first (menu → Generator settings)'
+                  : 'Generate a new image from this prompt'
+          }
+        >
+          <button
+            type="button"
+            className="btn btn-outline-secondary btn-sm"
+            disabled={generating || !layer.prompt?.trim() || !generatorConfigured}
+            onClick={() => setGeneratingModal(true)}
+          >
+            {generating && <Spinner />}✨ {generating ? 'Generating' : 'Generate'}
+          </button>
+        </span>
+        {layer.mediaId && (
+          <button
+            type="button"
+            className="btn btn-outline-secondary btn-sm"
+            disabled={task.busy}
+            title="Delete this image (it stops being this layer's image)"
+            aria-label="Delete this layer's image"
+            onClick={() => void task.run(async () => void (await cb().media.delete(layer.mediaId!)))}
+          >
+            <TrashIcon />
+          </button>
+        )}
       </div>
+      <LayerHistoryStrip
+        historyIds={layer.mediaHistory ?? []}
+        media={media}
+        onRestore={(id) => update({ mediaId: id })}
+        onDelete={(id) => void task.run(async () => void (await cb().media.delete(id)))}
+      />
+      {generatingModal && (
+        <GenerateImageModal
+          title={`Generate ${background ? 'background' : 'layer'} image`}
+          getDefaultPrompt={() => cb().generate.layerPrompt(panelId, layer.id)}
+          getDefaultReferences={() => cb().generate.layerReferences(panelId, layer.id)}
+          media={media}
+          onGenerate={(prompt, references) => cb().generate.layer(panelId, layer.id, prompt, references)}
+          onUse={(result) => update({ mediaId: result.id, aspectRatio: result.aspectRatio })}
+          onClose={() => setGeneratingModal(false)}
+        />
+      )}
       {picking && (
         <MediaPicker
           title={background ? 'Choose a background image' : 'Choose a layer image'}

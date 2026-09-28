@@ -281,8 +281,8 @@ function valueConflict(
     steps.length === 0 && key === 'title'
       ? 'Project title'
       : inMetadata
-        ? key === 'outline'
-          ? 'Outline'
+        ? key === 'style'
+          ? 'Style'
           : key === 'pageSize'
             ? 'Page size'
             : key

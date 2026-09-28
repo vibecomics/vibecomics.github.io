@@ -43,6 +43,9 @@ const WITHOUT_PROJECT = new Set([
   'storage.showProjects',
   'storage.createProject',
   'storage.openProject',
+  'generate.getConfig',
+  'generate.setConfig',
+  'generate.testConnection',
 ]);
 
 const LOGIN_HINT = 'Run "vibecomics auth login" and have the user approve it.';

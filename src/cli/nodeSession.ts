@@ -367,6 +367,10 @@ export function createNodeSession(options: NodeSessionOptions) {
 
     listStorageProjects: () => drive.listProjectFolders(),
 
+    getGeneratorConfig: () => state.generator ?? null,
+    setGeneratorConfig: (config) => setState((s) => ({ ...s, generator: config ?? undefined })),
+    generatorFetch: fetchImpl,
+
     createStorageProject: async (name, pageSize) => {
       const created = await createOrOpenProject(drive, name, pageSize);
       showProject(created.project, created.folder, created.version);

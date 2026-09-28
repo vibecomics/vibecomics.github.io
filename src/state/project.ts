@@ -20,6 +20,15 @@ export function createBlankProject(
 
 /** Fill in fields added after a project.json was written, so old projects stay loadable. */
 export function normalizeProject(p: ComicProject): void {
+  // style replaced outline (a synopsis stitched into every image's prompt was drowning it out): an
+  // old project.json only has outline, so carry it over rather than lose it or fail to load. It's
+  // likely far more than a STYLE paragraph should be; trim it down with metadata.setStyle.
+  const legacy = p.metadata as unknown as { outline?: string };
+  if (p.metadata.style === undefined && typeof legacy.outline === 'string') {
+    p.metadata.style = legacy.outline;
+  }
+  p.metadata.style ??= '';
+  delete legacy.outline;
   p.metadata.pageSize ??= { ...DEFAULT_PAGE_SIZE };
   for (const page of p.pages) {
     normalizePagePanels(page.panels);
@@ -44,7 +53,10 @@ export function assertValidProject(p: unknown): asserts p is ComicProject {
 
 function checkMetadata(value: unknown, path: string): void {
   const m = expectRecord(value, path);
-  expectStrings(m, path, ['outline']);
+  // style replaced outline; normalizeProject migrates an old project.json that still has outline.
+  if (m.style === undefined && m.outline === undefined) fail(path, 'expected string "style"');
+  optionalString(m, path, 'style');
+  optionalString(m, path, 'outline');
   if (m.pageSize !== undefined) checkPageSize(m.pageSize, `${path}.pageSize`);
   const characters = expectArray(m.characters, path, 'characters');
   const scenes = expectArray(m.scenes, path, 'scenes');
@@ -141,6 +153,11 @@ function checkLayer(value: unknown, path: string): void {
     fail(path, '"dirty" must be a boolean');
   }
   optionalString(layer, path, 'mediaId');
+  if (layer.mediaHistory !== undefined) {
+    expectArray(layer.mediaHistory, path, 'mediaHistory').forEach((id, i) => {
+      if (typeof id !== 'string') fail(`${path}.mediaHistory[${i}]`, 'expected string id');
+    });
+  }
   optionalString(layer, path, 'subjectId');
   optionalString(layer, path, 'sceneId');
   optionalString(layer, path, 'prompt');

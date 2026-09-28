@@ -28,6 +28,10 @@ export function removeMedia(project: ComicProject, id: string): MediaRemoval {
   for (const page of project.pages) {
     for (const panel of page.panels) {
       for (const layer of panel.layers) {
+        if (layer.mediaHistory?.includes(id)) {
+          layer.mediaHistory = layer.mediaHistory.filter((h) => h !== id);
+          if (layer.mediaHistory.length === 0) delete layer.mediaHistory;
+        }
         if (layer.mediaId !== id) continue;
         delete layer.mediaId;
         removal.layers++;

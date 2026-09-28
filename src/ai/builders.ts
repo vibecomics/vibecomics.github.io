@@ -253,6 +253,57 @@ export function artSize(widthIn: number, heightIn: number) {
   };
 }
 
+/** The size a layer's art should be generated at (see layers.size). */
+export function layerArtSize(project: ComicProject, panelId: string, layerId: string) {
+  const panel = findPanel(project, panelId);
+  const layer = panel?.layers.find((l) => l.id === layerId);
+  if (!panel || !layer) return null;
+  const { widthIn, heightIn } = project.metadata.pageSize;
+  const panelWidth = (widthIn * panel.width) / 100;
+  if (layer.kind === 'background') return artSize(panelWidth, (heightIn * panel.height) / 100);
+  const width = (panelWidth * layer.width) / 100;
+  return artSize(width, width / (layer.aspectRatio ?? 1));
+}
+
+export const MEDIA_HISTORY_LIMIT = 20;
+
+/**
+ * What changes on a layer when its image is swapped: the old mediaId (if any, and different) moves
+ * to the front of mediaHistory (removed from there first, so restoring an old one never duplicates
+ * it), and the image is no longer dirty.
+ */
+export function imageSwapPatch(
+  current: Layer,
+  mediaId: string
+): Pick<Layer, 'mediaId' | 'mediaHistory' | 'dirty'> {
+  const history = (current.mediaHistory ?? []).filter((id) => id !== mediaId);
+  if (current.mediaId && current.mediaId !== mediaId) history.unshift(current.mediaId);
+  return {
+    mediaId,
+    ...(history.length > 0 && { mediaHistory: history.slice(0, MEDIA_HISTORY_LIMIT) }),
+    dirty: false,
+  };
+}
+
+export interface LayerRef {
+  pageId: string;
+  panelId: string;
+  layerId: string;
+}
+
+/** Every layer (or background) across the whole project whose image no longer matches its prompt. */
+export function dirtyLayerRefs(project: ComicProject): LayerRef[] {
+  const refs: LayerRef[] = [];
+  for (const page of project.pages) {
+    for (const panel of page.panels) {
+      for (const layer of panel.layers) {
+        if (layer.dirty) refs.push({ pageId: page.id, panelId: panel.id, layerId: layer.id });
+      }
+    }
+  }
+  return refs;
+}
+
 /** Panel layout operations. The panels of a page always tile it (see state/layout.ts). */
 export function panelsApi(deps: ComicBuilderDeps) {
   const pageAt = (project: ComicProject, pageIndex = deps.getPageIndex()): ComicPage => {

@@ -3,9 +3,9 @@ import { cb } from '../ai/actions';
 import type { ComicProject } from '../types/comic';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_PRESETS } from '../types/comic';
 
-/** Project title, page size and story outline. */
+/** Project title, page size and the STYLE paragraph stitched into every image's prompt. */
 export default function OutlineTab({ project }: { project: ComicProject }) {
-  const [outline, setOutline] = useState(project.metadata.outline);
+  const [style, setStyle] = useState(project.metadata.style);
   const [note, setNote] = useState('');
   const pageSize = project.metadata.pageSize ?? DEFAULT_PAGE_SIZE;
   const presetIndex = PAGE_SIZE_PRESETS.findIndex(
@@ -14,7 +14,7 @@ export default function OutlineTab({ project }: { project: ComicProject }) {
 
   return (
     <div className="container py-4" style={{ maxWidth: 800 }}>
-      <h2 className="h5 mb-1">Outline</h2>
+      <h2 className="h5 mb-1">Style</h2>
       <p className="text-muted small mb-4">{project.title}</p>
 
       <div className="mb-4">
@@ -51,26 +51,31 @@ export default function OutlineTab({ project }: { project: ComicProject }) {
 
       <div className="mb-2 d-flex justify-content-between align-items-center">
         <label className="form-label fw-semibold mb-0" htmlFor="outline-text">
-          Story outline
+          STYLE paragraph
         </label>
         {note && <span className="text-success small">{note}</span>}
       </div>
       <textarea
         id="outline-text"
         className="form-control"
-        rows={12}
-        value={outline}
-        onChange={(e) => setOutline(e.target.value)}
-        placeholder="Story outline / synopsis…"
+        rows={4}
+        value={style}
+        onChange={(e) => setStyle(e.target.value)}
+        placeholder="A short paragraph fixing the visual style: medium, line, palette, lighting, mood…"
       />
+      <div className="form-text">
+        Stitched, verbatim, into every image's prompt — keep it to a few sentences. There's no
+        synopsis field: track the story itself elsewhere (each page and panel has its own prompt for
+        what happens there).
+      </div>
       <button
         className="btn btn-primary mt-3"
         onClick={() => {
-          cb().metadata.setOutline(outline);
-          setNote('Outline saved.');
+          cb().metadata.setStyle(style);
+          setNote('Style saved.');
         }}
       >
-        Save outline
+        Save style
       </button>
     </div>
   );

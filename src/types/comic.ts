@@ -10,6 +10,12 @@ export interface Layer {
    * layer can start as just a prompt.
    */
   mediaId?: string;
+  /**
+   * Previous mediaIds, most-recent-first: kept so regenerating or picking a new image for this
+   * layer never discards the old one. Pushed automatically whenever mediaId changes to something
+   * different; restoring one (set it back as mediaId) removes it from here again.
+   */
+  mediaHistory?: string[];
   /** Id of the character or object this layer shows; the media picker lists that subject's art first. */
   subjectId?: string;
   /** Id of the scene a background layer is the setting of; the media picker lists that scene's art first. */
@@ -164,7 +170,10 @@ export interface PageSize {
 }
 
 export interface ProjectMetadata {
-  outline: string;
+  /** A short paragraph fixing the visual style (medium, line, palette, lighting, mood): stitched,
+   * verbatim, into every image's prompt. Keep it to a few sentences; there is no synopsis field —
+   * track story notes elsewhere, since stitching a whole synopsis into every prompt drowns it out. */
+  style: string;
   pageSize: PageSize;
   characters: Character[];
   scenes: Scene[];
@@ -196,7 +205,7 @@ export const DEFAULT_PAGE_SIZE: PageSize = PAGE_SIZE_PRESETS[0];
 
 export function blankMetadata(pageSize: PageSize = DEFAULT_PAGE_SIZE): ProjectMetadata {
   return {
-    outline: '',
+    style: '',
     pageSize: { ...pageSize },
     characters: [],
     scenes: [],

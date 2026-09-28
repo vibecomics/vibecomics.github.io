@@ -94,15 +94,22 @@ concrete:
 - **Level of detail:** simple and iconic, or dense and textured.
 
 Keep it to a few sentences and never change it halfway through the book unless
-the story calls for it. Save it in the project's outline so it is always there.
+the story calls for it. Save it as the project's STYLE paragraph
+(`metadata.style`) so it is always there and gets stitched, verbatim, into
+every image's prompt.
+
+There is no separate synopsis or outline field: a page-by-page beat sheet
+would get stitched into every single image's prompt too, drowning out what is
+actually specific to each one. Keep the premise and the page-by-page plan
+somewhere else entirely (your own notes, a doc) and put what belongs to each
+page or panel in that page's or panel's own prompt instead.
 
 ### 2. Build the story bible
 
-The **story bible** is the project's outline plus its characters, scenes and
-objects (props). It is the single source of truth for every image.
+The **story bible** is the project's STYLE paragraph plus its characters,
+scenes and objects (props). It is the single source of truth for every image.
 
-- **Outline:** the STYLE paragraph, then the premise and a page-by-page list of
-  beats (what happens on each page).
+- **Style:** the STYLE paragraph, verbatim, nothing else.
 - **Characters, scenes and objects:** for each one, write a canonical visual
   description: for a character its age, build, face, hair, skin tone, outfit,
   colours and distinguishing marks; for a place its layout, time of day,
@@ -182,20 +189,36 @@ plan, then start generating.
 
 ### 5. Stitch the prompt for each image the same way
 
-The prompt you give the generator for a layer (a background too) is **built
-from the stored parts**, in this order, never written from scratch:
+The prompt you give the generator is **built from the stored parts**, never
+written from scratch — but a background and a foreground layer are stitched
+differently, because a foreground layer must stay an isolated cutout, and most
+generators draw a full scene the moment any place or setting language shows up
+anywhere in the prompt, even alongside "isolated subject" or "transparent
+background," and even labeled "for context only, do not draw it" (tested and
+confirmed: a scene description added this way still gets drawn). So a
+foreground layer's prompt leaves out the page prompt, the panel prompt, _and_
+any scene description entirely, however tempting it is to include them for
+continuity or lighting.
+
+**Background** (in this order):
 
 1. The **STYLE paragraph**, verbatim.
 2. The **page prompt** of the page it is on, verbatim.
 3. The **panel prompt** of the panel it is in, verbatim.
 4. The **scene description** from the bible, verbatim.
-5. Each **character's and object's description**, verbatim, for everything in
-   this image (do not paraphrase; a reworded description is a different
-   character).
-6. The **layer prompt**: what this image shows (pose, action, expression, gaze,
-   framing).
-7. The **technical requirements** for the image kind (next section), including
-   the exact size or aspect ratio the app gives you for that layer.
+5. The **layer prompt**: what this image shows.
+6. The **technical requirements** (next section), including the exact size or
+   aspect ratio the app gives you for that layer.
+
+**Foreground** (in this order):
+
+1. The **STYLE paragraph**, verbatim.
+2. The **character's or object's description**, verbatim (do not paraphrase; a
+   reworded description is a different character).
+3. The **layer prompt**: what this image shows (pose, action, expression, gaze,
+   framing) — say only what the subject is doing, never where it is.
+4. The **technical requirements**, including a plain, single-colour background
+   the generator can actually produce (see below) and the size to generate at.
 
 Read the parts back from the project when you generate (the page, its panels
 with their prompts, the layer, the characters) instead of trusting your memory:

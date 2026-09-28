@@ -14,6 +14,8 @@ import StatusToast from './components/StatusToast';
 import type { Status } from './components/StatusToast';
 import { awaitDeviceAccess, isDriveConfigured, requestDeviceAccess } from './drive/driveClient';
 import type { DeviceCodeInfo, ProjectFolder } from './drive/driveClient';
+import { readGeneratorConfig, writeGeneratorConfig } from './generators/browserConfigStore';
+import { removeWhiteBackground } from './utils/removeWhiteBackground';
 import { connectToServer } from './server/serverClient';
 import {
   backendLabel,
@@ -260,6 +262,10 @@ export default function App() {
       }),
 
       listStorageProjects: listProjectFolders,
+
+      getGeneratorConfig: readGeneratorConfig,
+      setGeneratorConfig: writeGeneratorConfig,
+      removeBackground: removeWhiteBackground,
 
       createStorageProject: async (name, pageSize) => {
         const {
