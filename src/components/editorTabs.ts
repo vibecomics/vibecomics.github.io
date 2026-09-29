@@ -1,11 +1,12 @@
 import type { ComicProject } from '../types/comic';
 
-export type EditorTab = 'outline' | 'cast' | 'scenes' | 'pages';
+export type EditorTab = 'outline' | 'cast' | 'scenes' | 'media' | 'pages';
 
 export const EDITOR_TABS: Array<{ id: EditorTab; label: string }> = [
   { id: 'outline', label: 'Style' },
   { id: 'cast', label: 'Cast & Props' },
   { id: 'scenes', label: 'Scenes' },
+  { id: 'media', label: 'Media' },
   { id: 'pages', label: 'Pages' },
 ];
 

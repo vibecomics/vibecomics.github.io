@@ -19,7 +19,9 @@ export type MediaShapePreference =
   /** A panel background: opaque images, best those with the panel's aspect ratio (width / height). */
   | { kind: 'background'; aspectRatio?: number }
   /** A layer: transparent images (cut-outs) first. */
-  | { kind: 'layer' };
+  | { kind: 'layer' }
+  /** Just browsing every image: no shape grouping, one "Images" group. */
+  | { kind: 'all' };
 
 export type MediaPreference = MediaShapePreference & {
   /** What the layer shows: the subject's art is listed before everything else. */
@@ -102,34 +104,39 @@ export function groupMedia(
     title: `Reference images of ${subject?.name ?? ''}`,
     items: [],
   };
-  const shapeGroups: MediaGroup[] = !infos
-    ? [{ title: subject ? 'Other images' : 'Images', items: [] }]
-    : prefer.kind === 'background'
-      ? [
-          { title: 'Fits this panel', items: [] },
-          { title: 'Other backgrounds', items: [] },
-          { title: 'Other images', items: [] },
-        ]
-      : [
-          { title: 'Transparent images', items: [] },
-          { title: 'Other images', items: [] },
-        ];
+  const shapeGroups: MediaGroup[] =
+    !infos || prefer.kind === 'all'
+      ? [{ title: subject ? 'Other images' : 'Images', items: [] }]
+      : prefer.kind === 'background'
+        ? [
+            { title: 'Fits this panel', items: [] },
+            { title: 'Other backgrounds', items: [] },
+            { title: 'Other images', items: [] },
+          ]
+        : [
+            { title: 'Transparent images', items: [] },
+            { title: 'Other images', items: [] },
+          ];
 
   for (const item of media) {
     if (subject && item[subject.tag] === subject.id) {
       subjectGroups[subject.placedIds.has(item.id) ? 1 : 0].items.push(item);
     } else if (subject?.referenceIds.has(item.id)) {
       referenceGroup.items.push(item);
-    } else if (!infos) {
+    } else if (!infos || prefer.kind === 'all') {
       shapeGroups[0].items.push(item);
     } else {
       const info = infos.get(mediaKey(item));
-      let rank: number;
-      if (prefer.kind === 'background') {
-        rank = !info || info.transparent ? 2 : fits(info, prefer.aspectRatio) ? 0 : 1;
-      } else {
-        rank = info?.transparent ? 0 : 1;
-      }
+      const rank =
+        prefer.kind === 'background'
+          ? !info || info.transparent
+            ? 2
+            : fits(info, prefer.aspectRatio)
+              ? 0
+              : 1
+          : info?.transparent
+            ? 0
+            : 1;
       shapeGroups[rank].items.push(item);
     }
   }

@@ -5,6 +5,7 @@ import ConflictDot from './ConflictDot';
 import EditorNavbar from './EditorNavbar';
 import { EDITOR_TABS } from './editorTabs';
 import type { EditorTab } from './editorTabs';
+import MediaTab from './MediaTab';
 import OutlineTab from './OutlineTab';
 import PagesTab from './PagesTab';
 import { ProjectContext } from './ProjectContext';
@@ -83,6 +84,7 @@ export default function EditorScreen({
               </>
             )}
             {tab === 'scenes' && <StoryTab key={project.id} project={project} kind="scenes" />}
+            {tab === 'media' && <MediaTab media={project.metadata.media} />}
           </div>
         )}
 
