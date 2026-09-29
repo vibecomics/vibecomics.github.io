@@ -480,7 +480,15 @@ free before an upload, since a name must be unique within a project
 (`src/components/mediaImages.ts`, `src/ai/storageDeps.ts`). `project.json`
 itself never stores a backend id, so moving a project's files between
 backends needs no rewriting of the file: copy the bytes under matching names
-to the other backend and the same `fileName` values resolve there too. A
+to the other backend and the same `fileName` values resolve there too. Stored names follow one rule
+(`src/utils/fileName.ts`): lowercase letters and digits joined by dashes, then
+an image extension (`ashwini-running.png`, `media-1a2b.thumb.png`). Uploads
+reword their name to fit (`toFileName`), the HTTP server refuses any other
+name, and a name is never reused within a project. Files are never shown by
+name: the UI shows a `MediaItem`'s `name` label, which for an uploaded file
+starts as its file name with dashes as spaces and a capital first letter
+(`displayName`). `scripts/normalize-http-storage.mjs` renames an existing root
+to the rule. A
 layer holds no image reference of its own beyond `mediaId`, pointing at the
 `MediaItem`; `Layer.src` and any backend-specific id on a `MediaItem` are
 gone.

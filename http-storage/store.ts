@@ -10,6 +10,7 @@
  *     <file name>       - one uploaded image per file, named exactly as project.json refers to it
  *     .trash/<file name> - files removed from the project, kept for recovery
  *
+ * File names follow one rule (src/utils/fileName.ts): lowercase, dashes, no spaces, an extension.
  * A file is addressed by its project and name; a name is unique within a project, so an upload
  * that would replace a file is refused. A file's MIME type comes from its extension, and versions
  * (project.json's, for optimistic concurrency, and each file's) are the file's modification time.
@@ -21,6 +22,7 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, open, readdir, readFile as fsReadFile, rename, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { isValidFileName } from '../src/utils/fileName.ts';
 
 /** Thrown for a project or file that does not exist. Maps to HTTP 404. */
 export class NotFoundError extends Error {}
@@ -101,14 +103,18 @@ export function sanitizeProjectName(name: unknown): string {
   return checkName('name', name, 200);
 }
 
-/** Validate an uploaded file's name: a plain name, not project.json, and not hidden. */
+/**
+ * Validate an uploaded file's name against the shared storage rule (lowercase words joined by
+ * dashes, then an extension), which also keeps it clear of paths, hidden files and project.json.
+ */
 export function sanitizeFileName(name: unknown): string {
-  const trimmed = checkName('file name', name, MAX_FILE_NAME_LENGTH);
-  if (trimmed.startsWith('.')) throw new BadRequestError('file name must not start with a dot.');
-  if (trimmed.toLowerCase() === PROJECT_FILE) {
-    throw new BadRequestError(`"${PROJECT_FILE}" is reserved for the project itself.`);
+  if (typeof name !== 'string') throw new BadRequestError('file name must be a string.');
+  if (name.length > MAX_FILE_NAME_LENGTH || !isValidFileName(name)) {
+    throw new BadRequestError(
+      `file name "${name}" must be lowercase letters and digits joined by dashes, with an image extension (like my-image.png).`
+    );
   }
-  return trimmed;
+  return name;
 }
 
 async function exists(p: string): Promise<boolean> {
@@ -173,7 +179,11 @@ export function createStore(root: string) {
   /** The path of an existing image in a project, or NotFoundError. */
   async function requireFile(rawProject: unknown, rawFile: unknown) {
     const project = sanitizeProjectName(rawProject);
-    const fileName = sanitizeFileName(rawFile);
+    // A name that breaks the naming rule cannot be stored, so it is simply not there.
+    if (typeof rawFile !== 'string' || !isValidFileName(rawFile)) {
+      throw new NotFoundError(`No file "${String(rawFile)}" in "${project}".`);
+    }
+    const fileName = rawFile;
     const filePath = path.join(projectDir(project), fileName);
     const version = await versionOf(filePath);
     if (version === null) throw new NotFoundError(`No file "${fileName}" in "${project}".`);
@@ -247,13 +257,13 @@ export function createStore(root: string) {
       return (await versionOf(projectJsonPath(name))) ?? '';
     },
 
-    /** List the image files of a project (not project.json, hidden files or the trash). */
+    /** List the image files of a project: those with a valid file name (not project.json, hidden files or the trash). */
     async listFiles(rawName: unknown): Promise<FileMeta[]> {
       const name = sanitizeProjectName(rawName);
       await requireProject(name);
       const entries = await readdir(projectDir(name), { withFileTypes: true });
       const files = entries
-        .filter((e) => e.isFile() && !e.name.startsWith('.') && e.name !== PROJECT_FILE)
+        .filter((e) => e.isFile() && isValidFileName(e.name))
         .map((e) => e.name)
         .sort((a, b) => a.localeCompare(b));
       return Promise.all(files.map((file) => this.statFile(name, file)));

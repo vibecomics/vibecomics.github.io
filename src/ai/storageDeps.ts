@@ -12,6 +12,7 @@ import type { MediaRemoval } from '../state/media';
 import { assertValidProject, createBlankProject, normalizeProject } from '../state/project';
 import type { ComicProject, MediaItem, PageSize } from '../types/comic';
 import { DEFAULT_PAGE_SIZE } from '../types/comic';
+import { toFileName } from '../utils/fileName';
 import { dataUrlToFile, readFileAsDataUrl } from '../utils/files';
 import { newId } from '../utils/id';
 import { extensionForMimeType } from '../utils/thumbnail';
@@ -33,13 +34,17 @@ export interface MediaHost {
   makeThumbnail?(image: File, name: string): Promise<File | null>;
 }
 
-/** Upload `file` under `name`, refusing to reuse a name the project folder already has. */
+/**
+ * Upload `file` under `rawName` reworded to the storage naming rule (lowercase, dashes), refusing
+ * to reuse a name the project folder already has. The stored name is on the result.
+ */
 async function uploadNewFile(
   host: MediaHost,
   folderId: string,
   file: File,
-  name: string
+  rawName: string
 ): Promise<DriveFileMeta> {
+  const name = toFileName(rawName, extensionForMimeType(file.type));
   if (await host.drive.findFileByName(folderId, name)) {
     throw new Error(`This project already has a file named "${name}". Rename one of them.`);
   }

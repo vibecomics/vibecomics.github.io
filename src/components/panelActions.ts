@@ -1,5 +1,6 @@
 import { cb } from '../ai/actions';
 import type { LayerKind, MediaItem } from '../types/comic';
+import { displayName } from '../utils/fileName';
 import { readFileAsDataUrl } from '../utils/files';
 import { loadBlobUrl } from './mediaImages';
 
@@ -16,7 +17,7 @@ export async function uploadImage(
   file: File,
   links: { subjectId?: string; sceneId?: string } = {}
 ): Promise<MediaItem> {
-  return cb().media.upload(file.name, await readFileAsDataUrl(file), {
+  return cb().media.upload(displayName(file.name), await readFileAsDataUrl(file), {
     mimeType: file.type,
     ...links,
   });
