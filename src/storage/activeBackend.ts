@@ -11,7 +11,7 @@
  */
 import { driveBackend } from '../drive/driveClient';
 import { serverBackend } from '../server/serverClient';
-import type { DriveFileMeta, ProjectFile, ProjectFolder } from '../drive/driveRest';
+import type { ProjectFile, ProjectFolder, StoredFile } from './types';
 import type { StorageBackendImpl } from './backend';
 
 export type StorageBackend = 'drive' | 'server';
@@ -59,10 +59,10 @@ export async function disconnectActiveBackend(): Promise<void> {
 
 export const listProjectFolders = (): Promise<ProjectFolder[]> => current().listProjectFolders();
 
-export const ensureProjectFolder = (name: string): Promise<DriveFileMeta> =>
+export const ensureProjectFolder = (name: string): Promise<ProjectFolder> =>
   current().ensureProjectFolder(name);
 
-export const uploadImage = (folderId: string, file: File, name?: string): Promise<DriveFileMeta> =>
+export const uploadImage = (folderId: string, file: File, name?: string): Promise<StoredFile> =>
   current().uploadImage(folderId, file, name);
 
 export const trashFile = (folderId: string, fileName: string): Promise<void> =>
@@ -71,10 +71,8 @@ export const trashFile = (folderId: string, fileName: string): Promise<void> =>
 export const downloadFile = (folderId: string, fileName: string): Promise<Blob> =>
   current().downloadFile(folderId, fileName);
 
-export const findFileByName = (
-  folderId: string,
-  name: string
-): Promise<DriveFileMeta | undefined> => current().findFileByName(folderId, name);
+export const findFileByName = (folderId: string, name: string): Promise<StoredFile | undefined> =>
+  current().findFileByName(folderId, name);
 
 export const saveProjectJson = (
   folderId: string,

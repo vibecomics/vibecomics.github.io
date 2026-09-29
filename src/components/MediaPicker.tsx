@@ -192,7 +192,7 @@ export default function MediaPicker({
   }
 
   async function remove(item: MediaItem) {
-    const message = `Delete "${item.name}"? It moves to the Drive trash and is removed from every layer and reference that uses it.`;
+    const message = `Delete "${item.name}"? It moves to the storage trash and is removed from every layer and reference that uses it.`;
     if (!window.confirm(message)) return;
     setError(null);
     setDeletingId(item.id);

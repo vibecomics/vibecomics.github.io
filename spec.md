@@ -408,7 +408,7 @@ they cannot drift from the code.
   containing `project.json` and uploaded artwork. Artwork is uploaded via
   `uploadImage()` and registered as `MediaItem`s, each named by its stable
   `fileName` (see §6's "Addressing images by name"); a layer holds only the
-  `mediaId` pointing at one. Because Drive needs the access token, `useDriveImage`
+  `mediaId` pointing at one. Because Drive needs the access token, `useMediaImage`
   fetches the bytes once (`loadBlobUrl`) and shows them from a blob URL.
   Character reference images are uploaded from the Cast & Props and Scenes
   tabs via `media.upload` and shown as blob-URL thumbnails (the media
@@ -647,13 +647,13 @@ it's drawn comic content, it's custom CSS.
   `bubbleShape.ts`) and the inspector (`InspectorPane`, `BottomSheet`, `PanelInspector`, `BubblesSection`,
   `LayersSection`, `BackgroundSection`, `LayerRow`, `LayerDetails`,
   `MediaPicker`, `MediaSlot`, `RowButtons`). Small hooks and helpers live beside them
-  (`useTask`, `useExpansion`, `useDriveImage`, `panelActions`, `selection`).
+  (`useTask`, `useExpansion`, `useMediaImage`, `panelActions`, `selection`).
 - `src/ai/` — `actions.ts` (the documented `window.ComicBuilder` literal:
   the JSDoc there is the source of the LLM docs), `builders.ts` (the shared
   list/get/add/update/delete builders and validation it is assembled from),
   `deps.ts` (`ComicBuilderDeps` and the input/patch types), `storageDeps.ts`
   (the storage-backed deps the page and the CLI share: media upload, download
-  and delete, create or open a project — generic over `MediaHost.drive` /
+  and delete, create or open a project — generic over `MediaHost.storage` /
   `.fileUrl`), `docs.ts`, generated `actions.docs.gen.ts`. `createComicBuilder(deps)`
   uses no browser APIs, so it runs in Node too.
 - `src/drive/` — `driveRest.ts` (Drive REST, token and `fetch` injected),
@@ -662,7 +662,7 @@ it's drawn comic content, it's custom CSS.
 - `src/server/` — the storage-server counterpart (§6a): `serverRest.ts`
   (REST calls, base URL and `fetch` injected) and `serverClient.ts` (the
   page's base URL, remembered in `localStorage`, bound to it).
-- `src/storage/` — `backend.ts` (the `StorageBackendImpl` interface),
+- `src/storage/` — `types.ts` (the shapes and errors every backend shares), `backend.ts` (the `StorageBackendImpl` interface),
   `activeBackend.ts` (the registry that dispatches to whichever backend is
   active; see §6a) and `projectStore.ts` (load, validate and normalize a
   project, through whichever is active).

@@ -5,11 +5,12 @@
  * deps from these, so the two behave the same. No browser APIs: the storage
  * calls and the optional thumbnail maker are injected.
  */
-import type { DriveFileMeta, DriveRest, ProjectFolder } from '../drive/driveRest';
-import { ProjectFileMissingError } from '../drive/driveRest';
 import { removeMedia } from '../state/media';
 import type { MediaRemoval } from '../state/media';
 import { assertValidProject, createBlankProject, normalizeProject } from '../state/project';
+import type { StorageBackendImpl } from '../storage/backend';
+import { ProjectFileMissingError } from '../storage/types';
+import type { ProjectFolder, StoredFile } from '../storage/types';
 import type { ComicProject, MediaItem, PageSize } from '../types/comic';
 import { DEFAULT_PAGE_SIZE } from '../types/comic';
 import { numberedFileName, thumbnailFileNameOf, toFileName } from '../utils/fileName';
@@ -29,7 +30,10 @@ export interface MediaHost {
   getProject(): ComicProject | null;
   getFolderId(): string | null;
   updateProject(mut: (p: ComicProject) => void): void;
-  drive: Pick<DriveRest, 'uploadImage' | 'trashFile' | 'downloadFile' | 'findFileByName'>;
+  storage: Pick<
+    StorageBackendImpl,
+    'uploadImage' | 'trashFile' | 'downloadFile' | 'findFileByName'
+  >;
   /** Makes a thumbnail when the caller gave none; null when it cannot (e.g. no canvas in Node). */
   makeThumbnail?(image: File, name: string): Promise<File | null>;
 }
@@ -43,12 +47,12 @@ async function uploadNewFile(
   folderId: string,
   file: File,
   rawName: string
-): Promise<DriveFileMeta> {
+): Promise<StoredFile> {
   const name = toFileName(rawName, extensionForMimeType(file.type));
-  if (await host.drive.findFileByName(folderId, name)) {
+  if (await host.storage.findFileByName(folderId, name)) {
     throw new Error(`This project already has a file named "${name}". Rename one of them.`);
   }
-  return host.drive.uploadImage(folderId, file, name);
+  return host.storage.uploadImage(folderId, file, name);
 }
 
 /** The stored name for `label`, or that with -2, -3... when the project folder already has it. */
@@ -61,7 +65,7 @@ async function freeFileName(
   const base = toFileName(label, extension);
   for (let n = 1; ; n++) {
     const candidate = n === 1 ? base : numberedFileName(base, n);
-    if (!(await host.drive.findFileByName(folderId, candidate))) return candidate;
+    if (!(await host.storage.findFileByName(folderId, candidate))) return candidate;
   }
 }
 
@@ -71,7 +75,7 @@ async function storeThumbnail(
   folderId: string,
   thumbnailFileName: string,
   thumbnail: File
-): Promise<DriveFileMeta> {
+): Promise<StoredFile> {
   return uploadNewFile(host, folderId, thumbnail, thumbnailFileName);
 }
 
@@ -96,7 +100,7 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
     downloadStorageMedia: async (id) => {
       const item = findItem(id);
       const dataUrl = await readFileAsDataUrl(
-        await host.drive.downloadFile(requireFolder(), item.fileName)
+        await host.storage.downloadFile(requireFolder(), item.fileName)
       );
       return { name: item.name, mimeType: item.mimeType, dataUrl };
     },
@@ -109,7 +113,7 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
       const given = thumbnailDataUrl
         ? dataUrlToFile(thumbnailDataUrl, name, 'image/png')
         : undefined;
-      const uploaded = await host.drive.uploadImage(folderId, file, fileName);
+      const uploaded = await host.storage.uploadImage(folderId, file, fileName);
       const item: MediaItem = {
         id,
         name,
@@ -147,14 +151,14 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
       );
       const previous = item.thumbnailFileName;
       // The new thumbnail may take the old one's name, so that name must be free first.
-      if (previous === thumbnailFileName) await host.drive.trashFile(folderId, previous);
+      if (previous === thumbnailFileName) await host.storage.trashFile(folderId, previous);
       await storeThumbnail(host, folderId, thumbnailFileName, thumbnail);
       host.updateProject((p) => {
         const target = p.metadata.media.find((m) => m.id === id);
         if (target) target.thumbnailFileName = thumbnailFileName;
       });
       if (previous && previous !== thumbnailFileName) {
-        await host.drive.trashFile(folderId, previous).catch(() => undefined);
+        await host.storage.trashFile(folderId, previous).catch(() => undefined);
       }
       return structuredClone(findItem(id));
     },
@@ -163,9 +167,9 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
       const item = findItem(id);
       const folderId = requireFolder();
       // Trash first: if storage refuses, the project is left as it was.
-      await host.drive.trashFile(folderId, item.fileName);
+      await host.storage.trashFile(folderId, item.fileName);
       if (item.thumbnailFileName) {
-        await host.drive.trashFile(folderId, item.thumbnailFileName).catch(() => undefined);
+        await host.storage.trashFile(folderId, item.thumbnailFileName).catch(() => undefined);
       }
       let removal: MediaRemoval = { layers: 0, entries: 0 };
       host.updateProject((p) => {
@@ -182,7 +186,7 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
  * project.json gets a fresh one, and no other error ever overwrites anything.
  */
 export async function createOrOpenProject(
-  drive: Pick<DriveRest, 'ensureProjectFolder' | 'loadProjectFile' | 'saveProjectJson'>,
+  storage: Pick<StorageBackendImpl, 'ensureProjectFolder' | 'loadProjectFile' | 'saveProjectJson'>,
   name: string,
   pageSize?: PageSize
 ): Promise<{
@@ -195,17 +199,17 @@ export async function createOrOpenProject(
 }> {
   const title = name.trim();
   if (!title) throw new Error('Project name is required.');
-  const folder = await drive.ensureProjectFolder(title);
+  const folder = await storage.ensureProjectFolder(title);
 
   let existing: { project: ComicProject; version: string | null } | null = null;
   try {
-    const file = await drive.loadProjectFile(folder.id);
+    const file = await storage.loadProjectFile(folder.id);
     existing = { project: parseProject(file.json), version: file.version };
   } catch (e) {
     if (!(e instanceof ProjectFileMissingError)) throw e;
   }
   const project = existing?.project ?? createBlankProject(title, pageSize ?? DEFAULT_PAGE_SIZE);
-  const version = existing ? existing.version : await drive.saveProjectJson(folder.id, project);
+  const version = existing ? existing.version : await storage.saveProjectJson(folder.id, project);
   return {
     folder: { id: folder.id, name: folder.name },
     project,

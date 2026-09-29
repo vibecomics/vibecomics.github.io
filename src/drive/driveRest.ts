@@ -5,39 +5,17 @@
  * only files and folders this app created are visible.
  */
 
+import { ProjectChangedError, ProjectFileMissingError } from '../storage/types';
+import type { ProjectFile, ProjectFolder, StoredFile } from '../storage/types';
+
 const DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 const FOLDER_MIME_TYPE = 'application/vnd.google-apps.folder';
 const PROJECT_FILE_NAME = 'project.json';
 
-/** Thrown when a Drive folder has no project.json yet. */
-export class ProjectFileMissingError extends Error {}
-
-export interface ProjectFolder {
+/** A file or folder as Drive lists it: the id is Drive's own, used only inside this module. */
+interface DriveFile extends StoredFile {
   id: string;
-  name: string;
-}
-
-export interface DriveFileMeta extends ProjectFolder {
-  mimeType: string;
-  /** Drive's counter for the file: it goes up on every change, so it tells whether a file changed. */
-  version?: string;
-}
-
-/**
- * Thrown when project.json on Drive is no longer the version that was loaded, i.e. somebody else
- * (another browser, the CLI) saved since. Nothing was written.
- */
-export class ProjectChangedError extends Error {
-  constructor(readonly currentVersion: string | null) {
-    super('The project was changed on Google Drive since it was loaded.');
-  }
-}
-
-/** A project.json as read from Drive, with the Drive version it had. */
-export interface ProjectFile {
-  json: unknown;
-  version: string | null;
 }
 
 export interface DriveRestOptions {
@@ -73,7 +51,7 @@ export function createDriveRest({ getToken, fetch: fetchImpl = fetch }: DriveRes
     metadata: object,
     content: Blob | string,
     contentType: string
-  ): Promise<DriveFileMeta> {
+  ): Promise<DriveFile> {
     const boundary = `cb-${Date.now()}`;
     const body = new Blob(
       [
@@ -89,7 +67,7 @@ export function createDriveRest({ getToken, fetch: fetchImpl = fetch }: DriveRes
       `${DRIVE_UPLOAD_API}/files?uploadType=multipart&fields=id,name,mimeType,version`,
       { method: 'POST', body }
     );
-    return (await res.json()) as DriveFileMeta;
+    return (await res.json()) as DriveFile;
   }
 
   async function findProjectFile(
@@ -104,12 +82,9 @@ export function createDriveRest({ getToken, fetch: fetchImpl = fetch }: DriveRes
   }
 
   /** The file named `name` directly inside `folderId`, or undefined when there is none. */
-  async function findFileByName(
-    folderId: string,
-    name: string
-  ): Promise<DriveFileMeta | undefined> {
+  async function findFileByName(folderId: string, name: string): Promise<DriveFile | undefined> {
     const escaped = name.replace(/'/g, "\\'");
-    const [found] = await queryFiles<DriveFileMeta>(
+    const [found] = await queryFiles<DriveFile>(
       `'${folderId}' in parents and name='${escaped}' and trashed=false`,
       'id,name,mimeType',
       '&pageSize=1'
@@ -128,9 +103,9 @@ export function createDriveRest({ getToken, fetch: fetchImpl = fetch }: DriveRes
     },
 
     /** Find (or create) the folder that holds a comic's files. */
-    async ensureProjectFolder(name: string): Promise<DriveFileMeta> {
+    async ensureProjectFolder(name: string): Promise<ProjectFolder> {
       const escaped = name.replace(/'/g, "\\'");
-      const [existing] = await queryFiles<DriveFileMeta>(
+      const [existing] = await queryFiles<DriveFile>(
         `mimeType='${FOLDER_MIME_TYPE}' and name='${escaped}' and trashed=false`,
         'id,name,mimeType',
         '&pageSize=1'
@@ -142,10 +117,10 @@ export function createDriveRest({ getToken, fetch: fetchImpl = fetch }: DriveRes
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, mimeType: FOLDER_MIME_TYPE }),
       });
-      return (await res.json()) as DriveFileMeta;
+      return (await res.json()) as DriveFile;
     },
 
-    uploadImage(folderId: string, file: File, name?: string): Promise<DriveFileMeta> {
+    uploadImage(folderId: string, file: File, name?: string): Promise<StoredFile> {
       return createFile(
         { name: name || file.name, parents: [folderId] },
         file,

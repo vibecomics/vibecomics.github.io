@@ -20,10 +20,7 @@ import { pollDeviceOnce, revokeToken, startDeviceFlow } from './deviceOAuth';
 import type { DeviceCodeInfo } from './deviceOAuth';
 import { createDriveRest } from './driveRest';
 
-// driveRest.ts's own exports (ProjectChangedError, ProjectFileMissingError, ProjectFolder) are
-// generic enough that callers import them straight from there; this module re-exports only what is
-// Drive-specific.
-export type { ProjectFolder } from './driveRest';
+// This module re-exports only what is Drive-specific; the shared storage types live in storage/types.
 export type { DeviceCodeInfo } from './deviceOAuth';
 
 const TOKEN_EXPIRY_MARGIN_MS = 60_000;

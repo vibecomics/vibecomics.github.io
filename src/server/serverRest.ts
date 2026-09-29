@@ -4,8 +4,8 @@
  * concurrency versioning, media files inside it) so it slots into the same ComicBuilder deps. No
  * browser APIs: the base URL and `fetch` are injected.
  */
-import { ProjectChangedError, ProjectFileMissingError } from '../drive/driveRest';
-import type { DriveFileMeta, ProjectFile, ProjectFolder } from '../drive/driveRest';
+import { ProjectChangedError, ProjectFileMissingError } from '../storage/types';
+import type { ProjectFile, ProjectFolder, StoredFile } from '../storage/types';
 
 export interface ServerRestOptions {
   /** The server's base URL (no trailing slash), or null when not connected. */
@@ -50,31 +50,29 @@ export function createServerRest({ getBaseUrl, fetch: fetchImpl = fetch }: Serve
     },
 
     /** Find (or create) the project folder that holds a comic's files. */
-    async ensureProjectFolder(name: string): Promise<DriveFileMeta> {
+    async ensureProjectFolder(name: string): Promise<ProjectFolder> {
       const res = await serverRequest('/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name }),
       });
-      const folder = (await res.json()) as ProjectFolder;
-      return { ...folder, mimeType: 'application/vnd.vibecomics.folder' };
+      return (await res.json()) as ProjectFolder;
     },
 
-    async uploadImage(folderId: string, file: File, name?: string): Promise<DriveFileMeta> {
+    async uploadImage(folderId: string, file: File, name?: string): Promise<StoredFile> {
       const res = await serverRequest(`/projects/${encodeURIComponent(folderId)}/files`, {
         method: 'POST',
         headers: { 'X-File-Name': encodeURIComponent(name || file.name) },
         body: file,
       });
-      return (await res.json()) as DriveFileMeta;
+      return (await res.json()) as StoredFile;
     },
 
     /** The file named `name` in the project folder, or undefined when there is none. */
-    async findFileByName(folderId: string, name: string): Promise<DriveFileMeta | undefined> {
+    async findFileByName(folderId: string, name: string): Promise<StoredFile | undefined> {
       try {
         const res = await serverRequest(filePath(folderId, name), { method: 'HEAD' });
         return {
-          id: name,
           name,
           mimeType: res.headers.get('Content-Type') ?? 'application/octet-stream',
           version: res.headers.get('ETag') ?? undefined,

@@ -20,7 +20,7 @@ interface Props {
   dirty: boolean;
   /** Tabs that hold a conflict with changes made elsewhere. */
   conflictTabs: Set<EditorTab>;
-  /** Reload the project from Drive. */
+  /** Reload the project from storage. */
   onRefresh: () => Promise<void>;
 }
 
@@ -37,7 +37,7 @@ export default function EditorNavbar({
 }: Props) {
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null);
   const dirtyCount = dirtyLayerRefs(useProject()).length;
-  // Opening the project list and closing a project (which saves first) go to Drive.
+  // Opening the project list and closing a project (which saves first) go to storage.
   const menuTask = useBusy();
   const menuProps = (menu: Exclude<OpenMenu, null>) => ({
     open: openMenu === menu,

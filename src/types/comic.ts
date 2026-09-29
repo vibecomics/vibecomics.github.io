@@ -116,7 +116,7 @@ export interface MediaItem {
   name: string;
   /**
    * The stable, backend-portable name this image is stored under in the project's storage folder
-   * (e.g. Drive's file name, or the storage server's file name), assigned once at upload and never
+   * (a file name like `ash-sword-reference.png`, unique in the folder), assigned once at upload and never
    * changed. Resolve it to bytes with media.download; it is not a URL.
    */
   fileName: string;
@@ -186,7 +186,7 @@ export interface ComicProject {
   title: string;
   pages: ComicPage[];
   updatedAt: string;
-  /** ISO timestamp of the last successful write to Drive. */
+  /** ISO timestamp of the last successful write to storage. */
   savedAt: string;
   metadata: ProjectMetadata;
 }

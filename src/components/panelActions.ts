@@ -12,7 +12,7 @@ async function imageAspect(item: MediaItem): Promise<number> {
   return Math.round((image.naturalWidth / image.naturalHeight) * 1000) / 1000;
 }
 
-/** Upload an image file to the project's media (on Drive), tagged as art of a subject or scene when given. */
+/** Upload an image file to the project's media, tagged as art of a subject or scene when given. */
 export async function uploadImage(
   file: File,
   links: { subjectId?: string; sceneId?: string } = {}

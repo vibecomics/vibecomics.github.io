@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { cb } from '../ai/actions';
-import type { ProjectFolder } from '../drive/driveClient';
+import type { ProjectFolder } from '../storage/types';
 import { PAGE_SIZE_PRESETS } from '../types/comic';
 import GeneratorSettings from './GeneratorSettings';
 import Spinner from './Spinner';

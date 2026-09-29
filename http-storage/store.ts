@@ -190,6 +190,12 @@ export function createStore(root: string) {
     return { project, fileName, filePath, version };
   }
 
+  /** A file's metadata, or NotFoundError. */
+  async function statFile(rawProject: unknown, rawFile: unknown): Promise<FileMeta> {
+    const { fileName, version } = await requireFile(rawProject, rawFile);
+    return { id: fileName, name: fileName, mimeType: mimeTypeOf(fileName), version };
+  }
+
   return {
     root,
 
@@ -266,14 +272,10 @@ export function createStore(root: string) {
         .filter((e) => e.isFile() && isValidFileName(e.name))
         .map((e) => e.name)
         .sort((a, b) => a.localeCompare(b));
-      return Promise.all(files.map((file) => this.statFile(name, file)));
+      return Promise.all(files.map((file) => statFile(name, file)));
     },
 
-    /** A file's metadata, or NotFoundError. */
-    async statFile(rawProject: unknown, rawFile: unknown): Promise<FileMeta> {
-      const { fileName, version } = await requireFile(rawProject, rawFile);
-      return { id: fileName, name: fileName, mimeType: mimeTypeOf(fileName), version };
-    },
+    statFile,
 
     /** Store an uploaded image under its own name; refused if the project already has that name. */
     async saveFile(
@@ -291,7 +293,7 @@ export function createStore(root: string) {
         throw new FileExistsError(`"${project}" already has a file named "${fileName}".`);
       }
       await writeFileAtomic(filePath, buffer);
-      return this.statFile(project, fileName);
+      return statFile(project, fileName);
     },
 
     /** Read back an uploaded image's bytes and metadata. */

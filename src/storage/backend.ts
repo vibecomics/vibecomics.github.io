@@ -1,4 +1,4 @@
-import type { DriveFileMeta, ProjectFile, ProjectFolder } from '../drive/driveRest';
+import type { ProjectFile, ProjectFolder, StoredFile } from './types';
 
 /**
  * The storage operations any project store must implement: Google Drive, a self-hosted HTTP server
@@ -10,13 +10,13 @@ export interface StorageBackendImpl {
   /** Shown in status messages ("Saved to X.", "Refresh from X"). */
   label: string;
   listProjectFolders(): Promise<ProjectFolder[]>;
-  ensureProjectFolder(name: string): Promise<DriveFileMeta>;
-  uploadImage(folderId: string, file: File, name?: string): Promise<DriveFileMeta>;
+  ensureProjectFolder(name: string): Promise<ProjectFolder>;
+  uploadImage(folderId: string, file: File, name?: string): Promise<StoredFile>;
   /** Files are addressed by project folder and name; a name is unique within a folder. */
   trashFile(folderId: string, fileName: string): Promise<void>;
   downloadFile(folderId: string, fileName: string): Promise<Blob>;
   /** The file named `name` directly inside the project folder, or undefined when there is none. */
-  findFileByName(folderId: string, name: string): Promise<DriveFileMeta | undefined>;
+  findFileByName(folderId: string, name: string): Promise<StoredFile | undefined>;
   saveProjectJson(
     folderId: string,
     project: unknown,

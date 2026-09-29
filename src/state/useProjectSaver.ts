@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import { parseProject } from '../ai/storageDeps';
-import { ProjectChangedError } from '../drive/driveRest';
 import { hasStorageAccess, loadProjectFile, saveProjectJson } from '../storage/activeBackend';
+import { ProjectChangedError } from '../storage/types';
 import type { ComicProject } from '../types/comic';
 import { errorMessage } from '../utils/errors';
 import { mergeProjects } from './merge';

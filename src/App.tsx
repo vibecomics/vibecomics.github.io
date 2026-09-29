@@ -13,7 +13,7 @@ import SplashScreen from './components/SplashScreen';
 import StatusToast from './components/StatusToast';
 import type { Status } from './components/StatusToast';
 import { awaitDeviceAccess, isDriveConfigured, requestDeviceAccess } from './drive/driveClient';
-import type { DeviceCodeInfo, ProjectFolder } from './drive/driveClient';
+import type { DeviceCodeInfo } from './drive/driveClient';
 import { readGeneratorConfig, writeGeneratorConfig } from './generators/browserConfigStore';
 import { removeWhiteBackground } from './utils/removeWhiteBackground';
 import { connectToServer } from './server/serverClient';
@@ -33,6 +33,7 @@ import {
   uploadImage,
 } from './storage/activeBackend';
 import { loadProject } from './storage/projectStore';
+import type { ProjectFolder } from './storage/types';
 import type { Conflict } from './state/merge';
 import { useProjectSaver } from './state/useProjectSaver';
 import type { ComicProject } from './types/comic';
@@ -42,7 +43,7 @@ import { makeThumbnail } from './utils/thumbnail';
 type Screen = 'splash' | 'tiles' | 'editor';
 
 /** The storage calls the ComicBuilder deps make: whichever backend is active. */
-const drive = {
+const storage = {
   uploadImage,
   trashFile,
   downloadFile,
@@ -274,7 +275,7 @@ export default function App() {
           version,
           existed,
           title,
-        } = await createOrOpenProject(drive, name, pageSize);
+        } = await createOrOpenProject(storage, name, pageSize);
         showProject(created, folder.id, version);
         setStatus(`${existed ? 'Opened' : 'Created'} "${title}".`);
         return folder;
@@ -308,7 +309,7 @@ export default function App() {
         getProject: () => projectRef.current,
         getFolderId: () => folderIdRef.current,
         updateProject: (mutation) => deps.updateProject(mutation),
-        drive,
+        storage,
         makeThumbnail,
       }),
     };

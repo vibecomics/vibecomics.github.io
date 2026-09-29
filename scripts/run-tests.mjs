@@ -1,5 +1,5 @@
 /**
- * Runs every src/**\/*.test.ts with Node's built-in test runner. The tests are
+ * Runs every src/**\/*.test.ts and http-storage/**\/*.test.ts with Node's built-in test runner. The tests are
  * TypeScript, so they are bundled with esbuild into a temp directory first.
  */
 import fs from 'node:fs';
@@ -22,7 +22,7 @@ function findTests(dir) {
 
 const outdir = fs.mkdtempSync(path.join(os.tmpdir(), 'comic-builder-tests-'));
 try {
-  const entryPoints = findTests(path.join(ROOT, 'src'));
+  const entryPoints = ['src', 'http-storage'].flatMap((dir) => findTests(path.join(ROOT, dir)));
   await esbuild.build({
     entryPoints,
     bundle: true,

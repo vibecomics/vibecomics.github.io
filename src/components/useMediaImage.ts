@@ -4,12 +4,12 @@ import { mediaKey } from '../utils/mediaKey';
 import { loadBlobUrl } from './mediaImages';
 
 /**
- * A layer's image, resolved from its registered MediaItem, as something an <img> can show. On
- * Drive this needs the user's access token, so its bytes are fetched once and served from a blob
- * URL; any other backend answers a plain fetch, so the same caching applies uniformly either way.
- * null while loading, or while the layer has no image yet.
+ * A layer's image, resolved from its registered MediaItem, as something an <img> can show. Its
+ * bytes are fetched once and served from a blob URL: on Drive an <img> tag cannot send the access
+ * token, and on any backend the cache spares a request per render. null while loading, or while
+ * the layer has no image yet.
  */
-export function useDriveImage(item: MediaItem | undefined): string | null {
+export function useMediaImage(item: MediaItem | undefined): string | null {
   const [loaded, setLoaded] = useState<{ key: string; url: string } | null>(null);
   const key = item ? mediaKey(item) : null;
 

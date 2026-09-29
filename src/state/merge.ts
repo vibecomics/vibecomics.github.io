@@ -3,7 +3,7 @@
  * browser, the CLI, another device) changed the same project.json.
  *
  * `base` is the last copy both sides agreed on (what was loaded or last saved),
- * `mine` ("ours") is what this side has now, `theirs` is what is on Drive now.
+ * `mine` ("ours") is what this side has now, `theirs` is what is in storage now.
  * Every page, panel, layer, bubble, character, scene, object and image has an
  * id, so the copies are compared thing by thing and field by field: changes to
  * different things, or to different fields of one thing, combine on their own.

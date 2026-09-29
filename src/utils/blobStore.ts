@@ -1,6 +1,6 @@
 /**
  * A size-limited store of downloaded files kept in the browser's Cache API, so an image that was
- * fetched from Drive once is not fetched again after a reload. Keys are ids (Drive file ids); each
+ * fetched from storage once is not fetched again after a reload. Keys are the images' file names; each
  * is stored under a made-up URL that never reaches the network. Nothing here may break loading:
  * when the Cache API is missing or fails, `get` finds nothing and `put` does nothing.
  *

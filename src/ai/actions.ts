@@ -11,7 +11,7 @@
  */
 
 import type { DeviceCodeInfo } from '../drive/deviceOAuth';
-import type { ProjectFolder } from '../drive/driveRest';
+import type { ProjectFolder } from '../storage/types';
 import { assertValidGeneratorConfig, createProvider } from '../generators/types';
 import type { GeneratorConfig } from '../generators/types';
 import { createPanel, defaultPointer } from '../state/layout';

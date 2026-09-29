@@ -15,8 +15,9 @@ import {
   startDeviceFlow,
 } from '../drive/deviceOAuth';
 import type { DeviceClient, DeviceCodeInfo } from '../drive/deviceOAuth';
-import { ProjectChangedError, createDriveRest } from '../drive/driveRest';
-import type { ProjectFolder } from '../drive/driveRest';
+import { createDriveRest } from '../drive/driveRest';
+import { ProjectChangedError } from '../storage/types';
+import type { ProjectFolder } from '../storage/types';
 import { mergeProjects } from '../state/merge';
 import type { Conflict } from '../state/merge';
 import type { ComicProject } from '../types/comic';
@@ -57,7 +58,7 @@ export class ConflictError extends Error {
     ]);
     super(
       [
-        `Nothing was saved: the project was changed on Google Drive since this command read it, and ${
+        `Nothing was saved: the project was changed in storage since this command read it, and ${
           conflicts.length === 1 ? 'that change conflicts' : 'those changes conflict'
         } with this one:`,
         ...lines,
@@ -315,7 +316,7 @@ export function createNodeSession(options: NodeSessionOptions) {
     getProject: () => project,
     getFolderId: folderId,
     updateProject: (mutation) => deps.updateProject(mutation),
-    drive,
+    storage: drive,
   });
 
   const deps: ComicBuilderDeps = {
