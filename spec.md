@@ -437,10 +437,13 @@ they cannot drift from the code.
 OAuth: one folder per project under a configurable root, `project.json` with
 the same optimistic-concurrency versioning (an `If-Match` header instead of
 Drive's file `version`, a 412 response instead of `ProjectChangedError`), and
-media files alongside it. File ids are global (a `.files-index.json` at the
-root maps id to project), so `GET /files/:id` and `DELETE /files/:id` never
-need a project name, mirroring how a Drive file id is addressable without its
-folder. `scripts/build-http-storage.mjs` bundles it (esbuild, no
+media files alongside it, as plain files under their real names (a project
+folder holds `project.json`, the images and a `.trash/`, nothing else: no
+index, no metadata file, no cache). A file is addressed by project and name
+(`GET|HEAD|DELETE /projects/:name/files/:file`), its MIME type comes from its
+extension, its version is its modification time, and an upload that would
+reuse a name is refused with a 409. `scripts/migrate-http-storage.mjs`
+converts a root from the earlier UUID-blob layout. `scripts/build-http-storage.mjs` bundles it (esbuild, no
 dependencies) to `http-storage/dist/http-storage.mjs`; `npm run http-storage`
 runs it locally (default `0.0.0.0:8081`; `npm run dev` is fixed to
 `0.0.0.0:8080`, both bound to every interface).
@@ -470,11 +473,12 @@ union, and giving the splash screen a way to connect it. Nothing else changes.
 in the project's storage folder, assigned once at upload
 (`src/ai/storageDeps.ts`) from the media id and never changed — never a raw
 URL or a backend's own opaque file id. To read the bytes, the active
-backend's `findFileByName(folderId, name)` resolves that name to whatever the
-backend addresses it by internally (a Drive file id, or the server's own
-generated id), and `downloadFile` fetches it with that id
+backend's `downloadFile(folderId, name)` and `trashFile(folderId, name)` take
+the name itself (Drive looks up its own file id internally; the server uses
+the name as the file's name on disk), and `findFileByName` checks a name is
+free before an upload, since a name must be unique within a project
 (`src/components/mediaImages.ts`, `src/ai/storageDeps.ts`). `project.json`
-itself never stores that resolved id, so moving a project's files between
+itself never stores a backend id, so moving a project's files between
 backends needs no rewriting of the file: copy the bytes under matching names
 to the other backend and the same `fileName` values resolve there too. A
 layer holds no image reference of its own beyond `mediaId`, pointing at the

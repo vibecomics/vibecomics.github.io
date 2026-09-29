@@ -14,15 +14,23 @@
  *                                                        header: If-Match: <expected version> (optional)
  *   GET    /projects/:name/files                        -> [{ id, name, mimeType, version }]
  *   POST   /projects/:name/files                        body: raw bytes
- *                                                        headers: X-File-Name (required), Content-Type
- *   GET    /files/:id                                    -> raw bytes, Content-Type set from stored mimeType
- *   DELETE /files/:id                                     moves the file to its project's trash
+ *                                                        headers: X-File-Name (required)
+ *                                                        409 if the project already has that name
+ *   GET    /projects/:name/files/:file                  -> raw bytes, Content-Type from the extension
+ *   HEAD   /projects/:name/files/:file                  200 with the same headers, or 404
+ *   DELETE /projects/:name/files/:file                  moves the file to the project's trash
  *
- * File ids are global (like Drive's), so reading or trashing one never needs its project name.
+ * A file is addressed by its project and its name; it has no other id.
  */
 import http from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { BadRequestError, ConflictError, createStore, NotFoundError } from './store.ts';
+import {
+  BadRequestError,
+  ConflictError,
+  createStore,
+  FileExistsError,
+  NotFoundError,
+} from './store.ts';
 
 const DEFAULT_MAX_JSON_BYTES = 25 * 1024 * 1024; // project.json and small JSON bodies
 const DEFAULT_MAX_UPLOAD_BYTES = 200 * 1024 * 1024; // media uploads
@@ -68,6 +76,7 @@ function errorStatus(e: unknown): number {
   if (e instanceof NotFoundError) return 404;
   if (e instanceof BadRequestError) return 400;
   if (e instanceof ConflictError) return 412;
+  if (e instanceof FileExistsError) return 409;
   if (e instanceof PayloadTooLargeError) return 413;
   return 500;
 }
@@ -97,7 +106,7 @@ export function createRequestListener({
   function setCors(res: ServerResponse): void {
     res.setHeader('Access-Control-Allow-Origin', corsOrigin);
     res.setHeader('Vary', 'Origin');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, If-Match, X-File-Name');
     res.setHeader('Access-Control-Expose-Headers', 'ETag');
   }
@@ -181,32 +190,36 @@ export function createRequestListener({
             const fileNameHeader = req.headers['x-file-name'];
             const fileName =
               typeof fileNameHeader === 'string' ? decodeURIComponent(fileNameHeader) : undefined;
-            const mimeType = req.headers['content-type'];
-            const saved = await store.saveFile(name, { fileName, mimeType, buffer });
+            const saved = await store.saveFile(name, { fileName, buffer });
             sendJson(res, 201, saved);
             return;
           }
-        }
-      }
-
-      // /files/:id (global, like a Drive file id: no project name needed)
-      if (segments[0] === 'files' && segments.length === 2) {
-        const id = segments[1];
-        if (req.method === 'GET') {
-          const { buffer, meta } = await store.readFile(id);
-          res.writeHead(200, {
-            'Content-Type': meta.mimeType || 'application/octet-stream',
-            'Content-Length': buffer.length,
-            ETag: meta.version,
-          });
-          res.end(buffer);
-          return;
-        }
-        if (req.method === 'DELETE') {
-          await store.trashFile(id);
-          res.writeHead(204);
-          res.end();
-          return;
+          // /projects/:name/files/:file
+          if (segments.length === 4) {
+            const file = segments[3];
+            if (req.method === 'GET') {
+              const { buffer, meta } = await store.readFile(name, file);
+              res.writeHead(200, {
+                'Content-Type': meta.mimeType,
+                'Content-Length': buffer.length,
+                ETag: meta.version,
+              });
+              res.end(buffer);
+              return;
+            }
+            if (req.method === 'HEAD') {
+              const meta = await store.statFile(name, file);
+              res.writeHead(200, { 'Content-Type': meta.mimeType, ETag: meta.version });
+              res.end();
+              return;
+            }
+            if (req.method === 'DELETE') {
+              await store.trashFile(name, file);
+              res.writeHead(204);
+              res.end();
+              return;
+            }
+          }
         }
       }
 

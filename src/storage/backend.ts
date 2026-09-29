@@ -12,8 +12,9 @@ export interface StorageBackendImpl {
   listProjectFolders(): Promise<ProjectFolder[]>;
   ensureProjectFolder(name: string): Promise<DriveFileMeta>;
   uploadImage(folderId: string, file: File, name?: string): Promise<DriveFileMeta>;
-  trashFile(fileId: string): Promise<void>;
-  downloadFile(fileId: string): Promise<Blob>;
+  /** Files are addressed by project folder and name; a name is unique within a folder. */
+  trashFile(folderId: string, fileName: string): Promise<void>;
+  downloadFile(folderId: string, fileName: string): Promise<Blob>;
   /** The file named `name` directly inside the project folder, or undefined when there is none. */
   findFileByName(folderId: string, name: string): Promise<DriveFileMeta | undefined>;
   saveProjectJson(

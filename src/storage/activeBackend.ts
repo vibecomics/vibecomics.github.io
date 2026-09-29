@@ -65,9 +65,11 @@ export const ensureProjectFolder = (name: string): Promise<DriveFileMeta> =>
 export const uploadImage = (folderId: string, file: File, name?: string): Promise<DriveFileMeta> =>
   current().uploadImage(folderId, file, name);
 
-export const trashFile = (fileId: string): Promise<void> => current().trashFile(fileId);
+export const trashFile = (folderId: string, fileName: string): Promise<void> =>
+  current().trashFile(folderId, fileName);
 
-export const downloadFile = (fileId: string): Promise<Blob> => current().downloadFile(fileId);
+export const downloadFile = (folderId: string, fileName: string): Promise<Blob> =>
+  current().downloadFile(folderId, fileName);
 
 export const findFileByName = (
   folderId: string,

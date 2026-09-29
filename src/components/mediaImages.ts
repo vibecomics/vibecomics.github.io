@@ -1,17 +1,8 @@
-import { downloadFile, findFileByName, getCurrentFolderId } from '../storage/activeBackend';
+import { downloadFile, getCurrentFolderId } from '../storage/activeBackend';
 import type { MediaItem } from '../types/comic';
 import { createBlobStore } from '../utils/blobStore';
 import { mediaKey } from '../utils/mediaKey';
 import type { FileRef } from '../utils/mediaKey';
-
-/** The backend id for a file ref's stable name, resolved by listing the open project's folder. */
-async function resolveFileId(ref: FileRef): Promise<string> {
-  const folderId = getCurrentFolderId();
-  if (!folderId) throw new Error('No project folder is open.');
-  const found = await findFileByName(folderId, ref.fileName);
-  if (!found) throw new Error(`No file named "${ref.fileName}" in this project.`);
-  return found.id;
-}
 
 const blobUrls = new Map<string, Promise<string>>();
 
@@ -80,7 +71,9 @@ function isRetryable(error: unknown): boolean {
 async function downloadWithRetry(ref: FileRef): Promise<Blob> {
   for (let attempt = 1; ; attempt++) {
     try {
-      return await downloadFile(await resolveFileId(ref));
+      const folderId = getCurrentFolderId();
+      if (!folderId) throw new Error('No project folder is open.');
+      return await downloadFile(folderId, ref.fileName);
     } catch (e) {
       if (attempt >= MAX_ATTEMPTS || !isRetryable(e)) throw e;
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS * 2 ** (attempt - 1)));
@@ -90,8 +83,7 @@ async function downloadWithRetry(ref: FileRef): Promise<Blob> {
 
 /**
  * A registered file's bytes as a blob URL, fetched once and cached: on Drive that avoids sending
- * the access token to an `<img>` tag, and on any backend it avoids resolving the stable name to a
- * backend id on every access. `low` priority is for work nobody is looking at; asking for the same
+ * the access token to an `<img>` tag, and on any backend it avoids a request on every access. `low` priority is for work nobody is looking at; asking for the same
  * file at `high` speeds it up.
  */
 export function loadBlobUrl(ref: FileRef, priority: Priority = 'high'): Promise<string> {

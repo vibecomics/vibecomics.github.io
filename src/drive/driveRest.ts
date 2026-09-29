@@ -103,6 +103,20 @@ export function createDriveRest({ getToken, fetch: fetchImpl = fetch }: DriveRes
     return file;
   }
 
+  /** The file named `name` directly inside `folderId`, or undefined when there is none. */
+  async function findFileByName(
+    folderId: string,
+    name: string
+  ): Promise<DriveFileMeta | undefined> {
+    const escaped = name.replace(/'/g, "\\'");
+    const [found] = await queryFiles<DriveFileMeta>(
+      `'${folderId}' in parents and name='${escaped}' and trashed=false`,
+      'id,name,mimeType',
+      '&pageSize=1'
+    );
+    return found;
+  }
+
   return {
     /** Folders this app created (the `drive.file` scope hides everything else). */
     listProjectFolders(): Promise<ProjectFolder[]> {
@@ -139,21 +153,14 @@ export function createDriveRest({ getToken, fetch: fetchImpl = fetch }: DriveRes
       );
     },
 
-    /** The file named `name` directly inside `folderId`, or undefined when there is none. */
-    async findFileByName(folderId: string, name: string): Promise<DriveFileMeta | undefined> {
-      const escaped = name.replace(/'/g, "\\'");
-      const [found] = await queryFiles<DriveFileMeta>(
-        `'${folderId}' in parents and name='${escaped}' and trashed=false`,
-        'id,name,mimeType',
-        '&pageSize=1'
-      );
-      return found;
-    },
+    findFileByName,
 
     /** Move a file to the Drive trash (recoverable there). A file that is already gone counts as trashed. */
-    async trashFile(fileId: string): Promise<void> {
+    async trashFile(folderId: string, fileName: string): Promise<void> {
+      const found = await findFileByName(folderId, fileName);
+      if (!found) return;
       try {
-        await driveRequest(`${DRIVE_API}/files/${fileId}`, {
+        await driveRequest(`${DRIVE_API}/files/${found.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ trashed: true }),
@@ -163,8 +170,10 @@ export function createDriveRest({ getToken, fetch: fetchImpl = fetch }: DriveRes
       }
     },
 
-    async downloadFile(fileId: string): Promise<Blob> {
-      const res = await driveRequest(`${DRIVE_API}/files/${fileId}?alt=media`);
+    async downloadFile(folderId: string, fileName: string): Promise<Blob> {
+      const found = await findFileByName(folderId, fileName);
+      if (!found) throw new Error(`No file named "${fileName}" in this project.`);
+      const res = await driveRequest(`${DRIVE_API}/files/${found.id}?alt=media`);
       return await res.blob();
     },
 

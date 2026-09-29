@@ -37,6 +37,11 @@ export function createServerRest({ getBaseUrl, fetch: fetchImpl = fetch }: Serve
     return res;
   }
 
+  const filePath = (folderId: string, fileName: string) =>
+    `/projects/${encodeURIComponent(folderId)}/files/${encodeURIComponent(fileName)}`;
+  const isNotFound = (e: unknown) =>
+    e instanceof Error && e.message.startsWith('Storage server error 404');
+
   return {
     /** Every project folder the server knows about. */
     async listProjectFolders(): Promise<ProjectFolder[]> {
@@ -58,10 +63,7 @@ export function createServerRest({ getBaseUrl, fetch: fetchImpl = fetch }: Serve
     async uploadImage(folderId: string, file: File, name?: string): Promise<DriveFileMeta> {
       const res = await serverRequest(`/projects/${encodeURIComponent(folderId)}/files`, {
         method: 'POST',
-        headers: {
-          'X-File-Name': encodeURIComponent(name || file.name),
-          'Content-Type': file.type || 'application/octet-stream',
-        },
+        headers: { 'X-File-Name': encodeURIComponent(name || file.name) },
         body: file,
       });
       return (await res.json()) as DriveFileMeta;
@@ -69,22 +71,31 @@ export function createServerRest({ getBaseUrl, fetch: fetchImpl = fetch }: Serve
 
     /** The file named `name` in the project folder, or undefined when there is none. */
     async findFileByName(folderId: string, name: string): Promise<DriveFileMeta | undefined> {
-      const res = await serverRequest(`/projects/${encodeURIComponent(folderId)}/files`);
-      const files = (await res.json()) as DriveFileMeta[];
-      return files.findLast((f) => f.name === name);
-    },
-
-    /** Move a file to its project's trash. A file that is already gone counts as trashed. */
-    async trashFile(fileId: string): Promise<void> {
       try {
-        await serverRequest(`/files/${encodeURIComponent(fileId)}`, { method: 'DELETE' });
+        const res = await serverRequest(filePath(folderId, name), { method: 'HEAD' });
+        return {
+          id: name,
+          name,
+          mimeType: res.headers.get('Content-Type') ?? 'application/octet-stream',
+          version: res.headers.get('ETag') ?? undefined,
+        };
       } catch (e) {
-        if (!(e instanceof Error && e.message.startsWith('Storage server error 404'))) throw e;
+        if (isNotFound(e)) return undefined;
+        throw e;
       }
     },
 
-    async downloadFile(fileId: string): Promise<Blob> {
-      const res = await serverRequest(`/files/${encodeURIComponent(fileId)}`);
+    /** Move a file to its project's trash. A file that is already gone counts as trashed. */
+    async trashFile(folderId: string, fileName: string): Promise<void> {
+      try {
+        await serverRequest(filePath(folderId, fileName), { method: 'DELETE' });
+      } catch (e) {
+        if (!isNotFound(e)) throw e;
+      }
+    },
+
+    async downloadFile(folderId: string, fileName: string): Promise<Blob> {
+      const res = await serverRequest(filePath(folderId, fileName));
       return await res.blob();
     },
 
