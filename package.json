@@ -13,7 +13,8 @@
     "format:check": "prettier --check .",
     "prepare": "husky",
     "cli": "node scripts/extract-docs.mjs && node scripts/build-cli.mjs && node public/vibecomics.mjs",
-    "http-storage": "node http-storage/start.ts"
+    "http-storage": "node http-storage/start.ts",
+    "start": "node scripts/start.mjs"
   },
   "lint-staged": {
     "*.{js,ts,json,css,html,md}": "prettier --write"
