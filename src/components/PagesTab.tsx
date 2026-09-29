@@ -120,7 +120,11 @@ export default function PagesTab({ pages, pageIndex, pageSize, media, conflictPa
               >
                 <div className="d-flex align-items-center gap-2 px-3 pt-2">
                   <h2 className="h6 mb-0 text-truncate flex-grow-1">{formatPageLabel(page)}</h2>
-                  <div className="btn-group btn-group-sm flex-shrink-0" role="group" aria-label="Zoom">
+                  <div
+                    className="btn-group btn-group-sm flex-shrink-0"
+                    role="group"
+                    aria-label="Zoom"
+                  >
                     <button
                       className="btn btn-outline-secondary"
                       title="Zoom out"
