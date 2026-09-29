@@ -326,7 +326,9 @@ export default function App() {
   } else if (screen === 'tiles') {
     content = <ProjectTiles folders={folders} />;
   } else if (project && preview && currentPage) {
-    content = <PreviewScreen project={project} page={currentPage} pageSize={project.metadata.pageSize} />;
+    content = (
+      <PreviewScreen project={project} page={currentPage} pageSize={project.metadata.pageSize} />
+    );
   } else if (project) {
     content = (
       <EditorScreen

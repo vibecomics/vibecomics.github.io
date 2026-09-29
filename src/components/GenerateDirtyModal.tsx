@@ -37,7 +37,9 @@ export default function GenerateDirtyModal({ project, onGenerate, onClose }: Pro
                   <li key={`${item.panelId}/${item.layerId}`} className="list-group-item">
                     <div className="d-flex justify-content-between gap-2">
                       <strong>{item.name}</strong>
-                      <span className="small text-muted text-nowrap">Page {item.page} · {item.panelTitle || `Panel ${item.panelNumber}`}</span>
+                      <span className="small text-muted text-nowrap">
+                        Page {item.page} · {item.panelTitle || `Panel ${item.panelNumber}`}
+                      </span>
                     </div>
                     <div className="small text-muted">
                       {item.kind === 'background' ? 'Background' : 'Layer'} ·{' '}
