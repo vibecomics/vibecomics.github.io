@@ -13,6 +13,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
   container-type: size;
 }
 
@@ -24,10 +25,28 @@
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.3);
   container-type: inline-size;
   user-select: none;
+  transition: transform 0.15s ease;
 }
 
 .page-sheet.editing {
   touch-action: none;
+}
+
+/* Zoomed in: the page can be dragged around. */
+.page-sheet.zoomed {
+  cursor: grab;
+  touch-action: none;
+}
+
+.page-sheet.panning {
+  cursor: grabbing;
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page-sheet {
+    transition: none;
+  }
 }
 
 .page-panel {

@@ -8,6 +8,8 @@ import InspectorPane from './InspectorPane';
 import PageButtons from './PageButtons';
 import PageDetails from './PageDetails';
 import PageSheet from './PageSheet';
+import { FIT_VIEW, MAX_SCALE, MIN_SCALE, ZOOM_STEP } from './pageView';
+import type { PageView } from './pageView';
 import { SNAPS } from './sheetSnaps';
 import type { Snap } from './sheetSnaps';
 import PanelInspector from './PanelInspector';
@@ -46,6 +48,9 @@ export default function PagesTab({ pages, pageIndex, pageSize, media, conflictPa
   const [selection, setSelection] = useState<Selection>({ panelId: null });
   const wide = useMediaQuery('(min-width: 768px)');
   const [snap, setSnap] = usePersistentChoice<Snap>('comic-builder:sheet', SNAPS, 'half');
+  const [view, setView] = useState<PageView>(FIT_VIEW);
+  const zoomBy = (delta: number) =>
+    setView((v) => ({ ...v, scale: Math.min(MAX_SCALE, Math.max(MIN_SCALE, v.scale + delta)) }));
 
   const page = pages[pageIndex];
   const panels = page?.panels ?? [];
@@ -115,6 +120,26 @@ export default function PagesTab({ pages, pageIndex, pageSize, media, conflictPa
               >
                 <div className="d-flex align-items-center gap-2 px-3 pt-2">
                   <h2 className="h6 mb-0 text-truncate flex-grow-1">{formatPageLabel(page)}</h2>
+                  <div className="btn-group btn-group-sm flex-shrink-0" role="group" aria-label="Zoom">
+                    <button
+                      className="btn btn-outline-secondary"
+                      title="Zoom out"
+                      aria-label="Zoom out"
+                      disabled={view.scale <= MIN_SCALE}
+                      onClick={() => zoomBy(-ZOOM_STEP)}
+                    >
+                      −
+                    </button>
+                    <button
+                      className="btn btn-outline-secondary"
+                      title="Zoom in"
+                      aria-label="Zoom in"
+                      disabled={view.scale >= MAX_SCALE}
+                      onClick={() => zoomBy(ZOOM_STEP)}
+                    >
+                      +
+                    </button>
+                  </div>
                   {/* The keyboard and touch way to reorder: the cover, page 0, stays first. */}
                   {pageIndex > 0 && (
                     <div
@@ -146,6 +171,8 @@ export default function PagesTab({ pages, pageIndex, pageSize, media, conflictPa
                 <PageSheet
                   page={page}
                   pageSize={pageSize}
+                  view={view}
+                  onViewChange={setView}
                   editing={{
                     selection: current,
                     onSelect: setSelection,
