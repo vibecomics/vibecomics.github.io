@@ -262,7 +262,7 @@ objects[], media[] }`: the story bible plus the media registry.
 - `Character` / `ComicObject` — `{ id, name, description, imageIds[],
 sceneIds[] }`. The description carries visual continuity guidance.
 - `Scene` — `{ id, name, description, characterIds[], imageIds[] }`.
-- `MediaItem` — `{ id, name, fileName, mimeType, thumbnailFileName?, subjectId?, sceneId? }`. `fileName` (and `thumbnailFileName`) is the stable, backend-portable name the image is stored under in the project's storage folder, assigned once at upload from the media id; it is not a URL (see §6's "Addressing images by name"). `subjectId` is the character or object, and `sceneId` the scene, the image is art of (reference art stays in the entity's `imageIds`); `media.upload(..., { subjectId, sceneId })` and `media.update(id, { name?, subjectId?, sceneId? })` set them (`null` clears), and each must name an existing entity. `media.update` only renames the registry entry (the stored file keeps its name). The thumbnail is a small stored file (about 256px on the long side; PNG if the image has transparency, else JPEG) that the UI shows instead of the full image. `media.upload` documents that the caller (an LLM) should resize the image and pass `thumbnailDataUrl`, so the media picker never has to download full images; if it is omitted the browser makes one; `media.uploadThumbnail(id, dataUrl)` adds or replaces one. `media.delete(id)` trashes both files in storage, then removes the item, clears `mediaId` on layers using it and drops it from `imageIds` (`src/state/media.ts`).
+- `MediaItem` — `{ id, name, fileName, mimeType, thumbnailFileName?, subjectId?, sceneId? }`. `fileName` (and `thumbnailFileName`) is the stable, backend-portable name the image is stored under in the project's storage folder, assigned once at upload from the item's name (`ash-sword-reference.png`, then `-2`, `-3` if that is taken; its thumbnail is `ash-sword-reference.thumb.png`); it is not a URL (see §6's "Addressing images by name"). `subjectId` is the character or object, and `sceneId` the scene, the image is art of (reference art stays in the entity's `imageIds`); `media.upload(..., { subjectId, sceneId })` and `media.update(id, { name?, subjectId?, sceneId? })` set them (`null` clears), and each must name an existing entity. `media.update` only renames the registry entry (the stored file keeps its name). The thumbnail is a small stored file (about 256px on the long side; PNG if the image has transparency, else JPEG) that the UI shows instead of the full image. `media.upload` documents that the caller (an LLM) should resize the image and pass `thumbnailDataUrl`, so the media picker never has to download full images; if it is omitted the browser makes one; `media.uploadThumbnail(id, dataUrl)` adds or replaces one. `media.delete(id)` trashes both files in storage, then removes the item, clears `mediaId` on layers using it and drops it from `imageIds` (`src/state/media.ts`).
 
 Structural validation lives in `src/state/project.ts` (`assertValidProject`,
 `createBlankProject`).
@@ -471,7 +471,7 @@ union, and giving the splash screen a way to connect it. Nothing else changes.
 **Addressing images by name, not URL.** A `MediaItem`'s `fileName` (and
 `thumbnailFileName`) is the stable, backend-portable name it is stored under
 in the project's storage folder, assigned once at upload
-(`src/ai/storageDeps.ts`) from the media id and never changed — never a raw
+(`src/ai/storageDeps.ts`) from the item's name and never changed — never a raw
 URL or a backend's own opaque file id. To read the bytes, the active
 backend's `downloadFile(folderId, name)` and `trashFile(folderId, name)` take
 the name itself (Drive looks up its own file id internally; the server uses
@@ -482,7 +482,7 @@ itself never stores a backend id, so moving a project's files between
 backends needs no rewriting of the file: copy the bytes under matching names
 to the other backend and the same `fileName` values resolve there too. Stored names follow one rule
 (`src/utils/fileName.ts`): lowercase letters and digits joined by dashes, then
-an image extension (`ashwini-running.png`, `media-1a2b.thumb.png`). Uploads
+an image extension (`ashwini-running.png`, `ashwini-running.thumb.png`). Uploads
 reword their name to fit (`toFileName`), the HTTP server refuses any other
 name, and a name is never reused within a project. Files are never shown by
 name: the UI shows a `MediaItem`'s `name` label, which for an uploaded file

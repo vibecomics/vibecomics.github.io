@@ -1,10 +1,11 @@
 /**
  * The one rule for the names images are stored under: lowercase letters and digits joined by
- * dashes, then an image extension (`ashwini-running.png`, `media-1a2b.thumb.png`). No spaces, capitals or
+ * dashes, then an image extension (`ashwini-running.png`, `ashwini-running.thumb.png`). No spaces, capitals or
  * punctuation, so a name is the same on every backend and file system (a Mac ignores case).
  */
 
 const IMAGE_EXTENSION = /\.(png|jpe?g|webp|gif|avif|svg)$/i;
+const MAX_STEM_LENGTH = 80;
 const VALID_FILE_NAME = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:\.thumb)?\.(?:png|jpe?g|webp|gif|avif|svg)$/;
 
 /** True when `name` already follows the storage naming rule. */
@@ -22,7 +23,9 @@ export function toFileName(name: string, defaultExtension = 'png'): string {
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
+    .replace(/['\u2019]/g, '')
     .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, MAX_STEM_LENGTH)
     .replace(/^-+|-+$/g, '');
   return `${words || 'image'}${thumbnail ? '.thumb' : ''}${extension}`;
 }
@@ -36,3 +39,11 @@ export function displayName(fileName: string): string {
     .trim();
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
+
+/** `name` with a number before its extension, for a name that is taken: `a.png` -> `a-2.png`. */
+export const numberedFileName = (name: string, n: number): string =>
+  name.replace(/((?:\.thumb)?\.[a-z0-9]+)$/, `-${n}$1`);
+
+/** The name of the thumbnail of `fileName`: `a-b.png` -> `a-b.thumb.jpg`. */
+export const thumbnailFileNameOf = (fileName: string, extension: string): string =>
+  `${fileName.replace(/\.[^.]+$/, '')}.thumb.${extension}`;

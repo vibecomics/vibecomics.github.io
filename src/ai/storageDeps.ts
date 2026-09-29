@@ -12,7 +12,7 @@ import type { MediaRemoval } from '../state/media';
 import { assertValidProject, createBlankProject, normalizeProject } from '../state/project';
 import type { ComicProject, MediaItem, PageSize } from '../types/comic';
 import { DEFAULT_PAGE_SIZE } from '../types/comic';
-import { toFileName } from '../utils/fileName';
+import { numberedFileName, thumbnailFileNameOf, toFileName } from '../utils/fileName';
 import { dataUrlToFile, readFileAsDataUrl } from '../utils/files';
 import { newId } from '../utils/id';
 import { extensionForMimeType } from '../utils/thumbnail';
@@ -49,6 +49,20 @@ async function uploadNewFile(
     throw new Error(`This project already has a file named "${name}". Rename one of them.`);
   }
   return host.drive.uploadImage(folderId, file, name);
+}
+
+/** The stored name for `label`, or that with -2, -3... when the project folder already has it. */
+async function freeFileName(
+  host: MediaHost,
+  folderId: string,
+  label: string,
+  extension: string
+): Promise<string> {
+  const base = toFileName(label, extension);
+  for (let n = 1; ; n++) {
+    const candidate = n === 1 ? base : numberedFileName(base, n);
+    if (!(await host.drive.findFileByName(folderId, candidate))) return candidate;
+  }
 }
 
 /** Put a thumbnail of `item` in the project folder under its stable name. */
@@ -90,12 +104,12 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
     uploadStorageMedia: async (name, dataUrl, mimeType, thumbnailDataUrl, links) => {
       const folderId = requireFolder();
       const id = newId('media');
-      const fileName = `${id}.${extensionForMimeType(mimeType)}`;
+      const fileName = await freeFileName(host, folderId, name, extensionForMimeType(mimeType));
       const file = dataUrlToFile(dataUrl, fileName, mimeType);
       const given = thumbnailDataUrl
         ? dataUrlToFile(thumbnailDataUrl, name, 'image/png')
         : undefined;
-      const uploaded = await uploadNewFile(host, folderId, file, fileName);
+      const uploaded = await host.drive.uploadImage(folderId, file, fileName);
       const item: MediaItem = {
         id,
         name,
@@ -107,7 +121,10 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
       try {
         const thumbnail = given ?? (await host.makeThumbnail?.(file, name)) ?? undefined;
         if (thumbnail) {
-          const thumbnailFileName = `${id}.thumb.${extensionForMimeType(thumbnail.type)}`;
+          const thumbnailFileName = thumbnailFileNameOf(
+            item.fileName,
+            extensionForMimeType(thumbnail.type)
+          );
           await storeThumbnail(host, folderId, thumbnailFileName, thumbnail);
           item.thumbnailFileName = thumbnailFileName;
         }
@@ -124,7 +141,10 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
       const folderId = requireFolder();
       const item = findItem(id);
       const thumbnail = dataUrlToFile(dataUrl, item.name, 'image/png');
-      const thumbnailFileName = `${item.id}.thumb.${extensionForMimeType(thumbnail.type)}`;
+      const thumbnailFileName = thumbnailFileNameOf(
+        item.fileName,
+        extensionForMimeType(thumbnail.type)
+      );
       const previous = item.thumbnailFileName;
       // The new thumbnail may take the old one's name, so that name must be free first.
       if (previous === thumbnailFileName) await host.drive.trashFile(folderId, previous);
