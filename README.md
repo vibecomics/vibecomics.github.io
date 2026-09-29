@@ -87,7 +87,7 @@ npm run http-storage
 ```
 
 Configure it with environment variables: `HTTP_STORAGE_PATH` (where projects
-are stored; defaults to `~/vibecomics-data`), `HTTP_STORAGE_PORT`
+are stored; defaults to `~/data/vibecomics-data`), `HTTP_STORAGE_PORT`
 (default 8081), `HTTP_STORAGE_HOST` (default `0.0.0.0`) and
 `HTTP_STORAGE_CORS_ORIGIN` (default `*`).
 
