@@ -45,6 +45,21 @@ const isLink = (value: unknown): value is [string, number] =>
 
 const byNodeId = (a: string, b: string) => Number(a) - Number(b) || a.localeCompare(b);
 
+const BG_REMOVAL_CLASS = /rembg|removebg|background.?removal|birefnet|rmbg|matting/i;
+
+/** Whether `nodeId` (or something a few hops upstream of it) looks like a background-removal node,
+ * by class name — covers the common community nodes (InspyrenetRembg, ComfyUI-RMBG, BiRefNet, ...)
+ * without needing to know any of them specifically. */
+function feedsFromBgRemoval(workflow: ComfyWorkflow, nodeId: string | undefined): boolean {
+  let current = nodeId;
+  for (let hops = 0; current && workflow[current] && hops < 5; hops++) {
+    if (BG_REMOVAL_CLASS.test(workflow[current].class_type)) return true;
+    const next = Object.values(workflow[current].inputs).find(isLink);
+    current = next?.[0];
+  }
+  return false;
+}
+
 /** Guess the node mapping: SaveImage is the output, LoadImage nodes are the reference images, the
  * prompt node is whatever feeds a sampler's `positive` input, the size node is the latent with a
  * width and height, and the seed node is the one with a `seed`. Throws when there's no prompt or
@@ -89,6 +104,15 @@ export function detectComfyNodes(workflow: ComfyWorkflow): ComfyNodeMapping {
   const seedId = seedField && ids.find((id) => typeof workflow[id].inputs[seedField] === 'number');
   const referenceImageNodeIds = withClass((t) => t === 'LoadImage');
 
+  // A second SaveImage fed (directly or via a few hops) by a background-removal-looking node is the
+  // transparent-cutout branch, used only for character/object layers (see GenerationRequest.transparent).
+  const transparentOutputId = withClass((t) => t === 'SaveImage' || t === 'PreviewImage').find(
+    (id) =>
+      id !== outputId &&
+      isLink(workflow[id].inputs.images) &&
+      feedsFromBgRemoval(workflow, (workflow[id].inputs.images as [string, number])[0])
+  );
+
   return {
     positivePromptNodeId: promptId,
     promptField: textField(promptId),
@@ -96,5 +120,6 @@ export function detectComfyNodes(workflow: ComfyWorkflow): ComfyNodeMapping {
     ...(referenceImageNodeIds.length && { referenceImageNodeIds }),
     ...(sizeId && { sizeNodeId: sizeId }),
     ...(seedId && { seedNodeId: seedId, seedField }),
+    ...(transparentOutputId && { transparentOutputNodeId: transparentOutputId }),
   };
 }

@@ -12,6 +12,10 @@ export interface GenerationRequest {
   referenceImages: string[];
   width?: number;
   height?: number;
+  /** Whether the result should be a transparent cutout (a character/object layer) rather than a
+   * full-bleed image (a background/scene). A provider that has no way to produce real transparency
+   * may ignore this; the caller falls back to its own background-removal heuristic in that case. */
+  transparent?: boolean;
   /** Aborts the request (and any polling it's doing) when the caller cancels it. A provider that
    * can't cancel mid-flight should at least stop polling and reject with GenerationCancelledError. */
   signal?: AbortSignal;

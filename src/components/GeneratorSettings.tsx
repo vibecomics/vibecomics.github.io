@@ -20,6 +20,7 @@ interface NodeFields {
   positivePromptNodeId: string;
   promptField: string;
   outputNodeId: string;
+  transparentOutputNodeId: string;
   referenceImageNodeIds: string;
   sizeNodeId: string;
   seedNodeId: string;
@@ -35,6 +36,7 @@ const nodeFieldsOf = (nodes: ComfyNodeMapping): NodeFields => ({
   positivePromptNodeId: nodes.positivePromptNodeId,
   promptField: nodes.promptField ?? '',
   outputNodeId: nodes.outputNodeId,
+  transparentOutputNodeId: nodes.transparentOutputNodeId ?? '',
   referenceImageNodeIds: (nodes.referenceImageNodeIds ?? []).join(', '),
   sizeNodeId: nodes.sizeNodeId ?? '',
   seedNodeId: nodes.seedNodeId ?? '',
@@ -103,6 +105,9 @@ export default function GeneratorSettings({ onClose }: Props) {
         nodes: {
           positivePromptNodeId: nodeFields.positivePromptNodeId,
           outputNodeId: nodeFields.outputNodeId,
+          ...(nodeFields.transparentOutputNodeId.trim() && {
+            transparentOutputNodeId: nodeFields.transparentOutputNodeId,
+          }),
           ...(nodeFields.promptField.trim() && { promptField: nodeFields.promptField }),
           ...(nodeFields.referenceImageNodeIds.trim() && {
             referenceImageNodeIds: splitIds(nodeFields.referenceImageNodeIds),
@@ -267,6 +272,20 @@ export default function GeneratorSettings({ onClose }: Props) {
                         value={fields.outputNodeId}
                         onChange={(e) => setField('outputNodeId', e.target.value)}
                       />
+                    </div>
+                    <div className="col-6">
+                      <label className="form-label small">
+                        Transparent output node id (optional)
+                      </label>
+                      <input
+                        className="form-control form-control-sm"
+                        value={fields.transparentOutputNodeId}
+                        onChange={(e) => setField('transparentOutputNodeId', e.target.value)}
+                      />
+                      <div className="form-text">
+                        A second SaveImage fed by a background-removal node (e.g. Inspyrenet Rembg),
+                        used instead of the output above for character/object layers.
+                      </div>
                     </div>
                     <div className="col-6">
                       <label className="form-label small">

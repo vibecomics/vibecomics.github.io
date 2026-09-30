@@ -26,6 +26,20 @@ test('follows the positive input through intermediate nodes', () => {
   assert.equal(nodes.referenceImageNodeIds, undefined);
 });
 
+test('finds a second SaveImage fed by a background-removal node as the transparent output', () => {
+  const workflow = {
+    '1': { class_type: 'CLIPTextEncode', inputs: { text: 'x' } },
+    '2': { class_type: 'KSampler', inputs: { positive: ['1', 0], seed: 1 } },
+    '3': { class_type: 'VAEDecode', inputs: { samples: ['2', 0] } },
+    '4': { class_type: 'SaveImage', inputs: { images: ['3', 0] } },
+    '5': { class_type: 'InspyrenetRembg', inputs: { image: ['3', 0] } },
+    '6': { class_type: 'SaveImage', inputs: { images: ['5', 0] } },
+  };
+  const nodes = detectComfyNodes(workflow);
+  assert.equal(nodes.outputNodeId, '4');
+  assert.equal(nodes.transparentOutputNodeId, '6');
+});
+
 test('a workflow with no output is rejected', () => {
   assert.throws(
     () => detectComfyNodes({ '1': { class_type: 'CLIPTextEncode', inputs: { text: '' } } }),

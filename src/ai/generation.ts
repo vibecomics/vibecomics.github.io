@@ -270,10 +270,12 @@ async function runLayerGeneration(
     referenceImages,
     width: size?.pixels.width,
     height: size?.pixels.height,
+    transparent: layer.kind === 'foreground',
     signal,
   });
-  // Generators draw the subject on a plain white background rather than real transparency (see the
-  // technical requirements line in buildLayerPrompt); cut that background out here, in the browser.
+  // A provider without real transparency draws the subject on a plain white background instead (see
+  // the technical requirements line in buildLayerPrompt); cut that background out here, in the
+  // browser. removeBackground is a no-op if the provider already returned a real cutout.
   const dataUrl =
     layer.kind === 'foreground' && deps.removeBackground
       ? await deps.removeBackground(rawDataUrl)
@@ -317,7 +319,12 @@ async function runReferenceGeneration(
   );
   const finalPrompt = appendReferenceNotes(prompt, used);
   const referenceImages = await downloadReferences(deps, used);
-  const rawDataUrl = await provider.generate({ prompt: finalPrompt, referenceImages, signal });
+  const rawDataUrl = await provider.generate({
+    prompt: finalPrompt,
+    referenceImages,
+    transparent: kind !== 'scenes',
+    signal,
+  });
   const dataUrl =
     kind !== 'scenes' && deps.removeBackground
       ? await deps.removeBackground(rawDataUrl)

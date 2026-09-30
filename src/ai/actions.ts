@@ -1541,8 +1541,9 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * Set the image generator configuration: currently a self-hosted
        * ComfyUI instance (provider: "comfy"): its base URL, a workflow
        * exported from it in "API format", and which node ids hold the
-       * positive prompt, reference image(s), output and, optionally, size and seed.
-       * @param config - { provider: "comfy", comfy: { baseUrl, workflow, nodes: { positivePromptNodeId, outputNodeId, referenceImageNodeIds?, sizeNodeId?, seedNodeId?, seedField? } } }.
+       * positive prompt, reference image(s), output and, optionally, size, seed, and a second
+       * ("transparent") output fed by a background-removal node, used for character/object layers.
+       * @param config - { provider: "comfy", comfy: { baseUrl, workflow, nodes: { positivePromptNodeId, outputNodeId, transparentOutputNodeId?, referenceImageNodeIds?, sizeNodeId?, seedNodeId?, seedField? } } }.
        * @returns { ok, error? }.
        */
       setConfig: (config: GeneratorConfig): ActionResult => {

@@ -16,6 +16,12 @@ export interface ComfyNodeMapping {
   /** LoadImage node ids, in fill order. Empty or absent means a text-only workflow. */
   referenceImageNodeIds?: string[];
   outputNodeId: string;
+  /** A second output node — typically a background-removal node feeding its own SaveImage — that
+   * produces a transparent cutout instead of the workflow's normal full-bleed image. Used only when
+   * the request asks for a transparent result (see GenerationRequest.transparent); the branch is
+   * pruned from the submitted graph otherwise, so a plain background/scene generation doesn't pay
+   * for running it. Optional: without it, transparent requests just get the normal output. */
+  transparentOutputNodeId?: string;
   sizeNodeId?: string;
   seedNodeId?: string;
   /** The seed node's input field name. Defaults to "seed". */
@@ -62,12 +68,24 @@ export function assertValidComfyConfig(config: unknown): asserts config is Comfy
     if (!(id in workflow))
       throw new Error(`nodes.referenceImageNodeIds: no node "${id}" in the workflow.`);
   }
+  const { transparentOutputNodeId } = nodes as ComfyNodeMapping;
+  if (transparentOutputNodeId !== undefined && !(transparentOutputNodeId in workflow)) {
+    throw new Error(
+      `nodes.transparentOutputNodeId: no node "${transparentOutputNodeId}" in the workflow.`
+    );
+  }
 }
 
 function patchWorkflow(
   workflow: ComfyWorkflow,
   nodes: ComfyNodeMapping,
-  patch: { prompt: string; referenceFilenames: string[]; width?: number; height?: number }
+  patch: {
+    prompt: string;
+    referenceFilenames: string[];
+    width?: number;
+    height?: number;
+    transparent?: boolean;
+  }
 ): ComfyWorkflow {
   const graph = structuredClone(workflow);
   const at = (id: string, label: string): ComfyWorkflowNode => {
@@ -75,6 +93,12 @@ function patchWorkflow(
     if (!node) throw new Error(`Workflow has no node "${id}" (${label}).`);
     return node;
   };
+  // A SaveImage-like node always runs once submitted, whether or not anything reads its result back
+  // (ComfyUI treats it as a required output node). Drop the transparent-output branch when it isn't
+  // wanted so a plain background/scene generation doesn't pay for running it.
+  if (!patch.transparent && nodes.transparentOutputNodeId) {
+    delete graph[nodes.transparentOutputNodeId];
+  }
   at(nodes.positivePromptNodeId, 'positive prompt').inputs[nodes.promptField ?? 'text'] =
     patch.prompt;
   (nodes.referenceImageNodeIds ?? []).forEach((id, i) => {
@@ -199,7 +223,11 @@ export function createComfyProvider(
     return (await asJson<{ name: string }>(res, 'upload')).name;
   }
 
-  async function waitForResult(promptId: string, signal?: AbortSignal): Promise<ComfyImageRef> {
+  async function waitForResult(
+    promptId: string,
+    outputNodeId: string,
+    signal?: AbortSignal
+  ): Promise<ComfyImageRef> {
     for (;;) {
       const res = await fetchImpl(`${base}/history/${promptId}`, { signal });
       const history = await asJson<ComfyHistory>(res, 'history');
@@ -207,7 +235,7 @@ export function createComfyProvider(
       if (entry?.status?.status_str === 'error') {
         throw new Error(`ComfyUI reported an error running prompt ${promptId}.`);
       }
-      const image = entry?.outputs?.[config.nodes.outputNodeId]?.images?.[0];
+      const image = entry?.outputs?.[outputNodeId]?.images?.[0];
       if (image) return image;
       await delay(1500, signal);
     }
@@ -226,6 +254,7 @@ export function createComfyProvider(
       referenceImages,
       width,
       height,
+      transparent,
       signal,
     }: GenerationRequest): Promise<string> {
       try {
@@ -239,7 +268,12 @@ export function createComfyProvider(
           referenceFilenames,
           width,
           height,
+          transparent,
         });
+        const outputNodeId =
+          transparent && config.nodes.transparentOutputNodeId
+            ? config.nodes.transparentOutputNodeId
+            : config.nodes.outputNodeId;
         const submitRes = await fetchImpl(`${base}/prompt`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -247,7 +281,7 @@ export function createComfyProvider(
           signal,
         });
         const { prompt_id: promptId } = await asJson<{ prompt_id: string }>(submitRes, 'submit');
-        const image = await waitForResult(promptId, signal);
+        const image = await waitForResult(promptId, outputNodeId, signal);
         const viewRes = await fetchImpl(
           `${base}/view?${new URLSearchParams(Object.entries(image))}`,
           { signal }

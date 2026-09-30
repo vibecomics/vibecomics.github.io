@@ -119,6 +119,79 @@ test('createComfyProvider drops an unused reference-image node and its link, rat
   });
 });
 
+test('createComfyProvider drops the transparent-output branch when the request does not want it', async () => {
+  const withBranch: ComfyConfig = {
+    ...config,
+    workflow: {
+      ...config.workflow,
+      '20': { class_type: 'InspyrenetRembg', inputs: { image: ['9', 0] } },
+      '21': { class_type: 'SaveImage', inputs: { images: ['20', 0] } },
+    },
+    nodes: { ...config.nodes, transparentOutputNodeId: '21' },
+  };
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith('/prompt')) {
+      const body = JSON.parse(String(init?.body));
+      assert.equal(body.prompt['21'], undefined, 'the unused transparent branch should be pruned');
+      assert.equal(
+        body.prompt['20'].inputs.image[0],
+        '9',
+        'the branch itself may be left dangling'
+      );
+      return new Response(JSON.stringify({ prompt_id: 'p1' }), { status: 200 });
+    }
+    if (url.includes('/history/')) {
+      const outputs = { '9': { images: [{ filename: 'out.png', subfolder: '', type: 'output' }] } };
+      return new Response(JSON.stringify({ p1: { outputs } }), { status: 200 });
+    }
+    if (url.includes('/view'))
+      return new Response(new Blob([new Uint8Array([1])], { type: 'image/png' }), { status: 200 });
+    throw new Error(`unexpected fetch ${url}`);
+  }) as typeof fetch;
+  await createComfyProvider(withBranch, fetchImpl).generate({
+    prompt: 'a cat',
+    referenceImages: [],
+  });
+});
+
+test('createComfyProvider reads from the transparent-output node when the request wants it', async () => {
+  const withBranch: ComfyConfig = {
+    ...config,
+    workflow: {
+      ...config.workflow,
+      '20': { class_type: 'InspyrenetRembg', inputs: { image: ['9', 0] } },
+      '21': { class_type: 'SaveImage', inputs: { images: ['20', 0] } },
+    },
+    nodes: { ...config.nodes, transparentOutputNodeId: '21' },
+  };
+  const fetchImpl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith('/prompt')) {
+      const body = JSON.parse(String(init?.body));
+      assert.ok(body.prompt['21'], 'the transparent branch should be kept');
+      return new Response(JSON.stringify({ prompt_id: 'p1' }), { status: 200 });
+    }
+    if (url.includes('/history/')) {
+      const outputs = {
+        '9': { images: [{ filename: 'raw.png', subfolder: '', type: 'output' }] },
+        '21': { images: [{ filename: 'cut.png', subfolder: '', type: 'output' }] },
+      };
+      return new Response(JSON.stringify({ p1: { outputs } }), { status: 200 });
+    }
+    if (url.includes('/view')) {
+      assert.match(url, /filename=cut\.png/);
+      return new Response(new Blob([new Uint8Array([1])], { type: 'image/png' }), { status: 200 });
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  }) as typeof fetch;
+  await createComfyProvider(withBranch, fetchImpl).generate({
+    prompt: 'a cat',
+    referenceImages: [],
+    transparent: true,
+  });
+});
+
 test('listComfyQwenModels reads the installed UNET/CLIP/VAE/LoRA filenames from object_info', async () => {
   const byClass: Record<string, [string, string]> = {
     UNETLoader: ['unet_name', 'u.safetensors'],
