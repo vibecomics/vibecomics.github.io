@@ -129,17 +129,21 @@ export function cancelQueueItem(id: string): boolean {
   return cancelGeneration(id);
 }
 
-/** One request in the generation queue: what it's for, and whether it's running yet or still waiting. */
+/** One request in the generation queue: what it's for, and how far it's gotten. Unlike the old
+ * queue, a finished item (done or error) stays here, in place, until clearCompletedQueueItems()
+ * removes it — so a panel listing the queue can show what was generated, not just what's in flight. */
 export interface QueueItem {
   id: string;
   label: string;
-  status: 'queued' | 'running';
+  status: 'queued' | 'running' | 'done' | 'error';
+  error?: string;
 }
 
 let queueItems: QueueItem[] = [];
 const queueListeners = new Set<() => void>();
 
-/** The generation queue right now: running (if any) first, then queued, in the order they'll run. */
+/** The generation queue right now, in the order each item was first requested: queued/running items
+ * (at most one running at a time) alongside finished ones (done/error) that haven't been cleared. */
 export function getQueue(): QueueItem[] {
   return queueItems;
 }
@@ -153,24 +157,38 @@ function notifyQueue(): void {
   queueListeners.forEach((listener) => listener());
 }
 
+/** Removes every finished (done or error) item from the queue; anything still queued or running is
+ * left alone. */
+export function clearCompletedQueueItems(): void {
+  queueItems = queueItems.filter((i) => i.status === 'queued' || i.status === 'running');
+  notifyQueue();
+}
+
+function setQueueItem(id: string, item: QueueItem): void {
+  queueItems = queueItems.some((i) => i.id === id)
+    ? queueItems.map((i) => (i.id === id ? item : i))
+    : [...queueItems, item];
+  notifyQueue();
+}
+
 // One request at a time, even across overlapping layer()/dirty()/reference-image calls. Items are
-// tracked and removed by their stable string id (the same layerKey/referenceKey trackedGeneration
-// tracks status and the abort controller under, not object identity, which changes on each status
-// update) so a finished item is reliably taken out of the queue, and cancelGeneration(id) can cancel
+// tracked by their stable string id (the same layerKey/referenceKey trackedGeneration tracks status
+// and the abort controller under, not object identity) so re-generating the same layer/entry updates
+// its existing row in place instead of adding a duplicate, and cancelGeneration(id) can cancel
 // straight from a queue() listing.
 let queueTail: Promise<unknown> = Promise.resolve();
 function enqueue<T>(id: string, label: string, task: () => Promise<T>): Promise<T> {
-  queueItems = [...queueItems, { id, label, status: 'queued' }];
-  notifyQueue();
+  setQueueItem(id, { id, label, status: 'queued' });
 
   const runTask = async (): Promise<T> => {
-    queueItems = queueItems.map((i) => (i.id === id ? { ...i, status: 'running' } : i));
-    notifyQueue();
+    setQueueItem(id, { id, label, status: 'running' });
     try {
-      return await task();
-    } finally {
-      queueItems = queueItems.filter((i) => i.id !== id);
-      notifyQueue();
+      const result = await task();
+      setQueueItem(id, { id, label, status: 'done' });
+      return result;
+    } catch (e) {
+      setQueueItem(id, { id, label, status: 'error', error: errorMessage(e) });
+      throw e;
     }
   };
   const run = queueTail.then(runTask, runTask);
@@ -537,23 +555,34 @@ export async function generateAllDirty(
   commit: CommitLayerImage
 ): Promise<GenerationOutcome[]> {
   const refs = dirtyLayerRefs(requireProject(deps));
-  const outcomes: GenerationOutcome[] = [];
-  for (const ref of refs) {
-    deps.setStatus(`Generating image ${outcomes.length + 1} of ${refs.length}…`);
+
+  // Queue every dirty layer's generation up front, not one at a time as each finishes:
+  // trackedGeneration marks its key "queued" the instant it's called, so the queue (and any panel
+  // showing it) lists every layer waiting its turn right away, not just the one currently running
+  // (see generateAllVariations, which does the same). The shared queue (see enqueue/queueTail) still
+  // runs them one request at a time, in this same order.
+  const runs = refs.map((ref) => {
     const key = layerKey(ref.panelId, ref.layerId);
     const label = describeLayer(deps, ref.panelId, ref.layerId);
+    const run = trackedGeneration(key, label, async (signal) => {
+      const image = await runLayerGeneration(
+        deps,
+        ref.panelId,
+        ref.layerId,
+        undefined,
+        undefined,
+        signal
+      );
+      commit(ref.panelId, ref.layerId, image.id, image.aspectRatio);
+    });
+    return { ref, run };
+  });
+
+  const outcomes: GenerationOutcome[] = [];
+  for (const { ref, run } of runs) {
+    deps.setStatus(`Generating image ${outcomes.length + 1} of ${refs.length}…`);
     try {
-      await trackedGeneration(key, label, async (signal) => {
-        const image = await runLayerGeneration(
-          deps,
-          ref.panelId,
-          ref.layerId,
-          undefined,
-          undefined,
-          signal
-        );
-        commit(ref.panelId, ref.layerId, image.id, image.aspectRatio);
-      });
+      await run;
       outcomes.push({ ...ref, ok: true });
     } catch (e) {
       outcomes.push({ ...ref, ok: false, error: errorMessage(e) });

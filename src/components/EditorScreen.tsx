@@ -5,6 +5,8 @@ import ConflictDot from './ConflictDot';
 import EditorNavbar from './EditorNavbar';
 import { EDITOR_TABS } from './editorTabs';
 import type { EditorTab } from './editorTabs';
+import { setGenerationPanelOpen, useGenerationPanelOpen } from './generationPanelState';
+import GenerationPanel from './GenerationPanel';
 import MediaTab from './MediaTab';
 import OutlineTab from './OutlineTab';
 import PagesTab from './PagesTab';
@@ -39,6 +41,8 @@ export default function EditorScreen({
   conflictBar,
   onRefresh,
 }: Props) {
+  const generationPanelOpen = useGenerationPanelOpen();
+
   return (
     <ProjectContext.Provider value={project}>
       <div className="position-fixed top-0 bottom-0 start-0 end-0 d-flex flex-column bg-body-tertiary">
@@ -66,27 +70,30 @@ export default function EditorScreen({
           ))}
         </ul>
 
-        {tab === 'pages' ? (
-          <PagesTab
-            pages={project.pages}
-            pageIndex={pageIndex}
-            pageSize={project.metadata.pageSize}
-            media={project.metadata.media}
-            conflictPageIds={conflictPageIds}
-          />
-        ) : (
-          <div className="flex-grow-1 overflow-auto" style={{ minHeight: 0 }}>
-            {tab === 'outline' && <OutlineTab key={project.id} project={project} />}
-            {tab === 'cast' && (
-              <>
-                <StoryTab key={`${project.id}-characters`} project={project} kind="characters" />
-                <StoryTab key={`${project.id}-objects`} project={project} kind="objects" />
-              </>
-            )}
-            {tab === 'scenes' && <StoryTab key={project.id} project={project} kind="scenes" />}
-            {tab === 'media' && <MediaTab media={project.metadata.media} />}
-          </div>
-        )}
+        <div className="d-flex flex-grow-1" style={{ minHeight: 0 }}>
+          {tab === 'pages' ? (
+            <PagesTab
+              pages={project.pages}
+              pageIndex={pageIndex}
+              pageSize={project.metadata.pageSize}
+              media={project.metadata.media}
+              conflictPageIds={conflictPageIds}
+            />
+          ) : (
+            <div className="flex-grow-1 overflow-auto" style={{ minHeight: 0, minWidth: 0 }}>
+              {tab === 'outline' && <OutlineTab key={project.id} project={project} />}
+              {tab === 'cast' && (
+                <>
+                  <StoryTab key={`${project.id}-characters`} project={project} kind="characters" />
+                  <StoryTab key={`${project.id}-objects`} project={project} kind="objects" />
+                </>
+              )}
+              {tab === 'scenes' && <StoryTab key={project.id} project={project} kind="scenes" />}
+              {tab === 'media' && <MediaTab media={project.metadata.media} />}
+            </div>
+          )}
+          {generationPanelOpen && <GenerationPanel onClose={() => setGenerationPanelOpen(false)} />}
+        </div>
 
         {conflictBar}
       </div>

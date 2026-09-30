@@ -87,7 +87,7 @@ export default function PagesTab({ pages, pageIndex, pageSize, media, conflictPa
   }, [panelId, current.layerId, current.bubbleId]);
 
   return (
-    <div className="d-flex flex-column flex-grow-1" style={{ minHeight: 0 }}>
+    <div className="d-flex flex-column flex-grow-1" style={{ minHeight: 0, minWidth: 0 }}>
       <div className="d-flex flex-grow-1" style={{ minHeight: 0 }}>
         <div
           className="d-none d-md-flex flex-column border-end bg-body py-2"

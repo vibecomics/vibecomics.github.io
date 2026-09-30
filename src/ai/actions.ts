@@ -60,6 +60,7 @@ import {
   cancelQueueItem as cancelGenerationQueueItem,
   cancelReferenceGeneration,
   cancelVariationGeneration,
+  clearCompletedQueueItems as clearCompletedGenerationQueueItems,
   defaultEntryReferences,
   defaultLayerReferences,
   generateAllDirty,
@@ -1695,9 +1696,8 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * The generation queue right now: every layer, dirty-batch, reference-image and variation-image
-       * request that's running or waiting its turn, in the order it will run (or is running). Empty
-       * when nothing is generating.
-       * @returns [{ id, label, status: "queued" | "running" }].
+       * request that's running, waiting its turn, or has finished since the queue was last cleared.
+       * @returns [{ id, label, status: "queued" | "running" | "done" | "error", error? }].
        */
       queue: (): QueueItem[] => getQueue(),
 
@@ -1708,6 +1708,12 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @returns True if something was cancelled, false if that id isn't outstanding (e.g. it already finished).
        */
       cancelQueueItem: (id: string): boolean => cancelGenerationQueueItem(id),
+
+      /**
+       * Remove every finished (done or error) item from generate.queue()'s list; anything still
+       * queued or running is left alone.
+       */
+      clearCompletedQueueItems: (): void => clearCompletedGenerationQueueItems(),
     },
   };
 
