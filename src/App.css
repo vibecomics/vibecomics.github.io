@@ -522,6 +522,9 @@
   color: #fff;
   font-size: 2rem;
   line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .lightbox-btn:hover {
@@ -531,6 +534,11 @@
 .lightbox-close {
   top: 0.75rem;
   right: 0.75rem;
+}
+
+.lightbox-delete {
+  top: 0.75rem;
+  right: 4rem;
 }
 
 .lightbox-prev,

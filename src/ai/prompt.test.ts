@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createBlankProject } from '../state/project';
 import type { ComicProject } from '../types/comic';
-import { buildLayerPrompt } from './prompt';
+import { buildLayerPrompt, defaultReferenceNote } from './prompt';
 
 function projectWithScene(): ComicProject {
   const project = createBlankProject('Test');
@@ -98,4 +98,38 @@ test("buildLayerPrompt leaves the page prompt, panel prompt and background scene
 test('buildLayerPrompt throws when the layer is not found', () => {
   const project = createBlankProject('Test');
   assert.throws(() => buildLayerPrompt(project, project.pages[0].panels[0].id, 'nope'));
+});
+
+function projectWithCharacterAndScene(): ComicProject {
+  const project = createBlankProject('Test');
+  project.metadata.characters.push({
+    id: 'char1',
+    name: 'Ashwini',
+    description: '',
+    sceneIds: [],
+    imageIds: ['media1'],
+  });
+  project.metadata.scenes.push({
+    id: 'scene1',
+    name: 'Rooftop',
+    description: '',
+    characterIds: [],
+    imageIds: ['media2'],
+  });
+  return project;
+}
+
+test('defaultReferenceNote names the character whose imageIds list this mediaId', () => {
+  const project = projectWithCharacterAndScene();
+  assert.match(defaultReferenceNote(project, 'media1') ?? '', /Ashwini/);
+});
+
+test('defaultReferenceNote names the scene whose imageIds list this mediaId', () => {
+  const project = projectWithCharacterAndScene();
+  assert.match(defaultReferenceNote(project, 'media2') ?? '', /Rooftop/);
+});
+
+test('defaultReferenceNote is undefined for a mediaId no entry lists', () => {
+  const project = projectWithCharacterAndScene();
+  assert.equal(defaultReferenceNote(project, 'media-unknown'), undefined);
 });

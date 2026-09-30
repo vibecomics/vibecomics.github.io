@@ -4,7 +4,7 @@ import DropdownMenu from './DropdownMenu';
 import GenerateDirtyModal from './GenerateDirtyModal';
 import { useProject } from './ProjectContext';
 import { useBusy } from './useBusy';
-import { useGenerationQueue } from './useIsGenerating';
+import { useGenerationQueue } from './useGenerationStatus';
 
 /** A dropdown showing the generation queue: what's running and what's waiting its turn. */
 function QueueButton() {

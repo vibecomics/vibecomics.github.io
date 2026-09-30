@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cb } from '../ai/actions';
-import type { GenerationReference } from '../ai/prompt';
-import type { MediaItem } from '../types/comic';
+import { defaultReferenceNote, joinPromptParts } from '../ai/prompt';
+import type { GenerationReference, PromptPart } from '../ai/prompt';
+import type { ComicProject, MediaItem } from '../types/comic';
 import { uploadImage } from './panelActions';
+import { TrashIcon } from './Icons';
 import MediaPicker from './MediaPicker';
 import MediaThumb from './MediaThumb';
 import Spinner from './Spinner';
@@ -16,14 +18,24 @@ export interface Generated extends MediaItem {
 
 interface Props {
   title: string;
-  getDefaultPrompt: () => string;
+  /** For looking up a manually-added reference's subject/scene, to prefill its note (see
+   * defaultReferenceNote). */
+  project: ComicProject;
+  /** The labeled pieces the prompt is stitched from (Style, Panel, Layer prompt, ...): each is shown
+   * collapsed, expandable to edit or drop on its own, instead of one large block of text. */
+  getDefaultPromptParts: () => PromptPart[];
   /** The reference images sent by default; the user can remove some, add others and annotate each. */
   getDefaultReferences: () => GenerationReference[];
   /** Every image in the project: what the user can pick references from. */
   media: MediaItem[];
   onGenerate: (prompt: string, references: GenerationReference[]) => Promise<Generated>;
-  /** Called when the user accepts the generated image. */
-  onUse: (result: Generated) => void;
+  /**
+   * Called with a generated image, `primary` false the instant generation succeeds (before the user
+   * does anything else — so the image is attached and never lost even if the tab is closed or
+   * reloaded right away) and again with `primary` true if the user then clicks "Use this image" to
+   * promote it to the layer's/entry's active image.
+   */
+  onUse: (result: Generated, opts: { primary: boolean }) => void;
   onClose: () => void;
 }
 
@@ -47,32 +59,67 @@ function Preview({ item }: { item: MediaItem }) {
  * and try again. Used for layer/background art and story-bible reference images alike. */
 export default function GenerateImageModal({
   title,
-  getDefaultPrompt,
+  project,
+  getDefaultPromptParts,
   getDefaultReferences,
   media,
   onGenerate,
   onUse,
   onClose,
 }: Props) {
-  const [prompt, setPrompt] = useState(getDefaultPrompt);
+  const [parts, setParts] = useState(getDefaultPromptParts);
+  // Collapsed by default (a stitched prompt can be long); expanded state is keyed by label rather
+  // than index so it survives a part being deleted.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [references, setReferences] = useState(getDefaultReferences);
   const [picking, setPicking] = useState(false);
   const max = cb().generate.maxReferenceImages();
   const [result, setResult] = useState<Generated | null>(null);
   const task = useTask();
 
+  const prompt = joinPromptParts(parts);
+
+  function togglePart(label: string) {
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  }
+
+  function updatePartText(i: number, text: string) {
+    setParts((current) => current.map((part, j) => (j === i ? { ...part, text } : part)));
+  }
+
+  function removePart(i: number) {
+    setParts((current) => current.filter((_, j) => j !== i));
+  }
+
   function addReference(mediaId: string) {
-    setReferences((current) =>
-      current.some((r) => r.mediaId === mediaId) ? current : [...current, { mediaId }]
-    );
+    setReferences((current) => {
+      if (current.some((r) => r.mediaId === mediaId)) return current;
+      const note = defaultReferenceNote(project, mediaId);
+      return [...current, note ? { mediaId, note } : { mediaId }];
+    });
     setPicking(false);
   }
 
   function generate() {
     setResult(null);
     void task.run(async () => {
-      setResult(await onGenerate(prompt, references));
+      const generated = await onGenerate(prompt, references);
+      // Attach it the moment it exists, before the user can do anything else (including closing the
+      // tab) — never leave a generated image sitting unattached, waiting on a later action.
+      onUse(generated, { primary: false });
+      setResult(generated);
     });
+  }
+
+  function useResult() {
+    if (!result) return;
+    onUse(result, { primary: true });
+    onClose();
   }
 
   return createPortal(
@@ -92,13 +139,65 @@ export default function GenerateImageModal({
               <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
             </div>
             <div className="modal-body">
-              <label className="form-label small">Prompt</label>
-              <textarea
-                className="form-control form-control-sm mb-2"
-                rows={8}
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-              />
+              <label className="form-label small">
+                Prompt <span className="text-muted">({parts.length} parts stitched together)</span>
+              </label>
+              <div className="mb-3">
+                {parts.length === 0 && (
+                  <div className="text-muted small mb-2">
+                    Every part of the prompt was removed — there's nothing to generate from.
+                  </div>
+                )}
+                {parts.map((part, i) => {
+                  const isOpen = expanded.has(part.label);
+                  return (
+                    <div key={part.label} className="mb-1">
+                      <div className="d-flex align-items-center">
+                        <button
+                          type="button"
+                          className="btn btn-link btn-sm flex-grow-1 text-start text-decoration-none d-flex align-items-center gap-2 px-2 py-1"
+                          style={{ minWidth: 0 }}
+                          onClick={() => togglePart(part.label)}
+                          aria-expanded={isOpen}
+                        >
+                          <span aria-hidden="true">{isOpen ? '▾' : '▸'}</span>
+                          <strong className="small text-nowrap">{part.label}</strong>
+                          {!isOpen && (
+                            <span
+                              className="text-muted small text-truncate"
+                              style={{ minWidth: 0 }}
+                            >
+                              {part.text}
+                            </span>
+                          )}
+                        </button>
+                        {isOpen && (
+                          <button
+                            type="button"
+                            className="btn btn-link btn-sm p-0 me-2 text-secondary d-flex align-items-center"
+                            title={`Remove "${part.label}" from the prompt`}
+                            aria-label={`Remove "${part.label}" from the prompt`}
+                            onClick={() => removePart(i)}
+                          >
+                            <TrashIcon />
+                          </button>
+                        )}
+                      </div>
+                      {isOpen && (
+                        <div className="px-2 pb-2">
+                          <textarea
+                            className="form-control form-control-sm w-100"
+                            rows={4}
+                            value={part.text}
+                            aria-label={`${part.label} text`}
+                            onChange={(e) => updatePartText(i, e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
               <label className="form-label small">
                 Reference images{' '}
                 <span className="text-muted">
@@ -126,25 +225,22 @@ export default function GenerateImageModal({
                       ) : (
                         <span className="text-muted small">Missing image</span>
                       )}
-                      <div className="flex-grow-1">
-                        <div className="small text-muted">
-                          Image {i + 1}
-                          {i >= max && ' — not used (over the limit)'}
-                        </div>
-                        <input
-                          className="form-control form-control-sm"
-                          value={ref.note ?? ''}
-                          placeholder="Say something about this image (optional), e.g. “use this outfit”"
-                          aria-label={`Note about reference image ${i + 1}`}
-                          onChange={(e) =>
-                            setReferences(
-                              references.map((r, j) =>
-                                j === i ? { ...r, note: e.target.value } : r
-                              )
-                            )
-                          }
-                        />
-                      </div>
+                      <textarea
+                        className="form-control form-control-sm flex-grow-1"
+                        style={{ height: 72, resize: 'none' }}
+                        value={ref.note ?? ''}
+                        placeholder="What should the generator take from this image? e.g. “match this exact outfit”, “use the pose only”, “ignore the background”"
+                        aria-label={
+                          i >= max
+                            ? `Note about reference image ${i + 1} (not used — over the limit)`
+                            : `Note about reference image ${i + 1}`
+                        }
+                        onChange={(e) =>
+                          setReferences(
+                            references.map((r, j) => (j === i ? { ...r, note: e.target.value } : r))
+                          )
+                        }
+                      />
                     </div>
                   );
                 })}
@@ -171,14 +267,7 @@ export default function GenerateImageModal({
                   >
                     {task.busy && <Spinner />}✨ Regenerate
                   </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => {
-                      onUse(result);
-                      onClose();
-                    }}
-                  >
+                  <button type="button" className="btn btn-primary btn-sm" onClick={useResult}>
                     Use this image
                   </button>
                 </>

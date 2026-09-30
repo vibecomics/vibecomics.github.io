@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { MediaItem } from '../types/comic';
+import { TrashIcon } from './Icons';
 import { loadBlobUrl } from './mediaImages';
 
 interface Props {
@@ -8,10 +9,13 @@ interface Props {
   /** Index of the image to open on. */
   start: number;
   onClose: () => void;
+  /** Deletes the image outright (not just from whatever list opened this lightbox). Omit to hide the
+   * delete button, e.g. where the caller has no way to remove media. */
+  onDelete?: (item: MediaItem) => void;
 }
 
 /** A full-size popup over the page for a set of images, with prev/next arrows when there are several. */
-export default function ImageLightbox({ items, start, onClose }: Props) {
+export default function ImageLightbox({ items, start, onClose, onDelete }: Props) {
   const [index, setIndex] = useState(Math.min(start, items.length - 1));
   const [loaded, setLoaded] = useState<{ id: string; url: string | null } | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -75,6 +79,17 @@ export default function ImageLightbox({ items, start, onClose }: Props) {
       >
         &times;
       </button>
+      {onDelete && (
+        <button
+          type="button"
+          className="lightbox-btn lightbox-delete"
+          aria-label={`Delete ${item.name}`}
+          title="Delete this image"
+          onClick={() => onDelete(item)}
+        >
+          <TrashIcon />
+        </button>
+      )}
       {many && (
         <button
           type="button"

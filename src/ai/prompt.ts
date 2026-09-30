@@ -3,6 +3,29 @@ import { findPanel, layerArtSize } from './builders';
 
 export type ReferenceKind = 'characters' | 'objects' | 'scenes';
 
+/** One labeled piece of a stitched prompt (e.g. "Style", "Panel", "Layer prompt"), so a UI can show,
+ * edit or drop each piece on its own instead of one opaque block of text. */
+export interface PromptPart {
+  label: string;
+  text: string;
+}
+
+/** Trims every part's text and drops any that end up empty — what a raw list of (label, maybe-empty
+ * text) pairs becomes before it's shown (buildLayerPromptParts/buildReferencePromptParts) or sent to
+ * a generator (joinPromptParts). */
+function keepNonEmpty(parts: { label: string; text: string | undefined }[]): PromptPart[] {
+  return parts.flatMap(({ label, text }) => (text?.trim() ? [{ label, text: text.trim() }] : []));
+}
+
+/** Joins prompt parts into the single string a generator takes, in order, dropping any with no text.
+ * Reproduces the equivalent buildLayerPrompt/buildReferencePrompt string, and is also what a UI (see
+ * GenerateImageModal) uses to assemble its edited parts before generating. */
+export function joinPromptParts(parts: PromptPart[]): string {
+  return keepNonEmpty(parts)
+    .map((part) => part.text)
+    .join('\n\n');
+}
+
 /** The technical requirements line for a story-bible entry's reference art: characters and objects
  * get an isolated multi-angle turnaround (so later generations have more than one angle to match);
  * a scene gets an establishing shot of the place itself, since that art is meant to be a background. */
@@ -19,19 +42,35 @@ function referenceTechnical(kind: ReferenceKind): string {
   );
 }
 
-/** Stitches the prompt for a story-bible entry's reference art: STYLE, its description, then the
- * kind-appropriate technical requirements (see referenceTechnical). */
+const ENTRY_LABEL: Record<ReferenceKind, string> = {
+  characters: 'Character',
+  objects: 'Object',
+  scenes: 'Scene',
+};
+
+/** The labeled parts of a story-bible entry's reference art prompt: Style, its description (labeled
+ * by kind), then the kind-appropriate technical requirements (see referenceTechnical). */
+export function buildReferencePromptParts(
+  project: ComicProject,
+  kind: ReferenceKind,
+  id: string
+): PromptPart[] {
+  const entry = project.metadata[kind].find((e) => e.id === id);
+  if (!entry) throw new Error(`"${id}" not found in ${kind}.`);
+  return keepNonEmpty([
+    { label: 'Style', text: project.metadata.style },
+    { label: ENTRY_LABEL[kind], text: entry.description },
+    { label: 'Technical requirements', text: referenceTechnical(kind) },
+  ]);
+}
+
+/** Stitches the prompt for a story-bible entry's reference art (see buildReferencePromptParts). */
 export function buildReferencePrompt(
   project: ComicProject,
   kind: ReferenceKind,
   id: string
 ): string {
-  const entry = project.metadata[kind].find((e) => e.id === id);
-  if (!entry) throw new Error(`"${id}" not found in ${kind}.`);
-  return [project.metadata.style, entry.description, referenceTechnical(kind)]
-    .map((part) => part?.trim())
-    .filter(Boolean)
-    .join('\n\n');
+  return joinPromptParts(buildReferencePromptParts(project, kind, id));
 }
 
 /** The story-bible entry a layer shows: a character or object (foreground) or a scene (background). */
@@ -43,15 +82,26 @@ export function layerSubject(project: ComicProject, layer: Layer): StoryEntry | 
     : project.metadata.scenes.find((s) => s.id === layer.sceneId);
 }
 
+/** What to label a layer's linked story-bible entry: "Scene" for a background, else "Character" or
+ * "Object" depending on which list the subject is in. */
+function subjectLabel(project: ComicProject, layer: Layer): string {
+  if (layer.kind === 'background') return 'Scene';
+  return project.metadata.objects.some((o) => o.id === layer.subjectId) ? 'Object' : 'Character';
+}
+
 /**
- * Stitches the prompt for a layer's (or background's) image: STYLE, then, for a background, the
+ * The labeled parts of a layer's (or background's) image prompt: Style, then, for a background, the
  * page and panel prompts and its scene (it's meant to depict that setting); for a foreground layer,
  * only its subject's description (not the page/panel prompts, and not its panel's background scene
  * either — any setting language anywhere in the prompt makes this model draw a full scene instead of
  * an isolated cutout, confirmed by testing a "for context only, do not draw it" scene description).
  * Then the layer prompt, then a technical requirements line.
  */
-export function buildLayerPrompt(project: ComicProject, panelId: string, layerId: string): string {
+export function buildLayerPromptParts(
+  project: ComicProject,
+  panelId: string,
+  layerId: string
+): PromptPart[] {
   const panel = findPanel(project, panelId);
   const layer = panel?.layers.find((l) => l.id === layerId);
   if (!panel || !layer) throw new Error(`Layer "${layerId}" not found.`);
@@ -65,27 +115,53 @@ export function buildLayerPrompt(project: ComicProject, panelId: string, layerId
     ? 'Foreground subject only, on a plain solid white background: no scene, no shadow, no border, no baked-in text.'
     : `Full-bleed background image, aspect ratio ${size?.aspectRatio ?? 1}:1, no border.`;
 
-  const parts = isForeground
-    ? [project.metadata.style, subject?.description, layer.prompt, technical]
-    : [
-        project.metadata.style,
-        page?.prompt,
-        panel.prompt,
-        subject?.description,
-        layer.prompt,
-        technical,
-      ];
+  const style = { label: 'Style', text: project.metadata.style };
+  const subjectPart = { label: subjectLabel(project, layer), text: subject?.description };
+  const layerPart = { label: 'Layer prompt', text: layer.prompt };
+  const technicalPart = { label: 'Technical requirements', text: technical };
 
-  return parts
-    .map((part) => part?.trim())
-    .filter(Boolean)
-    .join('\n\n');
+  return keepNonEmpty(
+    isForeground
+      ? [style, subjectPart, layerPart, technicalPart]
+      : [
+          style,
+          { label: 'Page', text: page?.prompt },
+          { label: 'Panel', text: panel.prompt },
+          subjectPart,
+          layerPart,
+          technicalPart,
+        ]
+  );
+}
+
+/** Stitches the prompt for a layer's (or background's) image (see buildLayerPromptParts). */
+export function buildLayerPrompt(project: ComicProject, panelId: string, layerId: string): string {
+  return joinPromptParts(buildLayerPromptParts(project, panelId, layerId));
 }
 
 /** A reference image chosen for one generation, with an optional note on how to use it. */
 export interface GenerationReference {
   mediaId: string;
   note?: string;
+}
+
+/** A ready-made note for a reference image that is a story-bible entry's own reference art (its
+ * `imageIds` lists this mediaId), naming which entry it is so the generator doesn't have to guess
+ * when several reference images are sent together. Checked against `imageIds` rather than the
+ * MediaItem's own `subjectId`/`sceneId` tag, since that tag is only set for art generated or uploaded
+ * straight onto a layer — a character's own reference images are frequently untagged even though
+ * they're unambiguously that character's art. Undefined for an image linked to no entry (a plain
+ * upload, say) — the user writes their own note for those. */
+export function defaultReferenceNote(project: ComicProject, mediaId: string): string | undefined {
+  const character = project.metadata.characters.find((c) => c.imageIds.includes(mediaId));
+  if (character) {
+    return `This is ${character.name} — match this character's design exactly (face, proportions, outfit, colors).`;
+  }
+  const object = project.metadata.objects.find((o) => o.imageIds.includes(mediaId));
+  if (object) return `This is ${object.name} — match this object's design exactly.`;
+  const scene = project.metadata.scenes.find((s) => s.imageIds.includes(mediaId));
+  if (scene) return `This is the reference for the "${scene.name}" setting — match this location.`;
+  return undefined;
 }
 
 /** Appends the user's notes about reference images, numbered by position ("Image 1" is the first

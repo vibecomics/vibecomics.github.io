@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
+import { addToHistoryPatch } from '../ai/builders';
 import type { LayerUpdate } from '../ai/deps';
 import type { Layer, MediaItem } from '../types/comic';
 import { uploadImage, setLayerMedia } from './panelActions';
@@ -11,7 +12,7 @@ import MediaPicker from './MediaPicker';
 import MediaSlot from './MediaSlot';
 import { useProject } from './ProjectContext';
 import SliderRow from './SliderRow';
-import { useIsGenerating } from './useIsGenerating';
+import { useLayerGenerationStatus } from './useGenerationStatus';
 import { useTask } from './useTask';
 
 interface Props {
@@ -27,8 +28,9 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
   const [picking, setPicking] = useState(false);
   const [generatingModal, setGeneratingModal] = useState(false);
   const background = layer.kind === 'background';
-  const generating = useIsGenerating(panelId, layer.id);
-  const { characters, objects, scenes } = useProject().metadata;
+  const status = useLayerGenerationStatus(panelId, layer.id);
+  const project = useProject();
+  const { characters, objects, scenes } = project.metadata;
   const known = [...characters, ...objects].some((entry) => entry.id === layer.subjectId);
   const sceneKnown = scenes.some((scene) => scene.id === layer.sceneId);
   // A foreground layer shows a character or object; a background is the setting of a scene.
@@ -109,7 +111,7 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           onClick={() => setPicking(true)}
         />
         <GenerateButton
-          generating={generating}
+          status={status}
           blockedReason={layer.prompt?.trim() ? undefined : 'Write a prompt first'}
           title="Generate a new image from this prompt"
           onClick={() => setGeneratingModal(true)}
@@ -138,13 +140,20 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
       {generatingModal && (
         <GenerateImageModal
           title={`Generate ${background ? 'background' : 'layer'} image`}
-          getDefaultPrompt={() => cb().generate.layerPrompt(panelId, layer.id)}
+          project={project}
+          getDefaultPromptParts={() => cb().generate.layerPromptParts(panelId, layer.id)}
           getDefaultReferences={() => cb().generate.layerReferences(panelId, layer.id)}
           media={media}
           onGenerate={(prompt, references) =>
             cb().generate.layer(panelId, layer.id, prompt, references)
           }
-          onUse={(result) => update({ mediaId: result.id, aspectRatio: result.aspectRatio })}
+          onUse={(result, { primary }) =>
+            update(
+              primary
+                ? { mediaId: result.id, aspectRatio: result.aspectRatio }
+                : addToHistoryPatch(layer, result.id)
+            )
+          }
           onClose={() => setGeneratingModal(false)}
         />
       )}

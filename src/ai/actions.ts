@@ -64,7 +64,13 @@ import {
 } from './generation';
 import type { GenerationReference } from './generation';
 import type { GeneratedImage, GenerationOutcome, QueueItem, ReferenceKind } from './generation';
-import { buildLayerPrompt, buildReferencePrompt } from './prompt';
+import {
+  buildLayerPrompt,
+  buildLayerPromptParts,
+  buildReferencePrompt,
+  buildReferencePromptParts,
+} from './prompt';
+import type { PromptPart } from './prompt';
 
 declare global {
   interface Window {
@@ -1335,6 +1341,20 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         buildLayerPrompt(requireProject(deps), panelId, layerId),
 
       /**
+       * The default prompt for a layer's (or background's) image, broken into the labeled pieces
+       * that get stitched together (e.g. Style, Page, Panel, Scene/Character/Object, Layer prompt,
+       * Technical requirements — which appear depends on the layer's kind and what's linked; see
+       * generate.layerPrompt for the single joined string). Read this to show or edit each piece on
+       * its own before generating; joining every part's text with a blank line between them (in
+       * order) reproduces generate.layerPrompt.
+       * @param panelId - The panel id.
+       * @param layerId - The layer id.
+       * @returns The parts, each { label, text }, in stitching order. Throws when the panel or layer is not found.
+       */
+      layerPromptParts: (panelId: string, layerId: string): PromptPart[] =>
+        buildLayerPromptParts(requireProject(deps), panelId, layerId),
+
+      /**
        * What generate.dirty() would generate, without generating anything:
        * every layer and background across the whole project whose dirty is
        * true. Call this first to see (and confirm) the work, then generate.dirty().
@@ -1403,6 +1423,19 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        */
       referencePrompt: (kind: ReferenceKind, id: string): string =>
         buildReferencePrompt(requireProject(deps), kind, id),
+
+      /**
+       * The default prompt for a story-bible entry's reference image, broken into its labeled pieces
+       * (Style, Character/Object/Scene, Technical requirements; see generate.referencePrompt for the
+       * single joined string). Read this to show or edit each piece on its own before generating;
+       * joining every part's text with a blank line between them (in order) reproduces
+       * generate.referencePrompt.
+       * @param kind - "characters", "scenes", or "objects".
+       * @param id - The entry's id.
+       * @returns The parts, each { label, text }, in stitching order. Throws when the entry is not found.
+       */
+      referencePromptParts: (kind: ReferenceKind, id: string): PromptPart[] =>
+        buildReferencePromptParts(requireProject(deps), kind, id),
 
       /**
        * The generation queue right now: every layer, dirty-batch item and reference-image request

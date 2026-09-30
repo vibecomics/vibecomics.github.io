@@ -13,7 +13,7 @@
  */
 import { createProvider } from '../generators/types';
 import type { ImageProvider } from '../generators/types';
-import type { Layer, MediaItem } from '../types/comic';
+import type { ComicProject, Layer, MediaItem } from '../types/comic';
 import { errorMessage } from '../utils/errors';
 import { pngDimensions } from '../utils/image';
 import { dirtyLayerRefs, findPanel, layerArtSize, requireProject } from './builders';
@@ -23,6 +23,7 @@ import {
   appendReferenceNotes,
   buildLayerPrompt,
   buildReferencePrompt,
+  defaultReferenceNote,
   layerSubject,
 } from './prompt';
 import type { GenerationReference, ReferenceKind } from './prompt';
@@ -46,19 +47,25 @@ type CommitLayerImage = (
   aspectRatio?: number
 ) => Layer;
 
-// Which layer or story-bible entry is currently generating, so any component showing it can reflect
-// that, even one that mounted after the request started (see useIsGenerating).
-const inProgress = new Set<string>();
+/** Whether a layer's or entry's generation request is waiting its turn behind another one, or
+ * actively running right now. Undefined means neither: nothing outstanding for it. */
+export type GenerationStatus = 'queued' | 'running' | undefined;
+
+// Which layer or story-bible entry has a generation queued or running, so any component showing it
+// can reflect that, even one that mounted after the request started (see useGenerationStatus). A key
+// is set the instant its request is made (queued, before the shared queue reaches its turn — see
+// trackedGeneration) and cleared only once that request finishes, whether it errored or not.
+const statusByKey = new Map<string, 'queued' | 'running'>();
 const generatingListeners = new Set<() => void>();
 const layerKey = (panelId: string, layerId: string) => `layer:${panelId}:${layerId}`;
 const referenceKey = (kind: ReferenceKind, id: string) => `ref:${kind}:${id}`;
 
-export function isGeneratingLayer(panelId: string, layerId: string): boolean {
-  return inProgress.has(layerKey(panelId, layerId));
+export function layerGenerationStatus(panelId: string, layerId: string): GenerationStatus {
+  return statusByKey.get(layerKey(panelId, layerId));
 }
 
-export function isGeneratingReference(kind: ReferenceKind, id: string): boolean {
-  return inProgress.has(referenceKey(kind, id));
+export function referenceGenerationStatus(kind: ReferenceKind, id: string): GenerationStatus {
+  return statusByKey.get(referenceKey(kind, id));
 }
 
 export function subscribeGenerating(listener: () => void): () => void {
@@ -66,9 +73,9 @@ export function subscribeGenerating(listener: () => void): () => void {
   return () => generatingListeners.delete(listener);
 }
 
-function markGenerating(key: string, value: boolean): void {
-  if (value) inProgress.add(key);
-  else inProgress.delete(key);
+function setGenerationStatus(key: string, status: 'queued' | 'running' | undefined): void {
+  if (status) statusByKey.set(key, status);
+  else statusByKey.delete(key);
   generatingListeners.forEach((listener) => listener());
 }
 
@@ -136,14 +143,16 @@ async function downloadReferences(
   );
 }
 
-/** Runs a generation in the queue, marking `key` as generating for as long as it runs. */
+/** Runs a generation in the queue, marking `key` as queued the instant it's requested and running
+ * once its turn comes, so a button for it can tell "waiting" from "actively generating". */
 function trackedGeneration<T>(key: string, label: string, task: () => Promise<T>): Promise<T> {
+  setGenerationStatus(key, 'queued');
   return enqueue(label, async () => {
-    markGenerating(key, true);
+    setGenerationStatus(key, 'running');
     try {
       return await task();
     } finally {
-      markGenerating(key, false);
+      setGenerationStatus(key, undefined);
     }
   });
 }
@@ -257,6 +266,13 @@ export function generateReferenceImage(
   );
 }
 
+/** A reference to `mediaId`, with a ready-made note when it's known art of a character, object or
+ * scene (see defaultReferenceNote). */
+function referenceTo(project: ComicProject, mediaId: string): GenerationReference {
+  const note = defaultReferenceNote(project, mediaId);
+  return note ? { mediaId, note } : { mediaId };
+}
+
 /** The images a layer's generation sends by default: those of the character/object (foreground) or
  * scene (background) it shows. */
 export function defaultLayerReferences(
@@ -267,7 +283,9 @@ export function defaultLayerReferences(
   const project = requireProject(deps);
   const layer = findPanel(project, panelId)?.layers.find((l) => l.id === layerId);
   if (!layer) throw new Error(`Layer "${layerId}" not found.`);
-  return (layerSubject(project, layer)?.imageIds ?? []).map((mediaId) => ({ mediaId }));
+  return (layerSubject(project, layer)?.imageIds ?? []).map((mediaId) =>
+    referenceTo(project, mediaId)
+  );
 }
 
 /** The images a story-bible entry's reference generation sends by default: its existing ones. */
@@ -276,8 +294,9 @@ export function defaultEntryReferences(
   kind: ReferenceKind,
   id: string
 ): GenerationReference[] {
-  const entry = requireProject(deps).metadata[kind].find((e) => e.id === id);
-  return (entry?.imageIds ?? []).map((mediaId) => ({ mediaId }));
+  const project = requireProject(deps);
+  const entry = project.metadata[kind].find((e) => e.id === id);
+  return (entry?.imageIds ?? []).map((mediaId) => referenceTo(project, mediaId));
 }
 
 /** How many reference images the configured generator uses (0 when none is configured). */

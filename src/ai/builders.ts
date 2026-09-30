@@ -285,6 +285,18 @@ export function imageSwapPatch(
   };
 }
 
+/**
+ * Adds an image to a layer's history without making it the active image: used the instant a
+ * generation succeeds (see GenerateImageModal), so the image — already registered in the project's
+ * media — is attached to the layer right away rather than waiting on a later "Use this image" click
+ * that the user might never get to.
+ */
+export function addToHistoryPatch(current: Layer, mediaId: string): Pick<Layer, 'mediaHistory'> {
+  const history = (current.mediaHistory ?? []).filter((id) => id !== mediaId);
+  history.unshift(mediaId);
+  return { mediaHistory: history.slice(0, MEDIA_HISTORY_LIMIT) };
+}
+
 export interface LayerRef {
   pageId: string;
   panelId: string;

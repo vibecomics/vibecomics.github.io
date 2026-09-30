@@ -7,8 +7,9 @@ import ImageLightbox from './ImageLightbox';
 import MediaPicker from './MediaPicker';
 import MediaThumb from './MediaThumb';
 import { uploadImage } from './panelActions';
+import { useProject } from './ProjectContext';
 import Spinner from './Spinner';
-import { useIsGeneratingReference } from './useIsGenerating';
+import { useReferenceGenerationStatus } from './useGenerationStatus';
 import { useTask } from './useTask';
 
 interface Props {
@@ -22,15 +23,17 @@ interface Props {
  * existing media, or generate a new one. */
 export default function ReferenceImages({ kind, entryId, imageIds, media }: Props) {
   const task = useTask();
+  const project = useProject();
   const [viewing, setViewing] = useState<number | null>(null);
   const [picking, setPicking] = useState(false);
   const [generatingModal, setGeneratingModal] = useState(false);
   const items = imageIds.flatMap((id) => media.find((m) => m.id === id) ?? []);
-  const generating = useIsGeneratingReference(kind, entryId);
+  const status = useReferenceGenerationStatus(kind, entryId);
   const fileInputId = `reference-upload-${kind}-${entryId}`;
 
   function addImageId(id: string) {
     const current = cb()[kind].get(entryId)?.imageIds ?? [];
+    if (current.includes(id)) return;
     cb()[kind].update(entryId, { imageIds: [...current, id] });
   }
 
@@ -38,6 +41,12 @@ export default function ReferenceImages({ kind, entryId, imageIds, media }: Prop
     for (const file of files) {
       addImageId((await uploadImage(file)).id);
     }
+  }
+
+  function deleteMedia(item: MediaItem) {
+    const message = `Delete "${item.name}"? It moves to the storage trash and is removed from every layer and reference that uses it.`;
+    if (!window.confirm(message)) return;
+    void task.run(async () => void (await cb().media.delete(item.id)));
   }
 
   return (
@@ -84,7 +93,7 @@ export default function ReferenceImages({ kind, entryId, imageIds, media }: Prop
           Pick from media
         </button>
         <GenerateButton
-          generating={generating}
+          status={status}
           title="Generate a new reference image"
           onClick={() => setGeneratingModal(true)}
         />
@@ -92,10 +101,15 @@ export default function ReferenceImages({ kind, entryId, imageIds, media }: Prop
       {generatingModal && (
         <GenerateImageModal
           title="Generate reference image"
-          getDefaultPrompt={() => cb().generate.referencePrompt(kind, entryId)}
+          project={project}
+          getDefaultPromptParts={() => cb().generate.referencePromptParts(kind, entryId)}
           getDefaultReferences={() => cb().generate.entryReferences(kind, entryId)}
           media={media}
           onGenerate={(prompt, references) => cb()[kind].generateImage(entryId, prompt, references)}
+          // No primary/non-primary distinction for a story-bible entry's reference images — they're
+          // just a list — so every generated image is kept the same way, used or not. onUse fires
+          // once as soon as generation succeeds and again on an explicit "Use this image" click;
+          // addImageId ignores the second call if the image is already in the list.
           onUse={(result) => addImageId(result.id)}
           onClose={() => setGeneratingModal(false)}
         />
@@ -114,7 +128,12 @@ export default function ReferenceImages({ kind, entryId, imageIds, media }: Prop
         />
       )}
       {viewing !== null && (
-        <ImageLightbox items={items} start={viewing} onClose={() => setViewing(null)} />
+        <ImageLightbox
+          items={items}
+          start={viewing}
+          onClose={() => setViewing(null)}
+          onDelete={deleteMedia}
+        />
       )}
       {task.error && <div className="text-danger small mt-2">{task.error}</div>}
     </div>

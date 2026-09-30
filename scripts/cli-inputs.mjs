@@ -322,6 +322,7 @@ export const INPUTS = {
   },
   'generate.maxReferenceImages': {},
   'generate.layerPrompt': { panelId: PANEL_ID, layerId: LAYER_ID },
+  'generate.layerPromptParts': { panelId: PANEL_ID, layerId: LAYER_ID },
   'generate.pending': {},
   'generate.dirty': {},
   'generate.getConfig': {},
@@ -334,6 +335,10 @@ export const INPUTS = {
   },
   'generate.testConnection': {},
   'generate.referencePrompt': {
+    kind: { type: 'enum', options: ['characters', 'scenes', 'objects'] },
+    id: { type: 'string', example: 'character_ab12cd' },
+  },
+  'generate.referencePromptParts': {
     kind: { type: 'enum', options: ['characters', 'scenes', 'objects'] },
     id: { type: 'string', example: 'character_ab12cd' },
   },
