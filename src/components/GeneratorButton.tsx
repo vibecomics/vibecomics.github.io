@@ -77,6 +77,7 @@ export default function GeneratorButton({ dirtyCount }: Props) {
           type="button"
           className="btn btn-sm btn-outline-light text-nowrap"
           disabled={task.busy}
+          title={`Generate images for every layer whose art no longer matches its prompt (${dirtyCount})`}
           onClick={() => setShowDirty(true)}
         >
           {task.busy && (
@@ -86,7 +87,7 @@ export default function GeneratorButton({ dirtyCount }: Props) {
               aria-label="Generating"
             />
           )}
-          {task.busy ? 'Generating…' : `✨ Generate (${dirtyCount})`}
+          {task.busy ? 'Generating…' : `🪄 Generate (${dirtyCount})`}
         </button>
       )}
       {showDirty && (

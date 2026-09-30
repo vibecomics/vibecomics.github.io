@@ -5,6 +5,7 @@ import {
   referenceGenerationStatus,
   subscribeGenerating,
   subscribeQueue,
+  variationGenerationStatus,
 } from '../ai/generation';
 import type { GenerationStatus, QueueItem, ReferenceKind } from '../ai/generation';
 
@@ -17,6 +18,17 @@ export function useLayerGenerationStatus(panelId: string, layerId: string): Gene
 /** Whether this story-bible entry has a reference-image generation queued or running. */
 export function useReferenceGenerationStatus(kind: ReferenceKind, id: string): GenerationStatus {
   return useSyncExternalStore(subscribeGenerating, () => referenceGenerationStatus(kind, id));
+}
+
+/** Whether this variation (pose/state) has a generation queued or running. */
+export function useVariationGenerationStatus(
+  kind: ReferenceKind,
+  id: string,
+  variationId: string
+): GenerationStatus {
+  return useSyncExternalStore(subscribeGenerating, () =>
+    variationGenerationStatus(kind, id, variationId)
+  );
 }
 
 /** The generation queue right now (running item first, then queued, in run order). */

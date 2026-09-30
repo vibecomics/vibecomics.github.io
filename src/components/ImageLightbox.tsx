@@ -75,6 +75,7 @@ export default function ImageLightbox({ items, start, onClose, onDelete }: Props
         type="button"
         className="lightbox-btn lightbox-close"
         aria-label="Close"
+        title="Close"
         onClick={onClose}
       >
         &times;
@@ -95,6 +96,7 @@ export default function ImageLightbox({ items, start, onClose, onDelete }: Props
           type="button"
           className="lightbox-btn lightbox-prev"
           aria-label="Previous image"
+          title="Previous image"
           onClick={() => step(-1)}
         >
           &lsaquo;
@@ -110,6 +112,7 @@ export default function ImageLightbox({ items, start, onClose, onDelete }: Props
           type="button"
           className="lightbox-btn lightbox-next"
           aria-label="Next image"
+          title="Next image"
           onClick={() => step(1)}
         >
           &rsaquo;

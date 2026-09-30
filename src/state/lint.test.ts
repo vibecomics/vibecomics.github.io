@@ -39,10 +39,18 @@ function tidy(): ComicProject {
       description: 'Red hair',
       imageIds: ['m-ref'],
       sceneIds: ['scene-roof'],
+      variations: [],
     },
   ];
   project.metadata.objects = [
-    { id: 'obj-scooter', name: 'Scooter', description: 'Red', imageIds: [], sceneIds: [] },
+    {
+      id: 'obj-scooter',
+      name: 'Scooter',
+      description: 'Red',
+      imageIds: [],
+      sceneIds: [],
+      variations: [],
+    },
   ];
   project.metadata.scenes = [
     {
@@ -51,6 +59,7 @@ function tidy(): ComicProject {
       description: 'Dusk',
       characterIds: ['char-mara'],
       imageIds: ['m-roof-ref'],
+      variations: [],
     },
   ];
   project.metadata.media = [
@@ -177,6 +186,7 @@ test('duplicate names are warnings, whatever the case or spacing', () => {
     description: 'x',
     imageIds: [],
     sceneIds: [],
+    variations: [],
   });
   project.metadata.objects.push({
     id: 'obj-2',
@@ -184,6 +194,7 @@ test('duplicate names are warnings, whatever the case or spacing', () => {
     description: 'x',
     imageIds: [],
     sceneIds: [],
+    variations: [],
   });
   project.metadata.media.push(media('m-copy', 'Mara-Front.PNG'));
   project.metadata.media[0].name = 'mara-front.png';

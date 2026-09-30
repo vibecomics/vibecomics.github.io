@@ -21,9 +21,18 @@ export function removeMedia(project: ComicProject, id: string): MediaRemoval {
 
   const removal: MediaRemoval = { layers: 0, entries: 0 };
   for (const entry of [...metadata.characters, ...metadata.scenes, ...metadata.objects]) {
-    if (!entry.imageIds.includes(id)) continue;
-    entry.imageIds = entry.imageIds.filter((imageId) => imageId !== id);
-    removal.entries++;
+    let touched = false;
+    if (entry.imageIds.includes(id)) {
+      entry.imageIds = entry.imageIds.filter((imageId) => imageId !== id);
+      touched = true;
+    }
+    for (const variation of entry.variations) {
+      if (variation.imageIds.includes(id)) {
+        variation.imageIds = variation.imageIds.filter((imageId) => imageId !== id);
+        touched = true;
+      }
+    }
+    if (touched) removal.entries++;
   }
   for (const page of project.pages) {
     for (const panel of page.panels) {

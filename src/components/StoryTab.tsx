@@ -1,6 +1,6 @@
-import { useState } from 'react';
 import { cb } from '../ai/actions';
-import type { ComicProject, MediaItem } from '../types/comic';
+import type { ComicProject, MediaItem, Variation } from '../types/comic';
+import { TrashIcon } from './Icons';
 import ReferenceImages from './ReferenceImages';
 
 type StoryKind = 'characters' | 'objects' | 'scenes';
@@ -28,7 +28,13 @@ const STORY_TABS = {
 
 interface EntryCardProps {
   kind: StoryKind;
-  entry: { id: string; name: string; description: string; imageIds: string[] };
+  entry: {
+    id: string;
+    name: string;
+    description: string;
+    imageIds: string[];
+    variations: Variation[];
+  };
   media: MediaItem[];
 }
 
@@ -41,7 +47,7 @@ function EntryCard({ kind, entry, media }: EntryCardProps) {
       <div className="card-body">
         <div className="d-flex gap-2 align-items-center mb-2">
           <input
-            className="form-control fw-semibold"
+            className="form-control fw-semibold fs-4"
             defaultValue={entry.name}
             aria-label={`${singular} name`}
             onBlur={(e) => {
@@ -52,11 +58,13 @@ function EntryCard({ kind, entry, media }: EntryCardProps) {
           />
           <button
             className="btn btn-outline-danger btn-sm flex-shrink-0"
+            title={`Delete this ${singular}`}
+            aria-label={`Delete this ${singular}`}
             onClick={() => {
               if (window.confirm(`Delete ${singular} "${entry.name}"?`)) entries.delete(entry.id);
             }}
           >
-            Delete
+            <TrashIcon />
           </button>
         </div>
         <textarea
@@ -72,39 +80,42 @@ function EntryCard({ kind, entry, media }: EntryCardProps) {
           }}
         />
         {referenceImages && (
-          <ReferenceImages kind={kind} entryId={entry.id} imageIds={entry.imageIds} media={media} />
+          <ReferenceImages
+            kind={kind}
+            entryId={entry.id}
+            imageIds={entry.imageIds}
+            variations={entry.variations}
+            media={media}
+          />
         )}
       </div>
     </div>
   );
 }
 
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** The characters, objects or scenes of the story bible: add, rename, describe, delete. */
 export default function StoryTab({ project, kind }: { project: ComicProject; kind: StoryKind }) {
   const { title, singular } = STORY_TABS[kind];
-  const [newName, setNewName] = useState('');
   const entries = project.metadata[kind];
 
   function add() {
-    const name = newName.trim();
-    if (!name) return;
-    cb()[kind].create({ name });
-    setNewName('');
+    cb()[kind].create({ name: `New ${capitalize(singular)}` });
   }
 
   return (
     <div className="container py-4" style={{ maxWidth: 800 }}>
-      <h2 className="h5 mb-3">{title}</h2>
-      <div className="input-group mb-4" style={{ maxWidth: 480 }}>
-        <input
-          className="form-control"
-          placeholder={`New ${singular} name`}
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && add()}
-        />
-        <button className="btn btn-primary" disabled={!newName.trim()} onClick={add}>
-          Add
+      <div className="d-flex align-items-center gap-2 mb-3">
+        <h2 className="h5 mb-0">{title}</h2>
+        <button
+          type="button"
+          className="btn btn-outline-secondary btn-sm"
+          title={`Add a new ${singular}`}
+          aria-label={`Add a new ${singular}`}
+          onClick={add}
+        >
+          +
         </button>
       </div>
       {entries.map((entry) => (

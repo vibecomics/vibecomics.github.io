@@ -20,6 +20,7 @@ import { dirtyLayerRefs, findPanel, layerArtSize, requireProject } from './build
 import type { LayerRef } from './builders';
 import type { ComicBuilderDeps } from './deps';
 import {
+  allEntryImageIds,
   appendReferenceNotes,
   buildLayerPrompt,
   buildReferencePrompt,
@@ -59,6 +60,8 @@ const statusByKey = new Map<string, 'queued' | 'running'>();
 const generatingListeners = new Set<() => void>();
 const layerKey = (panelId: string, layerId: string) => `layer:${panelId}:${layerId}`;
 const referenceKey = (kind: ReferenceKind, id: string) => `ref:${kind}:${id}`;
+const variationKey = (kind: ReferenceKind, id: string, variationId: string) =>
+  `ref:${kind}:${id}:${variationId}`;
 
 export function layerGenerationStatus(panelId: string, layerId: string): GenerationStatus {
   return statusByKey.get(layerKey(panelId, layerId));
@@ -66,6 +69,14 @@ export function layerGenerationStatus(panelId: string, layerId: string): Generat
 
 export function referenceGenerationStatus(kind: ReferenceKind, id: string): GenerationStatus {
   return statusByKey.get(referenceKey(kind, id));
+}
+
+export function variationGenerationStatus(
+  kind: ReferenceKind,
+  id: string,
+  variationId: string
+): GenerationStatus {
+  return statusByKey.get(variationKey(kind, id, variationId));
 }
 
 export function subscribeGenerating(listener: () => void): () => void {
@@ -101,6 +112,15 @@ export function cancelLayerGeneration(panelId: string, layerId: string): boolean
 /** Cancels a story-bible entry's outstanding reference-image generation request, if any. */
 export function cancelReferenceGeneration(kind: ReferenceKind, id: string): boolean {
   return cancelGeneration(referenceKey(kind, id));
+}
+
+/** Cancels a variation's outstanding generation request, if any. */
+export function cancelVariationGeneration(
+  kind: ReferenceKind,
+  id: string,
+  variationId: string
+): boolean {
+  return cancelGeneration(variationKey(kind, id, variationId));
 }
 
 /** Cancels an item straight from generate.queue()'s list, by its `id` (the same key layerKey/
@@ -254,12 +274,18 @@ async function runLayerGeneration(
   return { ...media, aspectRatio: dims ? dims.width / dims.height : undefined };
 }
 
-async function generateReferenceOne(
+/** Generates one reference image from an already-final prompt string (no further building): gathers
+ * reference images (variation-aware when `variationId` is given), calls the provider, strips the
+ * background for a character/object, and registers the result. Shared by generateReferenceOne (a
+ * single entry or variation) and generateAllVariations (which builds each variation's own final
+ * prompt itself, on top of one shared, possibly user-edited base). */
+async function runReferenceGeneration(
   deps: ComicBuilderDeps,
   kind: ReferenceKind,
   id: string,
-  promptOverride?: string,
-  references?: GenerationReference[],
+  variationId: string | undefined,
+  prompt: string,
+  references: GenerationReference[] | undefined,
   signal?: AbortSignal
 ): Promise<MediaItem> {
   const provider = requireProvider(deps);
@@ -267,21 +293,32 @@ async function generateReferenceOne(
   const entry = project.metadata[kind].find((e) => e.id === id);
   if (!entry) throw new Error(`"${id}" not found in ${kind}.`);
 
-  const used = (references ?? defaultEntryReferences(deps, kind, id)).slice(
+  const used = (references ?? defaultEntryReferences(deps, kind, id, variationId)).slice(
     0,
     provider.maxReferenceImages
   );
-  const prompt = appendReferenceNotes(
-    promptOverride?.trim() || buildReferencePrompt(project, kind, id),
-    used
-  );
+  const finalPrompt = appendReferenceNotes(prompt, used);
   const referenceImages = await downloadReferences(deps, used);
-  const rawDataUrl = await provider.generate({ prompt, referenceImages, signal });
+  const rawDataUrl = await provider.generate({ prompt: finalPrompt, referenceImages, signal });
   const dataUrl =
     kind !== 'scenes' && deps.removeBackground
       ? await deps.removeBackground(rawDataUrl)
       : rawDataUrl;
   return deps.uploadStorageMedia(`${entry.name} reference.png`, dataUrl, 'image/png');
+}
+
+async function generateReferenceOne(
+  deps: ComicBuilderDeps,
+  kind: ReferenceKind,
+  id: string,
+  variationId: string | undefined,
+  promptOverride?: string,
+  references?: GenerationReference[],
+  signal?: AbortSignal
+): Promise<MediaItem> {
+  const project = requireProject(deps);
+  const prompt = promptOverride?.trim() || buildReferencePrompt(project, kind, id, variationId);
+  return runReferenceGeneration(deps, kind, id, variationId, prompt, references, signal);
 }
 
 /** Generates and registers a new image for a layer (or background); does not set it as the layer's
@@ -308,8 +345,103 @@ export function generateReferenceImage(
   references?: GenerationReference[]
 ): Promise<MediaItem> {
   return trackedGeneration(referenceKey(kind, id), describeReference(deps, kind, id), (signal) =>
-    generateReferenceOne(deps, kind, id, prompt, references, signal)
+    generateReferenceOne(deps, kind, id, undefined, prompt, references, signal)
   );
+}
+
+/** Generates and registers a new image for one variation (pose/state) of a story-bible entry; does
+ * not add it to the variation's imageIds (see the module doc) — commit it yourself with
+ * variations.update(kind, id, variationId, { imageIds }). */
+export function generateVariationImage(
+  deps: ComicBuilderDeps,
+  kind: ReferenceKind,
+  id: string,
+  variationId: string,
+  prompt?: string,
+  references?: GenerationReference[]
+): Promise<MediaItem> {
+  return trackedGeneration(
+    variationKey(kind, id, variationId),
+    describeVariation(deps, kind, id, variationId),
+    (signal) => generateReferenceOne(deps, kind, id, variationId, prompt, references, signal)
+  );
+}
+
+/** One variation's outcome from generateAllVariations: whether it generated ok, and its error if not. */
+export interface VariationOutcome {
+  variationId: string;
+  ok: boolean;
+  error?: string;
+}
+
+function commitVariationImage(
+  deps: ComicBuilderDeps,
+  kind: ReferenceKind,
+  id: string,
+  variationId: string,
+  mediaId: string
+): void {
+  deps.updateProject((p) => {
+    const entry = p.metadata[kind].find((e) => e.id === id);
+    const variation = entry?.variations.find((v) => v.id === variationId);
+    if (variation && !variation.imageIds.includes(mediaId)) variation.imageIds.push(mediaId);
+  });
+}
+
+/** Generates one image for every variation of a story-bible entry, one request at a time, committing
+ * each result into that variation's imageIds as it goes (like generateAllDirty, there's no one to
+ * preview a batch for). `promptOverride`, when given, replaces the shared Style/description/technical
+ * base that's normally built from the entry alone (see buildReferencePrompt with no variationId) —
+ * each variation's own prompt is still appended on top of it, last, so the batch still draws a
+ * different pose/state per image even when the shared prompt was edited. A failure on one variation
+ * does not stop the rest. */
+export async function generateAllVariations(
+  deps: ComicBuilderDeps,
+  kind: ReferenceKind,
+  id: string,
+  promptOverride?: string,
+  references?: GenerationReference[]
+): Promise<VariationOutcome[]> {
+  const project = requireProject(deps);
+  const entry = project.metadata[kind].find((e) => e.id === id);
+  if (!entry) throw new Error(`"${id}" not found in ${kind}.`);
+  const basePrompt = promptOverride?.trim() || buildReferencePrompt(project, kind, id);
+
+  // Queue every variation's generation up front, not one at a time as each finishes: trackedGeneration
+  // marks its key "queued" the instant it's called, so every variation's own Generate button reflects
+  // its place in the queue right away, rather than only the one currently running. The shared queue
+  // (see enqueue/queueTail) still runs them one request at a time, in this same order.
+  const runs = entry.variations.map((variation) => {
+    const key = variationKey(kind, id, variation.id);
+    const label = describeVariation(deps, kind, id, variation.id);
+    const prompt = variation.prompt.trim()
+      ? `${basePrompt}\n\nVariation: ${variation.prompt.trim()}`
+      : basePrompt;
+    const run = trackedGeneration(key, label, async (signal) => {
+      const media = await runReferenceGeneration(
+        deps,
+        kind,
+        id,
+        variation.id,
+        prompt,
+        references,
+        signal
+      );
+      commitVariationImage(deps, kind, id, variation.id, media.id);
+    });
+    return { variationId: variation.id, run };
+  });
+
+  const outcomes: VariationOutcome[] = [];
+  for (const { variationId, run } of runs) {
+    try {
+      await run;
+      outcomes.push({ variationId, ok: true });
+    } catch (e) {
+      outcomes.push({ variationId, ok: false, error: errorMessage(e) });
+    }
+  }
+  return outcomes;
 }
 
 /** A reference to `mediaId`, with a ready-made note when it's known art of a character, object or
@@ -324,8 +456,9 @@ function referenceTo(
   return note ? { mediaId, note } : { mediaId };
 }
 
-/** The images a layer's generation sends by default: those of the character/object (foreground) or
- * scene (background) it shows. */
+/** The images a layer's generation sends by default: its subject's/scene's chosen variation (see
+ * layer.variationId), if it has one and that variation has images yet; otherwise every image the
+ * character/object (foreground) or scene (background) it shows has. */
 export function defaultLayerReferences(
   deps: ComicBuilderDeps,
   panelId: string,
@@ -335,18 +468,29 @@ export function defaultLayerReferences(
   const layer = findPanel(project, panelId)?.layers.find((l) => l.id === layerId);
   if (!layer) throw new Error(`Layer "${layerId}" not found.`);
   const subject = layerSubject(project, layer);
-  return (subject?.imageIds ?? []).map((mediaId) => referenceTo(project, mediaId, subject?.id));
+  if (!subject) return [];
+  const variation = layer.variationId
+    ? subject.variations.find((v) => v.id === layer.variationId)
+    : undefined;
+  const ids = variation?.imageIds.length ? variation.imageIds : allEntryImageIds(subject);
+  return ids.map((mediaId) => referenceTo(project, mediaId, subject.id));
 }
 
-/** The images a story-bible entry's reference generation sends by default: its existing ones. */
+/** The images a story-bible entry's reference generation sends by default: with `variationId`, that
+ * variation's own images (falling back to every image the entry has, across every variation, if that
+ * variation has none yet); without one, every image the entry has. */
 export function defaultEntryReferences(
   deps: ComicBuilderDeps,
   kind: ReferenceKind,
-  id: string
+  id: string,
+  variationId?: string
 ): GenerationReference[] {
   const project = requireProject(deps);
   const entry = project.metadata[kind].find((e) => e.id === id);
-  return (entry?.imageIds ?? []).map((mediaId) => referenceTo(project, mediaId, id));
+  if (!entry) return [];
+  const variation = variationId ? entry.variations.find((v) => v.id === variationId) : undefined;
+  const ids = variation?.imageIds.length ? variation.imageIds : allEntryImageIds(entry);
+  return ids.map((mediaId) => referenceTo(project, mediaId, id));
 }
 
 /** How many reference images the configured generator uses (0 when none is configured). */
@@ -370,6 +514,21 @@ function describeReference(deps: ComicBuilderDeps, kind: ReferenceKind, id: stri
     return `Reference: ${entry?.name || id}`;
   } catch {
     return `Reference: ${id}`;
+  }
+}
+
+function describeVariation(
+  deps: ComicBuilderDeps,
+  kind: ReferenceKind,
+  id: string,
+  variationId: string
+): string {
+  try {
+    const entry = requireProject(deps).metadata[kind].find((e) => e.id === id);
+    const variation = entry?.variations.find((v) => v.id === variationId);
+    return `Reference: ${entry?.name || id} — ${variation?.name || variationId}`;
+  } catch {
+    return `Reference: ${id} — ${variationId}`;
   }
 }
 

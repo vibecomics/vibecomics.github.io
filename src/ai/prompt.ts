@@ -26,19 +26,21 @@ export function joinPromptParts(parts: PromptPart[]): string {
     .join('\n\n');
 }
 
-/** The technical requirements line for a story-bible entry's reference art: characters and objects
- * get an isolated multi-angle turnaround (so later generations have more than one angle to match);
- * a scene gets an establishing shot of the place itself, since that art is meant to be a background. */
+/** The technical requirements line for a story-bible entry's reference art: a scene gets an
+ * establishing shot of the place itself, since that art is meant to be a background. A character or
+ * object gets a single isolated view — never several poses baked into one turnaround sheet, which
+ * confuses later prompting that references it. Use variations (see Variation) to get more than one
+ * pose or state, each its own image: buildReferencePromptParts appends the chosen variation's own
+ * prompt (e.g. "Front view") as the last part, saying which view to draw. */
 function referenceTechnical(kind: ReferenceKind): string {
   if (kind === 'scenes') {
     return 'Establishing reference image for this setting: a clear, well-lit view of the location itself, no characters, animals or monsters in it, matching the description exactly.';
   }
   const subject = kind === 'characters' ? 'Character' : 'Object';
   return (
-    `${subject} reference turnaround sheet: the same ${subject.toLowerCase()} shown from a few clear ` +
-    'angles (front view, back view, and a side or three-quarter view), consistent design, proportions ' +
-    'and colors across every view, on a plain solid white background: no scene, no shadow, no border, ' +
-    'no baked-in text, no duplicate labels.'
+    `${subject} reference image: a single, clear view of the ${subject.toLowerCase()}, on a plain ` +
+    'solid white background: no scene, no shadow, no border, no baked-in text. Not a multi-view ' +
+    'turnaround sheet or a grid of poses — pick one clear view and draw only that.'
   );
 }
 
@@ -49,18 +51,27 @@ const ENTRY_LABEL: Record<ReferenceKind, string> = {
 };
 
 /** The labeled parts of a story-bible entry's reference art prompt: Style, its description (labeled
- * by kind), then the kind-appropriate technical requirements (see referenceTechnical). */
+ * by kind), the kind-appropriate technical requirements (see referenceTechnical), then, when
+ * `variationId` names one of the entry's variations, that variation's own prompt last (e.g. "Front
+ * view, facing the camera directly.") — the most specific instruction, so it lands right before
+ * generation. */
 export function buildReferencePromptParts(
   project: ComicProject,
   kind: ReferenceKind,
-  id: string
+  id: string,
+  variationId?: string
 ): PromptPart[] {
   const entry = project.metadata[kind].find((e) => e.id === id);
   if (!entry) throw new Error(`"${id}" not found in ${kind}.`);
+  const variation = variationId ? entry.variations.find((v) => v.id === variationId) : undefined;
+  if (variationId && !variation) {
+    throw new Error(`Variation "${variationId}" not found on "${id}".`);
+  }
   return keepNonEmpty([
     { label: 'Style', text: project.metadata.style },
     { label: ENTRY_LABEL[kind], text: entry.description },
     { label: 'Technical requirements', text: referenceTechnical(kind) },
+    { label: 'Variation', text: variation?.prompt },
   ]);
 }
 
@@ -68,9 +79,10 @@ export function buildReferencePromptParts(
 export function buildReferencePrompt(
   project: ComicProject,
   kind: ReferenceKind,
-  id: string
+  id: string,
+  variationId?: string
 ): string {
-  return joinPromptParts(buildReferencePromptParts(project, kind, id));
+  return joinPromptParts(buildReferencePromptParts(project, kind, id, variationId));
 }
 
 /** The story-bible entry a layer shows: a character or object (foreground) or a scene (background). */
@@ -145,13 +157,20 @@ export interface GenerationReference {
   note?: string;
 }
 
+/** Every reference-image id of a story-bible entry: its own (ungrouped) imageIds plus every
+ * variation's, in that order. Used wherever "all the reference art this entry has" is wanted rather
+ * than one specific variation's. */
+export function allEntryImageIds(entry: StoryEntry): string[] {
+  return [...entry.imageIds, ...entry.variations.flatMap((v) => v.imageIds)];
+}
+
 /**
  * A ready-made note for a reference image that is a story-bible entry's own reference art (its
- * `imageIds` lists this mediaId). Checked against `imageIds` rather than the MediaItem's own
- * `subjectId`/`sceneId` tag, since that tag is only set for art generated or uploaded straight onto a
- * layer — a character's own reference images are frequently untagged even though they're
- * unambiguously that character's art. Undefined for an image linked to no entry (a plain upload,
- * say) — the user writes their own note for those.
+ * `imageIds`, or one of its variations' `imageIds`, lists this mediaId). Checked against those lists
+ * rather than the MediaItem's own `subjectId`/`sceneId` tag, since that tag is only set for art
+ * generated or uploaded straight onto a layer — a character's own reference images are frequently
+ * untagged even though they're unambiguously that character's art. Undefined for an image linked to
+ * no entry (a plain upload, say) — the user writes their own note for those.
  *
  * Names the entry only when it's a *different* one than `currentEntryId` (the character/object/scene
  * this generation is of, when known) — e.g. a layer showing Ashwini that also references Cupcake's
@@ -165,19 +184,19 @@ export function defaultReferenceNote(
   mediaId: string,
   currentEntryId?: string
 ): string | undefined {
-  const character = project.metadata.characters.find((c) => c.imageIds.includes(mediaId));
+  const character = project.metadata.characters.find((c) => allEntryImageIds(c).includes(mediaId));
   if (character) {
     return character.id === currentEntryId
       ? "Match this character's design exactly (face, proportions, outfit, colors)."
       : `This is ${character.name} — match this character's design exactly (face, proportions, outfit, colors).`;
   }
-  const object = project.metadata.objects.find((o) => o.imageIds.includes(mediaId));
+  const object = project.metadata.objects.find((o) => allEntryImageIds(o).includes(mediaId));
   if (object) {
     return object.id === currentEntryId
       ? "Match this object's design exactly."
       : `This is ${object.name} — match this object's design exactly.`;
   }
-  const scene = project.metadata.scenes.find((s) => s.imageIds.includes(mediaId));
+  const scene = project.metadata.scenes.find((s) => allEntryImageIds(s).includes(mediaId));
   if (scene) {
     return scene.id === currentEntryId
       ? 'Match this location exactly.'

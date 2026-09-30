@@ -35,6 +35,10 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
   const sceneKnown = scenes.some((scene) => scene.id === layer.sceneId);
   // A foreground layer shows a character or object; a background is the setting of a scene.
   const linkedId = background ? layer.sceneId : layer.subjectId;
+  const linkedEntry = background
+    ? scenes.find((s) => s.id === layer.sceneId)
+    : [...characters, ...objects].find((e) => e.id === layer.subjectId);
+  const variationKnown = linkedEntry?.variations.some((v) => v.id === layer.variationId) ?? false;
 
   return (
     <div className="mt-2">
@@ -53,56 +57,74 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         autoFocus={!layer.prompt && !layer.mediaId}
         onChange={(e) => update({ prompt: e.target.value })}
       />
-      {background ? (
+      <div className="d-flex gap-2 mb-2">
+        {background ? (
+          <select
+            className="form-select form-select-sm flex-grow-1"
+            aria-label="The scene this background is set in"
+            title="The media picker lists this scene's images first"
+            value={layer.sceneId ?? ''}
+            onChange={(e) => update({ sceneId: e.target.value || null })}
+          >
+            <option value="">None in particular</option>
+            {layer.sceneId && !sceneKnown && <option value={layer.sceneId}>A deleted scene</option>}
+            {scenes.map((scene) => (
+              <option key={scene.id} value={scene.id}>
+                {scene.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <select
+            className="form-select form-select-sm flex-grow-1"
+            aria-label="What this layer shows"
+            title="The media picker lists this character's or object's images first"
+            value={layer.subjectId ?? ''}
+            onChange={(e) => update({ subjectId: e.target.value || null })}
+          >
+            <option value="">Nothing in particular</option>
+            {layer.subjectId && !known && (
+              <option value={layer.subjectId}>A deleted character or object</option>
+            )}
+            {characters.length > 0 && (
+              <optgroup label="Characters">
+                {characters.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+            {objects.length > 0 && (
+              <optgroup label="Objects">
+                {objects.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        )}
         <select
-          className="form-select form-select-sm mb-2"
-          aria-label="The scene this background is set in"
-          title="The media picker lists this scene's images first"
-          value={layer.sceneId ?? ''}
-          onChange={(e) => update({ sceneId: e.target.value || null })}
+          className="form-select form-select-sm flex-grow-1"
+          aria-label="Which variation of it to use as reference"
+          title="That variation's images become the default reference sent when generating this layer"
+          value={layer.variationId ?? ''}
+          disabled={!linkedEntry || linkedEntry.variations.length === 0}
+          onChange={(e) => update({ variationId: e.target.value || null })}
         >
-          <option value="">Scene: none in particular</option>
-          {layer.sceneId && !sceneKnown && (
-            <option value={layer.sceneId}>Scene: a deleted scene</option>
+          <option value="">No variation</option>
+          {layer.variationId && !variationKnown && (
+            <option value={layer.variationId}>A deleted variation</option>
           )}
-          {scenes.map((scene) => (
-            <option key={scene.id} value={scene.id}>
-              Scene: {scene.name}
+          {linkedEntry?.variations.map((variation) => (
+            <option key={variation.id} value={variation.id}>
+              {variation.name}
             </option>
           ))}
         </select>
-      ) : (
-        <select
-          className="form-select form-select-sm mb-2"
-          aria-label="What this layer shows"
-          title="The media picker lists this character's or object's images first"
-          value={layer.subjectId ?? ''}
-          onChange={(e) => update({ subjectId: e.target.value || null })}
-        >
-          <option value="">Shows: nothing in particular</option>
-          {layer.subjectId && !known && (
-            <option value={layer.subjectId}>Shows: a deleted character or object</option>
-          )}
-          {characters.length > 0 && (
-            <optgroup label="Characters">
-              {characters.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  Shows: {entry.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-          {objects.length > 0 && (
-            <optgroup label="Objects">
-              {objects.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  Shows: {entry.name}
-                </option>
-              ))}
-            </optgroup>
-          )}
-        </select>
-      )}
+      </div>
       <div className="mb-2 d-flex align-items-start gap-2">
         <MediaSlot
           item={media.find((m) => m.id === layer.mediaId)}

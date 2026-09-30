@@ -892,3 +892,108 @@ test('lint reports problems with fixes, exits non-zero on errors, and a fix clea
   await run('layers', 'update', panelId, layer.id, JSON.stringify(finding.fix.args[2]));
   assert.deepEqual((await run('project', 'lint')).json(), []);
 });
+
+test('variations: default seeding, CRUD, layer pinning, and generate() through the CLI', async () => {
+  const { run, login } = setup();
+  await login();
+  await run('storage', 'createProject', 'Variations');
+  const panelId = (await run('page', 'current')).json().panels[0].id;
+
+  // characters.create seeds Front/Back/Side view by default; objects/scenes start with none.
+  const mira = (await run('characters', 'create', '{"name":"Mira"}')).json();
+  assert.deepEqual(
+    mira.variations.map((v: { name: string }) => v.name),
+    ['Front view', 'Back view', 'Side view']
+  );
+  const locker = (await run('objects', 'create', '{"name":"Locker"}')).json();
+  assert.deepEqual(locker.variations, []);
+
+  // variations list/get
+  const [front, back] = (await run('variations', 'list', 'characters', mira.id)).json();
+  assert.equal(front.name, 'Front view');
+  assert.equal(
+    (await run('variations', 'get', 'characters', mira.id, front.id)).json().name,
+    'Front view'
+  );
+  assert.equal((await run('variations', 'get', 'characters', mira.id, 'nope')).json(), null);
+
+  // variations add/update/delete, scoped to an object this time
+  const open = (
+    await run('variations', 'add', 'objects', locker.id, '{"name":"Open","prompt":"Door open."}')
+  ).json();
+  assert.equal(open.prompt, 'Door open.');
+  assert.equal(
+    (
+      await run(
+        'variations',
+        'update',
+        'objects',
+        locker.id,
+        open.id,
+        '{"imageIds":["media_ab12cd"]}'
+      )
+    ).json().imageIds[0],
+    'media_ab12cd'
+  );
+  assert.equal(
+    (await run('objects', 'get', locker.id)).json().variations[0].imageIds[0],
+    'media_ab12cd'
+  );
+  assert.equal((await run('variations', 'delete', 'objects', locker.id, open.id)).json(), true);
+  assert.deepEqual((await run('objects', 'get', locker.id)).json().variations, []);
+
+  // A layer can pin itself to one of its subject's variations; the id must belong to that subject,
+  // and switching subjects clears the pin.
+  const layer = (
+    await run(
+      'layers',
+      'add',
+      panelId,
+      JSON.stringify({ prompt: 'Mira', subjectId: mira.id, variationId: back.id })
+    )
+  ).json();
+  assert.equal(layer.variationId, back.id);
+  const badVariation = await run(
+    'layers',
+    'update',
+    panelId,
+    layer.id,
+    JSON.stringify({ variationId: 'nope' })
+  );
+  assert.equal(badVariation.code, 1);
+  assert.match(badVariation.err, /Variation "nope" not found/);
+  const scooter = (await run('objects', 'create', '{"name":"Scooter"}')).json();
+  const switched = (
+    await run('layers', 'update', panelId, layer.id, JSON.stringify({ subjectId: scooter.id }))
+  ).json();
+  assert.equal('variationId' in switched, false);
+
+  // generate.variation* pure helpers (prompt/reference building) need no configured generator.
+  await run('metadata', 'setStyle', 'STYLE: watercolor comic.');
+  await run('characters', 'update', mira.id, '{"description":"Red hair, green coat."}');
+  const refs = (
+    await run('generate', 'variationReferences', 'characters', mira.id, front.id)
+  ).json();
+  assert.deepEqual(refs, []);
+  const prompt = (await run('generate', 'variationPrompt', 'characters', mira.id, front.id)).json();
+  assert.match(prompt, /Front view, facing the camera directly\./);
+  const parts = (
+    await run('generate', 'variationPromptParts', 'characters', mira.id, front.id)
+  ).json();
+  assert.deepEqual(
+    parts.map((p: { label: string }) => p.label),
+    ['Style', 'Character', 'Technical requirements', 'Variation']
+  );
+
+  // Actually generating needs a configured image generator, same as every other generate.* call.
+  const noGenerator = await run('generate', 'variationImage', 'characters', mira.id, front.id);
+  assert.equal(noGenerator.code, 1);
+  assert.match(noGenerator.err, /No image generator is configured/);
+
+  // allVariations, like generate.dirty, never fails the whole call: a failure on one variation
+  // (here, all of them, for lack of a configured generator) is reported per item instead.
+  const outcomes = (await run('generate', 'allVariations', 'characters', mira.id)).json();
+  assert.equal(outcomes.length, 3);
+  assert.ok(outcomes.every((o: { ok: boolean }) => o.ok === false));
+  assert.match(outcomes[0].error, /No image generator is configured/);
+});

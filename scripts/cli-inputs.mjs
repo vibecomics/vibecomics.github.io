@@ -45,6 +45,13 @@ const LAYER_ID = { type: 'string', example: 'layer_ab12cd' };
 const BUBBLE_ID = { type: 'string', example: 'bubble_ab12cd' };
 const AXIS = { type: 'enum', options: ['horizontal', 'vertical'] };
 const IMAGE = { type: 'file', help: 'Path of the image file (PNG, JPEG, WebP or GIF).' };
+const KIND = { type: 'enum', options: ['characters', 'scenes', 'objects'] };
+const VARIATION_ID = { type: 'string', example: 'var_ab12cd' };
+const REFERENCE_LIST = {
+  type: 'json',
+  optional: true,
+  example: '[{ "mediaId": "media_ab12cd", "note": "use this outfit" }]',
+};
 
 /** Story bible entries (characters, scenes, objects) share one shape. */
 const STORY_ENTRY = {
@@ -250,6 +257,35 @@ export const INPUTS = {
     },
   },
 
+  'variations.list': { kind: KIND, entryId: { type: 'string', example: 'character_ab12cd' } },
+  'variations.get': {
+    kind: KIND,
+    entryId: { type: 'string', example: 'character_ab12cd' },
+    variationId: VARIATION_ID,
+  },
+  'variations.add': {
+    kind: KIND,
+    entryId: { type: 'string', example: 'character_ab12cd' },
+    input: {
+      type: 'json',
+      example: '{ "name": "Front view", "prompt": "Front view, facing the camera directly." }',
+    },
+  },
+  'variations.update': {
+    kind: KIND,
+    entryId: { type: 'string', example: 'character_ab12cd' },
+    variationId: VARIATION_ID,
+    patch: {
+      type: 'json',
+      example: '{ "prompt": "New prompt text", "imageIds": ["media_ab12cd"] }',
+    },
+  },
+  'variations.delete': {
+    kind: KIND,
+    entryId: { type: 'string', example: 'character_ab12cd' },
+    variationId: VARIATION_ID,
+  },
+
   'media.get': { id: { type: 'string', example: 'media_ab12cd' } },
   'media.download': { id: { type: 'string', example: 'media_ab12cd' } },
   'media.upload': {
@@ -346,6 +382,39 @@ export const INPUTS = {
   'generate.referencePromptParts': {
     kind: { type: 'enum', options: ['characters', 'scenes', 'objects'] },
     id: { type: 'string', example: 'character_ab12cd' },
+  },
+  'generate.variationImage': {
+    kind: KIND,
+    entryId: { type: 'string', example: 'character_ab12cd' },
+    variationId: VARIATION_ID,
+    prompt: { type: 'multiline', optional: true, allowEmpty: true },
+    references: REFERENCE_LIST,
+  },
+  'generate.cancelVariation': {
+    kind: KIND,
+    entryId: { type: 'string', example: 'character_ab12cd' },
+    variationId: VARIATION_ID,
+  },
+  'generate.variationReferences': {
+    kind: KIND,
+    entryId: { type: 'string', example: 'character_ab12cd' },
+    variationId: VARIATION_ID,
+  },
+  'generate.variationPrompt': {
+    kind: KIND,
+    entryId: { type: 'string', example: 'character_ab12cd' },
+    variationId: VARIATION_ID,
+  },
+  'generate.variationPromptParts': {
+    kind: KIND,
+    entryId: { type: 'string', example: 'character_ab12cd' },
+    variationId: VARIATION_ID,
+  },
+  'generate.allVariations': {
+    kind: KIND,
+    entryId: { type: 'string', example: 'character_ab12cd' },
+    prompt: { type: 'multiline', optional: true, allowEmpty: true },
+    references: REFERENCE_LIST,
   },
   'generate.queue': {},
   'generate.cancelQueueItem': { id: { type: 'string', example: '1' } },

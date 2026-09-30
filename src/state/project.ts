@@ -30,6 +30,24 @@ export function normalizeProject(p: ComicProject): void {
   p.metadata.style ??= '';
   delete legacy.outline;
   p.metadata.pageSize ??= { ...DEFAULT_PAGE_SIZE };
+  for (const entry of [...p.metadata.characters, ...p.metadata.scenes, ...p.metadata.objects]) {
+    entry.variations ??= [];
+    // There is no non-variation way to add reference art any more: an older project.json (or one
+    // written before this field existed) may still have its own reference images sitting in the
+    // now-vestigial imageIds instead of a variation. Fold them into a "Default" variation (reusing
+    // one by that name if the entry already has one) rather than lose or strand them.
+    if (entry.imageIds.length > 0) {
+      let defaultVariation = entry.variations.find((v) => v.name === 'Default');
+      if (!defaultVariation) {
+        defaultVariation = { id: newId('var'), name: 'Default', prompt: '', imageIds: [] };
+        entry.variations.push(defaultVariation);
+      }
+      for (const id of entry.imageIds) {
+        if (!defaultVariation.imageIds.includes(id)) defaultVariation.imageIds.push(id);
+      }
+      entry.imageIds = [];
+    }
+  }
   for (const page of p.pages) {
     normalizePagePanels(page.panels);
     page.panels.flatMap((panel) => panel.bubbles).forEach((bubble) => (bubble.height ??= 20));
@@ -93,6 +111,20 @@ function checkStoryEntry(value: unknown, path: string, linkField: string): void 
       if (typeof id !== 'string') fail(`${path}.${field}[${i}]`, 'expected string id');
     });
   }
+  // Optional (normalizeProject backfills [] on an older project.json that predates variations).
+  if (entry.variations !== undefined) {
+    expectArray(entry.variations, path, 'variations').forEach((v, i) =>
+      checkVariation(v, `${path}.variations[${i}]`)
+    );
+  }
+}
+
+function checkVariation(value: unknown, path: string): void {
+  const variation = expectRecord(value, path);
+  expectStrings(variation, path, ['id', 'name', 'prompt']);
+  expectArray(variation.imageIds, path, 'imageIds').forEach((id, i) => {
+    if (typeof id !== 'string') fail(`${path}.imageIds[${i}]`, 'expected string id');
+  });
 }
 
 function checkPage(value: unknown, path: string): void {
@@ -160,6 +192,7 @@ function checkLayer(value: unknown, path: string): void {
   }
   optionalString(layer, path, 'subjectId');
   optionalString(layer, path, 'sceneId');
+  optionalString(layer, path, 'variationId');
   optionalString(layer, path, 'prompt');
   if (
     layer.aspectRatio !== undefined &&

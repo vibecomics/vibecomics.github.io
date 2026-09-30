@@ -21,6 +21,13 @@ export interface Layer {
   /** Id of the scene a background layer is the setting of; the media picker lists that scene's art first. */
   sceneId?: string;
   /**
+   * Id of one of subjectId's (or, for a background, sceneId's) variations: which pose/state to draw
+   * and to pick reference images from (e.g. a character's "Back view", an object's "Open"). Absent
+   * means no particular variation. Cleared automatically when subjectId/sceneId changes to a
+   * different entry (or is cleared), since a variation belongs to one specific entry.
+   */
+  variationId?: string;
+  /**
    * What this layer's art shows: its own part of the image prompt, or a plain
    * description. The page prompt, the panel prompt and the story bible supply
    * the rest of the prompt an image model is given.
@@ -46,11 +53,12 @@ export interface Layer {
   flipX?: boolean;
   /**
    * True when the prompt (or, for a background, the linked scene; or, for a
-   * foreground layer, the linked subject) has changed since this layer's
-   * image was made, so the image no longer matches what the prompt asks for.
-   * Set automatically: layers.add/update turn it on when the prompt (or
-   * scene/subject) changes and off when the image does. Absent or false
-   * means the image is up to date, including for a layer with no image yet.
+   * foreground layer, the linked subject; or the linked variationId) has
+   * changed since this layer's image was made, so the image no longer matches
+   * what the prompt asks for. Set automatically: layers.add/update turn it on
+   * when the prompt (or scene/subject/variation) changes and off when the
+   * image does. Absent or false means the image is up to date, including for
+   * a layer with no image yet.
    */
   dirty?: boolean;
 }
@@ -136,14 +144,40 @@ export interface MediaItem {
   sceneId?: string;
 }
 
+/**
+ * One pose or state of a character/object/scene (e.g. a character's "Front view", "Back view", an
+ * object's "Open"/"Closed", a scene's "Day"/"Night"): its own prompt text, stitched in after the
+ * entry's description, plus the reference art for that pose/state specifically. Generating a
+ * variation's image never bakes several poses into one picture (that confuses later prompting that
+ * references it) — one variation, one pose, one image at a time; add more variations for more poses.
+ */
+export interface Variation {
+  id: string;
+  /** Short label shown in the UI and offered when a layer picks which variation to reference, e.g.
+   * "Front view", "Open". */
+  name: string;
+  /** This variation's own part of the image prompt, stitched in after the entry's description (e.g.
+   * "Front view, facing the camera directly."). */
+  prompt: string;
+  /** MediaItem ids of this variation's reference art. */
+  imageIds: string[];
+}
+
 /** Shared shape of the story-bible entries: visual description plus reference art. */
 export interface StoryEntry {
   id: string;
   name: string;
   /** Appearance and continuity notes an LLM reads to build image-generation prompts. */
   description: string;
-  /** MediaItem ids of the reference art. */
+  /** MediaItem ids of the reference art not tied to any particular variation. */
   imageIds: string[];
+  /**
+   * Poses or states of this entry (see Variation): a character typically has "Front view", "Back
+   * view", "Side view"; an object's are whatever states it has (a locker's "Open"/"Closed", a
+   * sword's "Sheathed"/"Drawn"); a scene's might be "Day"/"Night". Empty for an entry that doesn't
+   * need them.
+   */
+  variations: Variation[];
 }
 
 export interface Character extends StoryEntry {

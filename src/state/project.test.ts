@@ -92,6 +92,44 @@ test('a metadata block with neither style nor the old outline field is invalid',
   assert.throws(() => assertValidProject(project), /style/);
 });
 
+test('normalizeProject folds an entry\'s leftover imageIds into a "Default" variation', () => {
+  const project = projectWith([layer()]);
+  project.metadata.characters.push({
+    id: 'char1',
+    name: 'Mira',
+    description: '',
+    imageIds: ['m1', 'm2'],
+    sceneIds: [],
+    variations: [],
+  } as never);
+
+  normalizeProject(project);
+
+  const entry = project.metadata.characters[0];
+  assert.deepEqual(entry.imageIds, []);
+  assert.equal(entry.variations.length, 1);
+  assert.equal(entry.variations[0].name, 'Default');
+  assert.deepEqual(entry.variations[0].imageIds, ['m1', 'm2']);
+});
+
+test('normalizeProject reuses an existing "Default" variation instead of making a second one', () => {
+  const project = projectWith([layer()]);
+  project.metadata.objects.push({
+    id: 'obj1',
+    name: 'Locker',
+    description: '',
+    imageIds: ['m1'],
+    sceneIds: [],
+    variations: [{ id: 'v1', name: 'Default', prompt: '', imageIds: ['m0'] }],
+  } as never);
+
+  normalizeProject(project);
+
+  const entry = project.metadata.objects[0];
+  assert.equal(entry.variations.length, 1);
+  assert.deepEqual(entry.variations[0].imageIds, ['m0', 'm1']);
+});
+
 test('a media item may carry a thumbnail file name, which must be a string', () => {
   const project = createBlankProject('Test');
   project.metadata.media.push({

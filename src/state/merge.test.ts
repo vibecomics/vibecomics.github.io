@@ -26,8 +26,8 @@ function base(): ComicProject {
   const project = createBlankProject('Test');
   project.metadata.style = 'Style';
   project.metadata.characters = [
-    { id: 'c1', name: 'Mira', description: 'Red hair', imageIds: [], sceneIds: [] },
-    { id: 'c2', name: 'Otto', description: 'Tall', imageIds: [], sceneIds: [] },
+    { id: 'c1', name: 'Mira', description: 'Red hair', imageIds: [], sceneIds: [], variations: [] },
+    { id: 'c2', name: 'Otto', description: 'Tall', imageIds: [], sceneIds: [], variations: [] },
   ];
   project.pages.push(
     {
@@ -322,6 +322,7 @@ test('story bible: additions on both sides combine; the same description changed
     description: 'New',
     imageIds: [],
     sceneIds: [],
+    variations: [],
   });
   theirs.metadata.scenes.push({
     id: 's1',
@@ -329,6 +330,7 @@ test('story bible: additions on both sides combine; the same description changed
     description: 'Dusk',
     characterIds: [],
     imageIds: [],
+    variations: [],
   });
   mine.metadata.characters[0].name = 'Mira K';
   theirs.metadata.characters[0].description = 'Short red hair';

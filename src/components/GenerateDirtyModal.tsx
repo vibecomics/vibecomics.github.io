@@ -27,7 +27,7 @@ export default function GenerateDirtyModal({ project, onGenerate, onClose }: Pro
           <div className="modal-content">
             <div className="modal-header">
               <h2 className="modal-title h5">
-                ✨ {items.length} image{items.length === 1 ? '' : 's'} to generate
+                🪄 {items.length} image{items.length === 1 ? '' : 's'} to generate
               </h2>
               <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
             </div>
@@ -60,7 +60,7 @@ export default function GenerateDirtyModal({ project, onGenerate, onClose }: Pro
                 disabled={items.length === 0}
                 onClick={onGenerate}
               >
-                ✨ Generate {items.length}
+                🪄 Generate {items.length}
               </button>
             </div>
           </div>

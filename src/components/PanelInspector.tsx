@@ -37,14 +37,15 @@ export default function PanelInspector({ page, panel, media, selection, onSelect
         <button
           className="btn btn-outline-secondary btn-sm text-nowrap flex-shrink-0"
           disabled={onlyPanel}
-          title={onlyPanel ? 'A page needs at least one panel' : undefined}
+          title={onlyPanel ? 'A page needs at least one panel' : 'Delete this panel'}
+          aria-label="Delete this panel"
           onClick={() => {
             if (!hasContent || window.confirm('Delete this panel and everything in it?')) {
               cb().panels.delete(panel.id);
             }
           }}
         >
-          <TrashIcon /> Delete panel
+          <TrashIcon />
         </button>
       </div>
 

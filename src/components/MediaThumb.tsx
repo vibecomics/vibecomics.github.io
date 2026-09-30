@@ -6,14 +6,25 @@ interface Props {
   onRemove: () => void;
   /** Called when the image itself is clicked (e.g. to enlarge it). */
   onOpen?: () => void;
+  /** Width in px; defaults to 72. */
+  width?: number;
+  /** When true, no explicit height is set — the thumbnail stretches to fill its flex parent's
+   * height instead of forcing a square, e.g. to match a sibling's height in a row. */
+  fillHeight?: boolean;
 }
 
-/** A square thumbnail of a media item, with a button to remove it. */
-export default function MediaThumb({ item, onRemove, onOpen }: Props) {
+/** A thumbnail of a media item (square by default), with a button to remove it. */
+export default function MediaThumb({
+  item,
+  onRemove,
+  onOpen,
+  width = 72,
+  fillHeight = false,
+}: Props) {
   const { url, failed, error } = useMediaUrl(item);
 
   return (
-    <div className="position-relative" style={{ width: 72, height: 72 }}>
+    <div className="position-relative" style={{ width, ...(fillHeight ? {} : { height: width }) }}>
       {url ? (
         <button
           type="button"

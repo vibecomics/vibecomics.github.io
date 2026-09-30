@@ -18,9 +18,17 @@ import type {
   Layer,
   Panel,
   Scene,
+  StoryEntry,
+  Variation,
 } from '../types/comic';
 import { newId } from '../utils/id';
-import type { ComicBuilderDeps, StoryEntryInput, StoryEntryPatch } from './deps';
+import type {
+  ComicBuilderDeps,
+  StoryEntryInput,
+  StoryEntryPatch,
+  VariationInput,
+  VariationPatch,
+} from './deps';
 
 export const LAYER_KINDS = ['background', 'foreground'] as const;
 export const BUBBLE_KINDS = ['speech', 'thought', 'shout', 'caption'] as const;
@@ -38,6 +46,115 @@ interface StoryTypes {
   characters: Character;
   scenes: Scene;
   objects: ComicObject;
+}
+
+/** Which story-bible list an entry (or a layer's variationId) belongs to. */
+export type StoryKind = keyof StoryTypes;
+
+/** Seeded when a character is created (front/back/side is the one fixed set that always applies);
+ * objects and scenes start with none — their variations (a locker's Open/Closed, a scene's Day/
+ * Night) are whatever the user adds, so there is no sensible default to guess. */
+function defaultVariations(kind: StoryKind): Variation[] {
+  if (kind !== 'characters') return [];
+  return [
+    {
+      id: newId('var'),
+      name: 'Front view',
+      prompt: 'Front view, facing the camera directly.',
+      imageIds: [],
+    },
+    {
+      id: newId('var'),
+      name: 'Back view',
+      prompt: 'Back view, facing directly away from the camera.',
+      imageIds: [],
+    },
+    {
+      id: newId('var'),
+      name: 'Side view',
+      prompt: 'Side view (profile) or three-quarter view, facing to the side.',
+      imageIds: [],
+    },
+  ];
+}
+
+function entriesOfKind(project: ComicProject, kind: StoryKind): StoryEntry[] {
+  return project.metadata[kind] as unknown as StoryEntry[];
+}
+
+function findEntry(project: ComicProject, kind: StoryKind, entryId: string): StoryEntry {
+  const entry = entriesOfKind(project, kind).find((e) => e.id === entryId);
+  if (!entry) throw new Error(`"${entryId}" not found in ${kind}.`);
+  return entry;
+}
+
+/** A layer's variationId must belong to the variations of its linked subject (foreground) or scene
+ * (background). */
+export function assertVariation(project: ComicProject, ownerId: string, variationId: string): void {
+  const owner: StoryEntry | undefined = [
+    ...project.metadata.characters,
+    ...project.metadata.objects,
+    ...project.metadata.scenes,
+  ].find((entry) => entry.id === ownerId);
+  if (!owner?.variations.some((v) => v.id === variationId)) {
+    throw new Error(`Variation "${variationId}" not found on "${ownerId}".`);
+  }
+}
+
+/** list/get/add/update/delete for the variations (poses/states) of a character, scene or object. */
+export function variationsApi(deps: ComicBuilderDeps) {
+  return {
+    list: (kind: StoryKind, entryId: string): Variation[] =>
+      snapshot(findEntry(requireProject(deps), kind, entryId).variations),
+    get: (kind: StoryKind, entryId: string, variationId: string): Variation | null => {
+      const variation = findEntry(requireProject(deps), kind, entryId).variations.find(
+        (v) => v.id === variationId
+      );
+      return variation ? snapshot(variation) : null;
+    },
+    add: (kind: StoryKind, entryId: string, input: VariationInput): Variation => {
+      const variation: Variation = {
+        id: newId('var'),
+        name: input.name,
+        prompt: input.prompt ?? '',
+        imageIds: input.imageIds ?? [],
+      };
+      mutate(deps, (p) => {
+        findEntry(p, kind, entryId).variations.push(variation);
+      });
+      return snapshot(variation);
+    },
+    update: (
+      kind: StoryKind,
+      entryId: string,
+      variationId: string,
+      patch: VariationPatch
+    ): Variation =>
+      snapshot(
+        mutate(deps, (p) => {
+          const variation = findEntry(p, kind, entryId).variations.find(
+            (v) => v.id === variationId
+          );
+          if (!variation) throw new Error(`Variation "${variationId}" not found.`);
+          return Object.assign(variation, definedFields(patch));
+        })
+      ),
+    delete: (kind: StoryKind, entryId: string, variationId: string): boolean =>
+      mutate(deps, (p) => {
+        const entry = findEntry(p, kind, entryId);
+        const removed = removeById(entry.variations, variationId);
+        if (removed) {
+          for (const page of p.pages) {
+            for (const panel of page.panels) {
+              for (const layer of panel.layers) {
+                if (layer.variationId === variationId) delete layer.variationId;
+              }
+            }
+          }
+        }
+        return removed;
+      }),
+  };
 }
 
 interface PanelItemTypes {
@@ -126,8 +243,14 @@ export function clearLinksTo(project: ComicProject, id: string): void {
   for (const page of project.pages) {
     for (const panel of page.panels) {
       for (const layer of panel.layers) {
-        if (layer.subjectId === id) delete layer.subjectId;
-        if (layer.sceneId === id) delete layer.sceneId;
+        if (layer.subjectId === id) {
+          delete layer.subjectId;
+          delete layer.variationId;
+        }
+        if (layer.sceneId === id) {
+          delete layer.sceneId;
+          delete layer.variationId;
+        }
       }
     }
   }
@@ -199,6 +322,7 @@ export function storyApi<K extends keyof StoryTypes>(deps: ComicBuilderDeps, key
         name: input.name,
         description: input.description ?? '',
         imageIds: input.imageIds ?? [],
+        variations: input.variations ?? defaultVariations(key),
         [linkField]: input.linkIds ?? [],
       } as unknown as Entry;
       deps.updateProject((p) => {

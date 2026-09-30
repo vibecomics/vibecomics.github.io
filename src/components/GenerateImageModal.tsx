@@ -16,7 +16,16 @@ export interface Generated extends MediaItem {
   aspectRatio?: number;
 }
 
-interface Props {
+/** One item's outcome from a bulk generation (see the `bulk` prop). */
+export interface BulkResult {
+  id: string;
+  /** Shown in the results list, e.g. a variation's name. */
+  label: string;
+  ok: boolean;
+  error?: string;
+}
+
+interface CommonProps {
   title: string;
   /** For looking up a manually-added reference's subject/scene, to prefill its note (see
    * defaultReferenceNote). */
@@ -31,6 +40,12 @@ interface Props {
   getDefaultReferences: () => GenerationReference[];
   /** Every image in the project: what the user can pick references from. */
   media: MediaItem[];
+  onClose: () => void;
+}
+
+/** The usual flow: generate one image, preview it, then either accept it or discard it and try again. */
+interface SingleProps extends CommonProps {
+  bulk?: undefined;
   onGenerate: (prompt: string, references: GenerationReference[]) => Promise<Generated>;
   /**
    * Called with a generated image, `primary` false the instant generation succeeds (before the user
@@ -39,8 +54,23 @@ interface Props {
    * promote it to the layer's/entry's active image.
    */
   onUse: (result: Generated, opts: { primary: boolean }) => void;
-  onClose: () => void;
 }
+
+/** Generates one image per item in a single click instead of the usual generate-preview-accept flow
+ * for one image: each item auto-commits itself (there's no one to preview a batch for, same as
+ * generate.dirty), so there's no onGenerate/onUse — the dialog just shows which items succeeded.
+ * Used for the entry-level "Generate all variations" action. */
+interface BulkProps extends CommonProps {
+  bulk: {
+    /** e.g. "3 variations", shown on the Generate button. */
+    label: string;
+    onGenerateAll: (prompt: string, references: GenerationReference[]) => Promise<BulkResult[]>;
+  };
+  onGenerate?: undefined;
+  onUse?: undefined;
+}
+
+type Props = SingleProps | BulkProps;
 
 function Preview({ item }: { item: MediaItem }) {
   const { url, failed } = useMediaUrl(item);
@@ -59,18 +89,19 @@ function Preview({ item }: { item: MediaItem }) {
 }
 
 /** Generate an image from an editable prompt: generate, preview, then either accept it or discard it
- * and try again. Used for layer/background art and story-bible reference images alike. */
-export default function GenerateImageModal({
-  title,
-  project,
-  currentEntryId,
-  getDefaultPromptParts,
-  getDefaultReferences,
-  media,
-  onGenerate,
-  onUse,
-  onClose,
-}: Props) {
+ * and try again (or, in `bulk` mode, generate one image per item in a click, each auto-committing
+ * itself). Used for layer/background art and story-bible reference images alike. */
+export default function GenerateImageModal(props: Props) {
+  const {
+    title,
+    project,
+    currentEntryId,
+    getDefaultPromptParts,
+    getDefaultReferences,
+    media,
+    bulk,
+    onClose,
+  } = props;
   const [parts, setParts] = useState(getDefaultPromptParts);
   // Collapsed by default (a stitched prompt can be long); expanded state is keyed by label rather
   // than index so it survives a part being deleted.
@@ -79,6 +110,7 @@ export default function GenerateImageModal({
   const [picking, setPicking] = useState(false);
   const max = cb().generate.maxReferenceImages();
   const [result, setResult] = useState<Generated | null>(null);
+  const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
   const task = useTask();
 
   const prompt = joinPromptParts(parts);
@@ -110,19 +142,24 @@ export default function GenerateImageModal({
   }
 
   function generate() {
+    if (props.bulk) {
+      setBulkResults(null);
+      void task.run(async () => setBulkResults(await props.bulk.onGenerateAll(prompt, references)));
+      return;
+    }
     setResult(null);
     void task.run(async () => {
-      const generated = await onGenerate(prompt, references);
+      const generated = await props.onGenerate(prompt, references);
       // Attach it the moment it exists, before the user can do anything else (including closing the
       // tab) — never leave a generated image sitting unattached, waiting on a later action.
-      onUse(generated, { primary: false });
+      props.onUse(generated, { primary: false });
       setResult(generated);
     });
   }
 
   function useResult() {
-    if (!result) return;
-    onUse(result, { primary: true });
+    if (!result || props.bulk) return;
+    props.onUse(result, { primary: true });
     onClose();
   }
 
@@ -139,7 +176,9 @@ export default function GenerateImageModal({
         <div className="modal-dialog modal-lg modal-dialog-scrollable">
           <div className="modal-content">
             <div className="modal-header">
-              <h2 className="modal-title h5">✨ {title}</h2>
+              <h2 className="modal-title h5">
+                {bulk ? '🪄' : '✨'} {title}
+              </h2>
               <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
             </div>
             <div className="modal-body">
@@ -257,11 +296,36 @@ export default function GenerateImageModal({
               >
                 + Add reference image
               </button>
-              {result && <Preview item={result} />}
+              {!bulk && result && <Preview item={result} />}
+              {bulk && bulkResults && (
+                <ul className="list-unstyled mb-2">
+                  {bulkResults.map((r) => (
+                    <li key={r.id} className={r.ok ? 'text-body' : 'text-danger'}>
+                      {r.ok ? '✓' : '✗'} {r.label}
+                      {!r.ok && r.error ? ` — ${r.error}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              )}
               {task.error && <div className="text-danger small mb-2">{task.error}</div>}
             </div>
             <div className="modal-footer">
-              {result ? (
+              {bulk ? (
+                bulkResults ? (
+                  <button type="button" className="btn btn-primary btn-sm" onClick={onClose}>
+                    Done
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={task.busy || !prompt.trim()}
+                    onClick={generate}
+                  >
+                    {task.busy && <Spinner />}🪄 Generate {bulk.label}
+                  </button>
+                )
+              ) : result ? (
                 <>
                   <button
                     type="button"

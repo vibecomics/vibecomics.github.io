@@ -2,7 +2,7 @@ import type { MediaRemoval } from '../state/media';
 import type { DeviceCodeInfo } from '../drive/deviceOAuth';
 import type { ProjectFolder } from '../storage/types';
 import type { GeneratorConfig } from '../generators/types';
-import type { Bubble, ComicProject, Layer, MediaItem, PageSize } from '../types/comic';
+import type { Bubble, ComicProject, Layer, MediaItem, PageSize, Variation } from '../types/comic';
 
 /** Result of an action that can fail. */
 export interface ActionResult {
@@ -60,10 +60,11 @@ export interface ComicBuilderDeps {
 export type LayerInput = Partial<Omit<Layer, 'id'>>;
 /** Patch for layers.update(). Only the given fields change. */
 export type LayerPatch = Partial<Omit<Layer, 'id'>>;
-/** A LayerPatch as the API takes it: `subjectId` or `sceneId` set to null clears it. */
-export type LayerUpdate = Omit<LayerPatch, 'subjectId' | 'sceneId'> & {
+/** A LayerPatch as the API takes it: `subjectId`, `sceneId` or `variationId` set to null clears it. */
+export type LayerUpdate = Omit<LayerPatch, 'subjectId' | 'sceneId' | 'variationId'> & {
   subjectId?: string | null;
   sceneId?: string | null;
+  variationId?: string | null;
 };
 /** Input for bubbles.add(). Position and size are in % of panel size. */
 export type BubbleInput = Partial<Omit<Bubble, 'id'>> & { text: string };
@@ -74,11 +75,27 @@ export type BubblePatch = Partial<Omit<Bubble, 'id'>>;
 export interface StoryEntryInput {
   name: string;
   description?: string;
-  /** MediaItem ids (reference art). */
+  /** MediaItem ids (reference art not tied to any particular variation). */
   imageIds?: string[];
   /** Linked entry ids: sceneIds for characters/objects, characterIds for scenes. */
   linkIds?: string[];
+  /** Poses/states (see Variation). Full replace, not appended to; a character defaults to Front/Back/
+   * Side view when left out, objects and scenes default to none. Any item missing an `id` gets one
+   * generated. */
+  variations?: Variation[];
 }
 
 /** Patch for characters/scenes/objects.update(). Only the given fields change. */
 export type StoryEntryPatch = Partial<StoryEntryInput>;
+
+/** Input for variations.add(). */
+export interface VariationInput {
+  name: string;
+  /** This variation's own part of the image prompt, stitched in after the entry's description. */
+  prompt?: string;
+  /** MediaItem ids of this variation's reference art. */
+  imageIds?: string[];
+}
+
+/** Patch for variations.update(). Only the given fields change; imageIds replaces the list. */
+export type VariationPatch = Partial<VariationInput>;

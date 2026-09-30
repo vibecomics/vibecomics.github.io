@@ -30,6 +30,7 @@ import {
   assertScene,
   assertSubject,
   assertOptionalText,
+  assertVariation,
   definedFields,
   imageSwapPatch,
   layerArtSize,
@@ -42,6 +43,7 @@ import {
   resolveLayerImage,
   snapshot,
   storyApi,
+  variationsApi,
 } from './builders';
 import type { PendingGeneration } from './builders';
 import type {
@@ -57,16 +59,25 @@ import {
   cancelLayerGeneration,
   cancelQueueItem as cancelGenerationQueueItem,
   cancelReferenceGeneration,
+  cancelVariationGeneration,
   defaultEntryReferences,
   defaultLayerReferences,
   generateAllDirty,
+  generateAllVariations,
   generateLayerImage,
   generateReferenceImage,
+  generateVariationImage,
   getQueue,
   maxReferenceImages,
 } from './generation';
 import type { GenerationReference } from './generation';
-import type { GeneratedImage, GenerationOutcome, QueueItem, ReferenceKind } from './generation';
+import type {
+  GeneratedImage,
+  GenerationOutcome,
+  QueueItem,
+  ReferenceKind,
+  VariationOutcome,
+} from './generation';
 import {
   buildLayerPrompt,
   buildLayerPromptParts,
@@ -92,32 +103,53 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
   const characters = storyApi(deps, 'characters');
   const scenes = storyApi(deps, 'scenes');
   const objects = storyApi(deps, 'objects');
+  const variations = variationsApi(deps);
 
   /** Shared by layers.update and generate.layer/dirty, which also need to set a layer's image. */
   function updateLayer(panelId: string, layerId: string, patch: LayerUpdate): Layer {
     if (patch.kind !== undefined) assertKind(patch.kind, LAYER_KINDS, 'Layer kind');
+    const project = requireProject(deps);
+    const current = layers.get(panelId, layerId);
+    if (!current) throw new Error(`Layer "${layerId}" not found.`);
     const swapsImage = patch.mediaId !== undefined;
     let image: Partial<Layer> = {};
     if (swapsImage) {
-      const project = requireProject(deps);
       resolveLayerImage(project, patch);
-      const current = layers.get(panelId, layerId);
-      if (!current) throw new Error(`Layer "${layerId}" not found.`);
       image = imageSwapPatch(current, patch.mediaId!);
     }
-    const { subjectId, sceneId, ...rest } = patch;
-    if (typeof subjectId === 'string') assertSubject(requireProject(deps), subjectId);
-    if (typeof sceneId === 'string') assertScene(requireProject(deps), sceneId);
+    const { subjectId, sceneId, variationId, ...rest } = patch;
+    if (typeof subjectId === 'string') assertSubject(project, subjectId);
+    if (typeof sceneId === 'string') assertScene(project, sceneId);
+    const subjectChanged = subjectId !== undefined && subjectId !== current.subjectId;
+    const sceneChanged = sceneId !== undefined && sceneId !== current.sceneId;
+    // A variation belongs to one specific entry, so switching to a different subject/scene (or
+    // clearing it) invalidates the current one, unless this same call also gives a new one.
+    const clearsVariation = (subjectChanged || sceneChanged) && variationId === undefined;
+    if (typeof variationId === 'string') {
+      const ownerId =
+        typeof subjectId === 'string'
+          ? subjectId
+          : typeof sceneId === 'string'
+            ? sceneId
+            : current.kind === 'background'
+              ? current.sceneId
+              : current.subjectId;
+      if (!ownerId) throw new Error('variationId needs a linked subjectId or sceneId.');
+      assertVariation(project, ownerId, variationId);
+    }
     // A new image satisfies whatever prompt asked for it, so it always clears dirty (image.dirty,
     // set above), even alongside a prompt change (that means "here is the new art for it").
-    // Otherwise, touching the prompt or the linked scene/subject makes the current image stale
-    // (dirty) unless that leaves no prompt at all to act on.
+    // Otherwise, touching the prompt, the linked scene/subject, or the chosen variation makes the
+    // current image stale (dirty) unless that leaves no prompt at all to act on.
     const touchesPrompt =
-      patch.prompt !== undefined || subjectId !== undefined || sceneId !== undefined;
+      patch.prompt !== undefined ||
+      subjectId !== undefined ||
+      sceneId !== undefined ||
+      variationId !== undefined;
     const dirty = swapsImage
       ? undefined
       : touchesPrompt
-        ? Boolean((patch.prompt ?? layers.get(panelId, layerId)?.prompt ?? '').trim())
+        ? Boolean((patch.prompt ?? current.prompt ?? '').trim())
         : undefined;
     return layers.update(
       panelId,
@@ -128,8 +160,13 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         ...(dirty !== undefined && { dirty }),
         ...(typeof subjectId === 'string' && { subjectId }),
         ...(typeof sceneId === 'string' && { sceneId }),
+        ...(typeof variationId === 'string' && { variationId }),
       },
-      [...(subjectId === null ? ['subjectId'] : []), ...(sceneId === null ? ['sceneId'] : [])]
+      [
+        ...(subjectId === null ? ['subjectId'] : []),
+        ...(sceneId === null ? ['sceneId'] : []),
+        ...(variationId === null || clearsVariation ? ['variationId'] : []),
+      ]
     );
   }
   const setLayerMedia = (
@@ -671,10 +708,16 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * repeating or contradicting each other. Read them back with page.select
      * (page prompt), panels.get (panel prompt) and layers.get (layer prompt).
      *
+     * A layer can pin itself to one of its subject's/scene's variations (see
+     * the Variation type and the variations namespace) with variationId: that
+     * variation's own reference images become the default sent when generating
+     * this layer's art (see generate.layerReferences), and its own sparkle
+     * button in the reference picker generates just that one pose/state.
+     *
      * DIRTY. A layer's `dirty` field says whether its image still matches its
      * prompt. add/update set it automatically: editing the prompt (or, for a
-     * background, its scene; or, for a foreground layer, its subject) turns it
-     * on; setting the image (mediaId) turns it off. Check layers.list or
+     * background, its scene; or, for a foreground layer, its subject; or its
+     * chosen variation) turns it on; setting the image (mediaId) turns it off. Check layers.list or
      * layers.get for `dirty: true` to find which layers or backgrounds need a
      * new image generated for them, and regenerate just those, not the whole
      * panel. See the generate namespace to do this automatically with a
@@ -709,7 +752,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * layer prompt (see the layers namespace). Foreground images
        * should usually be PNGs with a transparent background.
        * @param panelId - The panel id.
-       * @param input - { name?, prompt?, subjectId?, sceneId?, mediaId?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. mediaId must already be registered (from media.upload or media.list); omit it for a layer that is only a prompt so far. subjectId is the id of the character or object the layer shows (it must exist); the media picker lists that subject's art first. sceneId is the id of the scene a background layer is the setting of (it must exist); the picker lists that scene's art first. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate. dirty is set automatically (true when there's a prompt and no image yet) unless you pass it explicitly.
+       * @param input - { name?, prompt?, subjectId?, sceneId?, variationId?, mediaId?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. mediaId must already be registered (from media.upload or media.list); omit it for a layer that is only a prompt so far. subjectId is the id of the character or object the layer shows (it must exist); the media picker lists that subject's art first. sceneId is the id of the scene a background layer is the setting of (it must exist); the picker lists that scene's art first. variationId is the id of one of subjectId's (or sceneId's) variations (it must belong to that entry): its own images become the default reference sent when generating this layer. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate. dirty is set automatically (true when there's a prompt and no image yet) unless you pass it explicitly.
        * @returns A deep-cloned snapshot of the new Layer.
        */
       add: (panelId: string, input: LayerInput): Layer => {
@@ -719,6 +762,11 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         const image = resolveLayerImage(project, input);
         if (input.subjectId !== undefined) assertSubject(project, input.subjectId);
         if (input.sceneId !== undefined) assertScene(project, input.sceneId);
+        if (input.variationId !== undefined) {
+          const ownerId = kind === 'background' ? input.sceneId : input.subjectId;
+          if (!ownerId) throw new Error('variationId needs a subjectId or sceneId.');
+          assertVariation(project, ownerId, input.variationId);
+        }
         const media = project.metadata.media.find((m) => m.id === image.mediaId);
         return layers.add(
           panelId,
@@ -742,10 +790,12 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * Update a layer: move (x/y), resize (width), rotate, change opacity or
-       * visibility, flip it left to right (flipX), rename, edit its prompt, set what it shows (subjectId: a character or object id) or, for a background, the scene it is the setting of (sceneId), either null to clear it, or swap its image (mediaId).
+       * visibility, flip it left to right (flipX), rename, edit its prompt, set what it shows (subjectId: a character or object id) or, for a background, the scene it is the setting of (sceneId), pin it to one of that entry's variations (variationId), any of the three either null to clear it, or swap its image (mediaId).
        * Only the given fields change. dirty tracks itself: editing prompt,
-       * subjectId or sceneId turns it on (off again if that leaves no prompt);
-       * setting mediaId turns it off, even in the same call.
+       * subjectId, sceneId or variationId turns it on (off again if that leaves no prompt);
+       * setting mediaId turns it off, even in the same call. Changing subjectId or sceneId to a
+       * different id (or clearing it) clears variationId too, unless this same call also gives a new
+       * one — a variation belongs to one specific entry.
        * @param panelId - The panel id.
        * @param layerId - The layer id.
        * @param patch - Partial layer fields.
@@ -953,12 +1003,19 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * Characters in the story bible. A character's description sets its visual
      * look (appearance, outfit, distinctive features) plus continuity notes;
      * imageIds point at reference art in metadata.media (upload it with
-     * media.upload). An LLM reads a character (description + images) together
-     * with a scene to build image-generation prompts: copy the description
-     * verbatim into every prompt involving the character, and pass its reference
-     * images (media.download) to the generator, so it looks the same on every
-     * page (see the continuity guide above). In update(), imageIds and
-     * linkIds replace the existing lists (they are not appended to).
+     * media.upload) not tied to any particular variation. An LLM reads a
+     * character (description + images) together with a scene to build
+     * image-generation prompts: copy the description verbatim into every prompt
+     * involving the character, and pass its reference images (media.download)
+     * to the generator, so it looks the same on every page (see the continuity
+     * guide above). In update(), imageIds and linkIds replace the existing
+     * lists (they are not appended to).
+     *
+     * A character also has variations (see the Variation type and the
+     * variations namespace): named poses, each its own image rather than
+     * several baked into one turnaround sheet. characters.create seeds three —
+     * Front view, Back view, Side view — since those apply to every character;
+     * add more (or delete these) with variations.add/delete.
      */
     characters: {
       /**
@@ -968,24 +1025,26 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       list: characters.list,
 
       /**
-       * Get one character with its full description and image/scene links.
+       * Get one character with its full description, image/scene links and variations.
        * @param id - The character id.
        * @returns A deep-cloned Character snapshot, or null when not found. Read-only.
        */
       get: characters.get,
 
       /**
-       * Create a character.
-       * @param input - { name, description?, imageIds?, linkIds? }: linkIds are scene ids the character appears in.
+       * Create a character. Seeds variations with Front view/Back view/Side view unless `input`
+       * gives its own.
+       * @param input - { name, description?, imageIds?, linkIds?, variations? }: linkIds are scene ids the character appears in.
        * @returns The new Character.
        */
       create: characters.create,
 
       /**
-       * Update a character's name, description, or image/scene links.
-       * Only the given fields change.
+       * Update a character's name, description, image/scene links or variations. Only the given
+       * fields change; imageIds, linkIds and variations each replace the existing list (not
+       * appended to) — use the variations namespace to add/change/remove one at a time instead.
        * @param id - The character id.
-       * @param patch - { name?, description?, imageIds?, linkIds? }.
+       * @param patch - { name?, description?, imageIds?, linkIds?, variations? }.
        * @returns A deep-cloned snapshot of the updated Character. Throws when not found.
        */
       update: characters.update,
@@ -1001,11 +1060,13 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       /**
        * Generate a reference image for this character with the configured image generator (see the
        * generate namespace): built from the STYLE paragraph, this character's description and,
-       * unless given, a default prompt for a multi-angle turnaround sheet (see
-       * generate.referencePrompt) on a plain white background, using its existing reference images
-       * (if any) so a new one stays consistent. Registers the image but does not add it to imageIds —
-       * review it, then add it yourself with characters.update(id, { imageIds: [...] }), the same
-       * "register, then link" split as media.upload.
+       * unless given, a default prompt for a single, isolated view on a plain white background (see
+       * generate.referencePrompt) — not tied to any variation. Uses its existing (ungrouped plus
+       * every variation's) reference images, if any, so a new one stays consistent. Registers the
+       * image but does not add it to imageIds — review it, then add it yourself with
+       * characters.update(id, { imageIds: [...] }), the same "register, then link" split as
+       * media.upload. To generate one of this character's variations (e.g. its Back view) instead,
+       * use generate.variationImage; to generate all of them at once, use generate.allVariations.
        * @param id - The character id.
        * @param prompt - Optional prompt to use instead of the default (e.g. edited by a user before generating).
        * @param references - Optional reference images to send instead of the entry's own (see generate.entryReferences), each { mediaId, note? }; a note says how to use that image and is added to the prompt.
@@ -1022,6 +1083,11 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * Scenes/locations in the story bible. A scene's description covers the
      * setting, time of day, mood, and lighting — the other half (with a
      * character) of an image-generation prompt.
+     *
+     * A scene also has variations (see the Variation type and the variations
+     * namespace): named states (e.g. Day, Night, Rain), each its own image.
+     * Scenes start with none — add whatever states the story needs with
+     * variations.add.
      */
     scenes: {
       /**
@@ -1031,7 +1097,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       list: scenes.list,
 
       /**
-       * Get one scene with its full description and character/image links.
+       * Get one scene with its full description, character/image links and variations.
        * @param id - The scene id.
        * @returns A deep-cloned Scene snapshot, or null when not found. Read-only.
        */
@@ -1039,16 +1105,17 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * Create a scene.
-       * @param input - { name, description?, imageIds?, linkIds? }: linkIds are character ids appearing in the scene.
+       * @param input - { name, description?, imageIds?, linkIds?, variations? }: linkIds are character ids appearing in the scene.
        * @returns The new Scene.
        */
       create: scenes.create,
 
       /**
-       * Update a scene's name, description, or character/image links.
-       * Only the given fields change.
+       * Update a scene's name, description, character/image links or variations. Only the given
+       * fields change; imageIds, linkIds and variations each replace the existing list (not
+       * appended to) — use the variations namespace to add/change/remove one at a time instead.
        * @param id - The scene id.
-       * @param patch - { name?, description?, imageIds?, linkIds? }.
+       * @param patch - { name?, description?, imageIds?, linkIds?, variations? }.
        * @returns A deep-cloned snapshot of the updated Scene. Throws when not found.
        */
       update: scenes.update,
@@ -1065,10 +1132,12 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * Generate a reference image for this scene with the configured image generator (see the
        * generate namespace): built from the STYLE paragraph, this scene's description and, unless
        * given, a default prompt for an establishing shot of the location itself (no characters; see
-       * generate.referencePrompt), using its existing reference images (if any) so a new one stays
-       * consistent. Registers the image but does not add it to imageIds — review it, then add it
-       * yourself with scenes.update(id, { imageIds: [...] }), the same "register, then link" split as
-       * media.upload.
+       * generate.referencePrompt), not tied to any variation, using its existing (ungrouped plus every
+       * variation's) reference images, if any, so a new one stays consistent. Registers the image but
+       * does not add it to imageIds — review it, then add it yourself with scenes.update(id, { imageIds:
+       * [...] }), the same "register, then link" split as media.upload. To generate one of this
+       * scene's variations (e.g. its Night state) instead, use generate.variationImage; to generate
+       * all of them at once, use generate.allVariations.
        * @param id - The scene id.
        * @param prompt - Optional prompt to use instead of the default (e.g. edited by a user before generating).
        * @param references - Optional reference images to send instead of the entry's own (see generate.entryReferences), each { mediaId, note? }; a note says how to use that image and is added to the prompt.
@@ -1084,6 +1153,11 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     /**
      * Props/objects in the story bible. Same shape as characters: a visual
      * description plus reference art, linkable from scenes.
+     *
+     * An object also has variations (see the Variation type and the variations
+     * namespace): named states (e.g. a locker's Open/Closed, a sword's
+     * Sheathed/Drawn), each its own image. Objects start with none — add
+     * whatever states it actually has with variations.add.
      */
     objects: {
       /**
@@ -1093,7 +1167,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       list: objects.list,
 
       /**
-       * Get one object with its full description and image/scene links.
+       * Get one object with its full description, image/scene links and variations.
        * @param id - The object id.
        * @returns A deep-cloned ComicObject snapshot, or null when not found. Read-only.
        */
@@ -1101,16 +1175,17 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * Create an object.
-       * @param input - { name, description?, imageIds?, linkIds? }: linkIds are scene ids where the object appears.
+       * @param input - { name, description?, imageIds?, linkIds?, variations? }: linkIds are scene ids where the object appears.
        * @returns The new ComicObject.
        */
       create: objects.create,
 
       /**
-       * Update an object's name, description, or image/scene links.
-       * Only the given fields change.
+       * Update an object's name, description, image/scene links or variations. Only the given
+       * fields change; imageIds, linkIds and variations each replace the existing list (not
+       * appended to) — use the variations namespace to add/change/remove one at a time instead.
        * @param id - The object id.
-       * @param patch - { name?, description?, imageIds?, linkIds? }.
+       * @param patch - { name?, description?, imageIds?, linkIds?, variations? }.
        * @returns A deep-cloned snapshot of the updated ComicObject. Throws when not found.
        */
       update: objects.update,
@@ -1125,11 +1200,13 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       /**
        * Generate a reference image for this object with the configured image generator (see the
        * generate namespace): built from the STYLE paragraph, this object's description and, unless
-       * given, a default prompt for a multi-angle turnaround sheet (see generate.referencePrompt) on a
-       * plain white background, using its existing reference images (if any) so a new one stays
-       * consistent. Registers the image but does not add it to imageIds — review it, then add it
-       * yourself with objects.update(id, { imageIds: [...] }), the same "register, then link" split as
-       * media.upload.
+       * given, a default prompt for a single, isolated view on a plain white background (see
+       * generate.referencePrompt), not tied to any variation, using its existing (ungrouped plus
+       * every variation's) reference images, if any, so a new one stays consistent. Registers the
+       * image but does not add it to imageIds — review it, then add it yourself with
+       * objects.update(id, { imageIds: [...] }), the same "register, then link" split as
+       * media.upload. To generate one of this object's variations (e.g. its Open state) instead,
+       * use generate.variationImage; to generate all of them at once, use generate.allVariations.
        * @param id - The object id.
        * @param prompt - Optional prompt to use instead of the default (e.g. edited by a user before generating).
        * @param references - Optional reference images to send instead of the entry's own (see generate.entryReferences), each { mediaId, note? }; a note says how to use that image and is added to the prompt.
@@ -1140,6 +1217,64 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         prompt?: string,
         references?: GenerationReference[]
       ): Promise<MediaItem> => generateReferenceImage(deps, 'objects', id, prompt, references),
+    },
+
+    /**
+     * Variations (poses/states) of a character, object or scene (see the Variation type): a name plus
+     * its own prompt text, stitched in after the entry's description when generating its image (see
+     * generate.variationImage/generate.allVariations), and its own reference images. Replaces baking
+     * several poses into one turnaround-sheet image, which confuses later prompting that references
+     * it: one variation, one pose, one image at a time. Addressed by (kind, entryId, variationId),
+     * the same `kind` as characters/scenes/objects.
+     */
+    variations: {
+      /**
+       * List an entry's variations, in creation order.
+       * @param kind - Which story-bible list the entry is in.
+       * @param entryId - The entry id.
+       * @returns Deep-cloned Variation snapshots. Throws when the entry is not found.
+       */
+      list: variations.list,
+
+      /**
+       * Get one variation.
+       * @param kind - Which story-bible list the entry is in.
+       * @param entryId - The entry id.
+       * @param variationId - The variation id.
+       * @returns A deep-cloned Variation snapshot, or null when not found. Throws when the entry is not found.
+       */
+      get: variations.get,
+
+      /**
+       * Add a variation to a character, object or scene.
+       * @param kind - Which story-bible list the entry is in.
+       * @param entryId - The entry id.
+       * @param input - { name, prompt?, imageIds? }: prompt is this variation's own instruction (e.g.
+       *   "Front view, facing the camera directly."), stitched in after the entry's description when
+       *   generating its image; defaults to "".
+       * @returns The new Variation.
+       */
+      add: variations.add,
+
+      /**
+       * Update a variation's name, prompt or reference images. Only the given fields change;
+       * imageIds replaces the list (it is not appended to).
+       * @param kind - Which story-bible list the entry is in.
+       * @param entryId - The entry id.
+       * @param variationId - The variation id.
+       * @param patch - { name?, prompt?, imageIds? }.
+       * @returns A deep-cloned snapshot of the updated Variation. Throws when not found.
+       */
+      update: variations.update,
+
+      /**
+       * Delete a variation. Layers pinned to it (layers.variationId) lose that link.
+       * @param kind - Which story-bible list the entry is in.
+       * @param entryId - The entry id.
+       * @param variationId - The variation id.
+       * @returns True when a variation was removed, false when not found.
+       */
+      delete: variations.delete,
     },
 
     /**
@@ -1435,11 +1570,11 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       },
 
       /**
-       * The default prompt for a story-bible entry's reference image (what
+       * The default prompt for a story-bible entry's reference image, not tied to any variation (what
        * characters.generateImage / scenes.generateImage / objects.generateImage use when no prompt is
        * given): the STYLE paragraph, the entry's description, and a technical requirements line (a
-       * multi-angle turnaround sheet for a character or object; an establishing shot for a scene).
-       * Read this to pre-fill an editable prompt before generating.
+       * single isolated view for a character or object; an establishing shot for a scene). Read this
+       * to pre-fill an editable prompt before generating.
        * @param kind - "characters", "scenes", or "objects".
        * @param id - The entry's id.
        * @returns The stitched prompt. Throws when the entry is not found.
@@ -1461,9 +1596,107 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         buildReferencePromptParts(requireProject(deps), kind, id),
 
       /**
-       * The generation queue right now: every layer, dirty-batch item and reference-image request
-       * that's running or waiting its turn, in the order it will run (or is running). Empty when
-       * nothing is generating.
+       * Generate a new image for one variation (pose/state) of a character, object or scene (see the
+       * Variation type and the variations namespace): built the same way as
+       * characters/scenes/objects.generateImage, plus this variation's own prompt text stitched in
+       * last. Uses this variation's own reference images by default (falling back to every image the
+       * entry has, across every variation, if this one has none yet). Registers the image but does not
+       * add it to the variation's imageIds — review it, then commit yourself with
+       * variations.update(kind, entryId, variationId, { imageIds: [...] }).
+       * @param kind - Which story-bible list the entry is in.
+       * @param entryId - The entry id.
+       * @param variationId - The variation id.
+       * @param prompt - Optional prompt to use instead of the default (e.g. edited by a user before generating; see generate.variationPrompt).
+       * @param references - Optional reference images to send instead of the defaults (see generate.variationReferences), each { mediaId, note? }.
+       * @returns A promise resolving to the new MediaItem.
+       */
+      variationImage: (
+        kind: ReferenceKind,
+        entryId: string,
+        variationId: string,
+        prompt?: string,
+        references?: GenerationReference[]
+      ): Promise<MediaItem> =>
+        generateVariationImage(deps, kind, entryId, variationId, prompt, references),
+
+      /**
+       * Cancel a variation's outstanding generation request, if it has one: one still queued is
+       * skipped when its turn comes, one already running has its request aborted.
+       * @param kind - Which story-bible list the entry is in.
+       * @param entryId - The entry id.
+       * @param variationId - The variation id.
+       * @returns True if something was cancelled, false if there was nothing outstanding for it.
+       */
+      cancelVariation: (kind: ReferenceKind, entryId: string, variationId: string): boolean =>
+        cancelVariationGeneration(kind, entryId, variationId),
+
+      /**
+       * The reference images generate.variationImage sends by default: this variation's own images,
+       * or, if it has none yet, every image the entry has (its own imageIds plus every variation's).
+       * @param kind - Which story-bible list the entry is in.
+       * @param entryId - The entry id.
+       * @param variationId - The variation id.
+       * @returns The references, in the order they're sent.
+       */
+      variationReferences: (
+        kind: ReferenceKind,
+        entryId: string,
+        variationId: string
+      ): GenerationReference[] => defaultEntryReferences(deps, kind, entryId, variationId),
+
+      /**
+       * The default prompt for one variation's image (what generate.variationImage uses when no
+       * prompt is given). Read this to pre-fill an editable prompt before generating.
+       * @param kind - Which story-bible list the entry is in.
+       * @param entryId - The entry id.
+       * @param variationId - The variation id.
+       * @returns The stitched prompt. Throws when the entry or variation is not found.
+       */
+      variationPrompt: (kind: ReferenceKind, entryId: string, variationId: string): string =>
+        buildReferencePrompt(requireProject(deps), kind, entryId, variationId),
+
+      /**
+       * The default prompt for one variation's image, broken into its labeled pieces (Style,
+       * Character/Object/Scene, Technical requirements, Variation; see generate.variationPrompt for
+       * the single joined string).
+       * @param kind - Which story-bible list the entry is in.
+       * @param entryId - The entry id.
+       * @param variationId - The variation id.
+       * @returns The parts, each { label, text }, in stitching order. Throws when the entry or variation is not found.
+       */
+      variationPromptParts: (
+        kind: ReferenceKind,
+        entryId: string,
+        variationId: string
+      ): PromptPart[] =>
+        buildReferencePromptParts(requireProject(deps), kind, entryId, variationId),
+
+      /**
+       * Generate one image for every variation of a character, object or scene, one request at a
+       * time, committing each result into that variation's imageIds as it goes (unlike
+       * generate.variationImage, there's no one to preview a batch for — same as generate.dirty). A
+       * failure on one variation does not stop the rest.
+       * @param kind - Which story-bible list the entry is in.
+       * @param entryId - The entry id.
+       * @param prompt - Optional prompt to use instead of the default shared base (Style + description
+       *   + technical requirements, not tied to any variation); each variation's own prompt is still
+       *   stitched in on top of it, so the batch still draws a different pose/state per image even
+       *   when this shared part was edited.
+       * @param references - Optional reference images to send instead of each variation's own defaults.
+       * @returns A promise resolving to one { variationId, ok, error? } per variation found when it started.
+       */
+      allVariations: (
+        kind: ReferenceKind,
+        entryId: string,
+        prompt?: string,
+        references?: GenerationReference[]
+      ): Promise<VariationOutcome[]> =>
+        generateAllVariations(deps, kind, entryId, prompt, references),
+
+      /**
+       * The generation queue right now: every layer, dirty-batch, reference-image and variation-image
+       * request that's running or waiting its turn, in the order it will run (or is running). Empty
+       * when nothing is generating.
        * @returns [{ id, label, status: "queued" | "running" }].
        */
       queue: (): QueueItem[] => getQueue(),

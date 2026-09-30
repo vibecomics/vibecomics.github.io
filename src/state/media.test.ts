@@ -22,6 +22,7 @@ function projectWithMedia(): ComicProject {
     description: '',
     imageIds: ['m1', 'm2'],
     sceneIds: [],
+    variations: [],
   });
   const layer = (id: string, mediaId: string | undefined) => ({
     id,
@@ -63,4 +64,14 @@ test('removeMedia rejects an unknown id and changes nothing', () => {
   const project = projectWithMedia();
   assert.throws(() => removeMedia(project, 'nope'), /not found/);
   assert.equal(project.metadata.media.length, 2);
+});
+
+test("removeMedia also drops the image from an entry's variations", () => {
+  const project = projectWithMedia();
+  project.metadata.media.push(item('m3'));
+  project.metadata.characters[0].variations = [
+    { id: 'var1', name: 'Front view', prompt: '', imageIds: ['m3', 'm2'] },
+  ];
+  assert.deepEqual(removeMedia(project, 'm3'), { layers: 0, entries: 1 });
+  assert.deepEqual(project.metadata.characters[0].variations[0].imageIds, ['m2']);
 });

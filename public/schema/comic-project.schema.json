@@ -66,6 +66,13 @@
             "type": "string"
           },
           "type": "array"
+        },
+        "variations": {
+          "description": "Poses of this character (e.g. Front view, Back view, Side view). Optional: an older project.json predating this field is loaded as if it were [].",
+          "items": {
+            "$ref": "#/$defs/Variation"
+          },
+          "type": "array"
         }
       },
       "required": ["id", "name", "description", "imageIds", "sceneIds"],
@@ -94,6 +101,13 @@
           "description": "Scene ids where the object appears.",
           "items": {
             "type": "string"
+          },
+          "type": "array"
+        },
+        "variations": {
+          "description": "States of this object (e.g. Open, Closed). Optional: an older project.json predating this field is loaded as if it were [].",
+          "items": {
+            "$ref": "#/$defs/Variation"
           },
           "type": "array"
         }
@@ -152,6 +166,10 @@
         },
         "subjectId": {
           "description": "Optional id of the character or object (metadata.characters or metadata.objects) this layer shows. The media picker lists that subject's art first. May name an entity that has since been deleted.",
+          "type": "string"
+        },
+        "variationId": {
+          "description": "Optional id of one of subjectId's (or sceneId's, for a background) variations: which pose/state to draw and pick reference images from.",
           "type": "string"
         },
         "kind": {
@@ -369,9 +387,40 @@
         },
         "name": {
           "type": "string"
+        },
+        "variations": {
+          "description": "States of this scene (e.g. Day, Night). Optional: an older project.json predating this field is loaded as if it were [].",
+          "items": {
+            "$ref": "#/$defs/Variation"
+          },
+          "type": "array"
         }
       },
       "required": ["id", "name", "description", "characterIds", "imageIds"],
+      "type": "object"
+    },
+    "Variation": {
+      "description": "One pose or state of a character/object/scene (e.g. a character's Front view, an object's Open/Closed), with its own prompt text and its own reference art.",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "imageIds": {
+          "description": "MediaItem ids of this variation's reference art.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "prompt": {
+          "description": "This variation's own part of the image prompt, stitched in after the entry's description.",
+          "type": "string"
+        }
+      },
+      "required": ["id", "name", "prompt", "imageIds"],
       "type": "object"
     }
   },

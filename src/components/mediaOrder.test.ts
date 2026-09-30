@@ -97,6 +97,7 @@ function castProject(): ComicProject {
     description: '',
     imageIds: ['ref', 'both'],
     sceneIds: [],
+    variations: [],
   });
   project.metadata.objects.push({
     id: 'obj-scooter',
@@ -104,6 +105,7 @@ function castProject(): ComicProject {
     description: '',
     imageIds: [],
     sceneIds: [],
+    variations: [],
   });
   project.pages[0].panels[0].layers = [
     {
@@ -215,6 +217,7 @@ test('a background lists the art of its scene first, and its reference images la
     description: '',
     characterIds: [],
     imageIds: ['ref'],
+    variations: [],
   });
   project.metadata.media[5].sceneId = 'scene-roof'; // "other", used by the layer l2
   project.metadata.media[4].sceneId = 'scene-roof'; // "scooter-art", used nowhere
@@ -244,6 +247,7 @@ test('search also finds images by their scene', () => {
     description: '',
     characterIds: [],
     imageIds: ['ref'],
+    variations: [],
   });
   project.metadata.media[5].sceneId = 'scene-roof';
   const text = searchTextByMedia(project);
