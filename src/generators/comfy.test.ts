@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { assertValidComfyConfig, createComfyProvider, listComfyQwenModels } from './comfy';
 import type { ComfyConfig } from './comfy';
+import { GenerationCancelledError } from './types';
 
 const config: ComfyConfig = {
   baseUrl: 'http://comfy.local:8188',
@@ -59,6 +60,26 @@ test('createComfyProvider generates: uploads references, patches the workflow, p
     referenceImages: ['data:image/png;base64,AAAA'],
   });
   assert.match(dataUrl, /^data:image\/png;base64,/);
+});
+
+test('createComfyProvider.generate() rejects with GenerationCancelledError when aborted mid-request', async () => {
+  // Mimics real fetch's own abort handling: reject immediately for a signal that's already aborted
+  // by the time fetch is called, otherwise wait for it to abort later.
+  const fetchImpl = ((_input: RequestInfo | URL, init?: RequestInit) =>
+    new Promise<Response>((_resolve, reject) => {
+      const abort = () => reject(new DOMException('The operation was aborted.', 'AbortError'));
+      if (init?.signal?.aborted) abort();
+      else init?.signal?.addEventListener('abort', abort);
+    })) as typeof fetch;
+
+  const controller = new AbortController();
+  const generation = createComfyProvider(config, fetchImpl).generate({
+    prompt: 'a cat',
+    referenceImages: [],
+    signal: controller.signal,
+  });
+  controller.abort();
+  await assert.rejects(generation, GenerationCancelledError);
 });
 
 test('createComfyProvider.test() succeeds when the server answers', async () => {

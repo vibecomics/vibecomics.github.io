@@ -65,10 +65,10 @@ test('buildLayerPrompt skips empty parts', () => {
     rotation: 0,
     opacity: 1,
   });
-  assert.equal(
-    buildLayerPrompt(project, panelId, 'fg1'),
-    `A cat.\n\nForeground subject only, on a plain solid white background: no scene, no shadow, no border, no baked-in text.`
-  );
+  const prompt = buildLayerPrompt(project, panelId, 'fg1');
+  assert.match(prompt, /^A cat\.\n\n/);
+  assert.match(prompt, /single image of one pose only/i);
+  assert.match(prompt, /not a multi-view turnaround sheet/i);
 });
 
 test("buildLayerPrompt leaves the page prompt, panel prompt and background scene out of a foreground layer's prompt", () => {
@@ -132,4 +132,16 @@ test('defaultReferenceNote names the scene whose imageIds list this mediaId', ()
 test('defaultReferenceNote is undefined for a mediaId no entry lists', () => {
   const project = projectWithCharacterAndScene();
   assert.equal(defaultReferenceNote(project, 'media-unknown'), undefined);
+});
+
+test("defaultReferenceNote omits the entry's name when it's the one currently being generated", () => {
+  const project = projectWithCharacterAndScene();
+  const note = defaultReferenceNote(project, 'media1', 'char1');
+  assert.doesNotMatch(note ?? '', /Ashwini/);
+  assert.match(note ?? '', /match this character's design exactly/i);
+});
+
+test('defaultReferenceNote still names the entry when currentEntryId is a different one', () => {
+  const project = projectWithCharacterAndScene();
+  assert.match(defaultReferenceNote(project, 'media1', 'some-other-entry') ?? '', /Ashwini/);
 });

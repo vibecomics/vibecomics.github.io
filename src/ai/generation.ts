@@ -11,7 +11,7 @@
  * The dirty-batch path is the exception: it has no one to show a preview to, so it commits each result
  * itself as it goes.
  */
-import { createProvider } from '../generators/types';
+import { createProvider, GenerationCancelledError } from '../generators/types';
 import type { ImageProvider } from '../generators/types';
 import type { ComicProject, Layer, MediaItem } from '../types/comic';
 import { errorMessage } from '../utils/errors';
@@ -79,6 +79,36 @@ function setGenerationStatus(key: string, status: 'queued' | 'running' | undefin
   generatingListeners.forEach((listener) => listener());
 }
 
+// One AbortController per outstanding request, from the moment it's queued (so cancelling a queued
+// item skips it entirely once its turn comes) until it finishes, succeeds, fails or is cancelled.
+const abortControllers = new Map<string, AbortController>();
+
+/** Cancels the layer's/entry's/queue item's outstanding generation request, if any: a queued one is
+ * skipped when its turn comes, a running one has its network request aborted (see comfy.ts). Returns
+ * false when there was nothing outstanding for `key` to cancel. */
+function cancelGeneration(key: string): boolean {
+  const controller = abortControllers.get(key);
+  if (!controller) return false;
+  controller.abort();
+  return true;
+}
+
+/** Cancels a layer's (or background's) outstanding generation request, if any. */
+export function cancelLayerGeneration(panelId: string, layerId: string): boolean {
+  return cancelGeneration(layerKey(panelId, layerId));
+}
+
+/** Cancels a story-bible entry's outstanding reference-image generation request, if any. */
+export function cancelReferenceGeneration(kind: ReferenceKind, id: string): boolean {
+  return cancelGeneration(referenceKey(kind, id));
+}
+
+/** Cancels an item straight from generate.queue()'s list, by its `id` (the same key layerKey/
+ * referenceKey builds — opaque to callers, just round-trip whatever queue() gave you). */
+export function cancelQueueItem(id: string): boolean {
+  return cancelGeneration(id);
+}
+
 /** One request in the generation queue: what it's for, and whether it's running yet or still waiting. */
 export interface QueueItem {
   id: string;
@@ -86,7 +116,6 @@ export interface QueueItem {
   status: 'queued' | 'running';
 }
 
-let nextQueueItemId = 1;
 let queueItems: QueueItem[] = [];
 const queueListeners = new Set<() => void>();
 
@@ -105,11 +134,12 @@ function notifyQueue(): void {
 }
 
 // One request at a time, even across overlapping layer()/dirty()/reference-image calls. Items are
-// tracked and removed by their stable string id (not object identity, which changes on each status
-// update) so a finished item is reliably taken out of the queue.
+// tracked and removed by their stable string id (the same layerKey/referenceKey trackedGeneration
+// tracks status and the abort controller under, not object identity, which changes on each status
+// update) so a finished item is reliably taken out of the queue, and cancelGeneration(id) can cancel
+// straight from a queue() listing.
 let queueTail: Promise<unknown> = Promise.resolve();
-function enqueue<T>(label: string, task: () => Promise<T>): Promise<T> {
-  const id = String(nextQueueItemId++);
+function enqueue<T>(id: string, label: string, task: () => Promise<T>): Promise<T> {
   queueItems = [...queueItems, { id, label, status: 'queued' }];
   notifyQueue();
 
@@ -144,15 +174,26 @@ async function downloadReferences(
 }
 
 /** Runs a generation in the queue, marking `key` as queued the instant it's requested and running
- * once its turn comes, so a button for it can tell "waiting" from "actively generating". */
-function trackedGeneration<T>(key: string, label: string, task: () => Promise<T>): Promise<T> {
+ * once its turn comes, so a button for it can tell "waiting" from "actively generating". Also tracks
+ * an AbortController for `key` for the same span, so cancelGeneration(key) can either skip it (still
+ * queued) or abort its request (already running) — `task` gets the controller's signal to pass on to
+ * whatever it awaits. */
+function trackedGeneration<T>(
+  key: string,
+  label: string,
+  task: (signal: AbortSignal) => Promise<T>
+): Promise<T> {
+  const controller = new AbortController();
+  abortControllers.set(key, controller);
   setGenerationStatus(key, 'queued');
-  return enqueue(label, async () => {
-    setGenerationStatus(key, 'running');
+  return enqueue(key, label, async () => {
     try {
-      return await task();
+      if (controller.signal.aborted) throw new GenerationCancelledError();
+      setGenerationStatus(key, 'running');
+      return await task(controller.signal);
     } finally {
       setGenerationStatus(key, undefined);
+      abortControllers.delete(key);
     }
   });
 }
@@ -164,7 +205,8 @@ async function runLayerGeneration(
   panelId: string,
   layerId: string,
   promptOverride?: string,
-  references?: GenerationReference[]
+  references?: GenerationReference[],
+  signal?: AbortSignal
 ): Promise<GeneratedImage> {
   const provider = requireProvider(deps);
   const project = requireProject(deps);
@@ -190,6 +232,7 @@ async function runLayerGeneration(
     referenceImages,
     width: size?.pixels.width,
     height: size?.pixels.height,
+    signal,
   });
   // Generators draw the subject on a plain white background rather than real transparency (see the
   // technical requirements line in buildLayerPrompt); cut that background out here, in the browser.
@@ -216,7 +259,8 @@ async function generateReferenceOne(
   kind: ReferenceKind,
   id: string,
   promptOverride?: string,
-  references?: GenerationReference[]
+  references?: GenerationReference[],
+  signal?: AbortSignal
 ): Promise<MediaItem> {
   const provider = requireProvider(deps);
   const project = requireProject(deps);
@@ -232,7 +276,7 @@ async function generateReferenceOne(
     used
   );
   const referenceImages = await downloadReferences(deps, used);
-  const rawDataUrl = await provider.generate({ prompt, referenceImages });
+  const rawDataUrl = await provider.generate({ prompt, referenceImages, signal });
   const dataUrl =
     kind !== 'scenes' && deps.removeBackground
       ? await deps.removeBackground(rawDataUrl)
@@ -249,8 +293,10 @@ export function generateLayerImage(
   prompt?: string,
   references?: GenerationReference[]
 ): Promise<GeneratedImage> {
-  return trackedGeneration(layerKey(panelId, layerId), describeLayer(deps, panelId, layerId), () =>
-    runLayerGeneration(deps, panelId, layerId, prompt, references)
+  return trackedGeneration(
+    layerKey(panelId, layerId),
+    describeLayer(deps, panelId, layerId),
+    (signal) => runLayerGeneration(deps, panelId, layerId, prompt, references, signal)
   );
 }
 
@@ -261,15 +307,20 @@ export function generateReferenceImage(
   prompt?: string,
   references?: GenerationReference[]
 ): Promise<MediaItem> {
-  return trackedGeneration(referenceKey(kind, id), describeReference(deps, kind, id), () =>
-    generateReferenceOne(deps, kind, id, prompt, references)
+  return trackedGeneration(referenceKey(kind, id), describeReference(deps, kind, id), (signal) =>
+    generateReferenceOne(deps, kind, id, prompt, references, signal)
   );
 }
 
 /** A reference to `mediaId`, with a ready-made note when it's known art of a character, object or
- * scene (see defaultReferenceNote). */
-function referenceTo(project: ComicProject, mediaId: string): GenerationReference {
-  const note = defaultReferenceNote(project, mediaId);
+ * scene (see defaultReferenceNote). `currentEntryId` is the entry this generation is of, if any, so
+ * the note only names the entry when it's a *different* one. */
+function referenceTo(
+  project: ComicProject,
+  mediaId: string,
+  currentEntryId?: string
+): GenerationReference {
+  const note = defaultReferenceNote(project, mediaId, currentEntryId);
   return note ? { mediaId, note } : { mediaId };
 }
 
@@ -283,9 +334,8 @@ export function defaultLayerReferences(
   const project = requireProject(deps);
   const layer = findPanel(project, panelId)?.layers.find((l) => l.id === layerId);
   if (!layer) throw new Error(`Layer "${layerId}" not found.`);
-  return (layerSubject(project, layer)?.imageIds ?? []).map((mediaId) =>
-    referenceTo(project, mediaId)
-  );
+  const subject = layerSubject(project, layer);
+  return (subject?.imageIds ?? []).map((mediaId) => referenceTo(project, mediaId, subject?.id));
 }
 
 /** The images a story-bible entry's reference generation sends by default: its existing ones. */
@@ -296,7 +346,7 @@ export function defaultEntryReferences(
 ): GenerationReference[] {
   const project = requireProject(deps);
   const entry = project.metadata[kind].find((e) => e.id === id);
-  return (entry?.imageIds ?? []).map((mediaId) => referenceTo(project, mediaId));
+  return (entry?.imageIds ?? []).map((mediaId) => referenceTo(project, mediaId, id));
 }
 
 /** How many reference images the configured generator uses (0 when none is configured). */
@@ -334,8 +384,15 @@ export async function generateAllDirty(
     const key = layerKey(ref.panelId, ref.layerId);
     const label = describeLayer(deps, ref.panelId, ref.layerId);
     try {
-      await trackedGeneration(key, label, async () => {
-        const image = await runLayerGeneration(deps, ref.panelId, ref.layerId);
+      await trackedGeneration(key, label, async (signal) => {
+        const image = await runLayerGeneration(
+          deps,
+          ref.panelId,
+          ref.layerId,
+          undefined,
+          undefined,
+          signal
+        );
         commit(ref.panelId, ref.layerId, image.id, image.aspectRatio);
       });
       outcomes.push({ ...ref, ok: true });

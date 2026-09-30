@@ -21,6 +21,9 @@ interface Props {
   /** For looking up a manually-added reference's subject/scene, to prefill its note (see
    * defaultReferenceNote). */
   project: ComicProject;
+  /** The character/object/scene this generation is of, if any — so a manually-added reference of
+   * that same entry gets a note that doesn't just restate its own name (see defaultReferenceNote). */
+  currentEntryId?: string;
   /** The labeled pieces the prompt is stitched from (Style, Panel, Layer prompt, ...): each is shown
    * collapsed, expandable to edit or drop on its own, instead of one large block of text. */
   getDefaultPromptParts: () => PromptPart[];
@@ -60,6 +63,7 @@ function Preview({ item }: { item: MediaItem }) {
 export default function GenerateImageModal({
   title,
   project,
+  currentEntryId,
   getDefaultPromptParts,
   getDefaultReferences,
   media,
@@ -99,7 +103,7 @@ export default function GenerateImageModal({
   function addReference(mediaId: string) {
     setReferences((current) => {
       if (current.some((r) => r.mediaId === mediaId)) return current;
-      const note = defaultReferenceNote(project, mediaId);
+      const note = defaultReferenceNote(project, mediaId, currentEntryId);
       return [...current, note ? { mediaId, note } : { mediaId }];
     });
     setPicking(false);

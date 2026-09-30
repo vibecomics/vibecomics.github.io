@@ -12,6 +12,19 @@ export interface GenerationRequest {
   referenceImages: string[];
   width?: number;
   height?: number;
+  /** Aborts the request (and any polling it's doing) when the caller cancels it. A provider that
+   * can't cancel mid-flight should at least stop polling and reject with GenerationCancelledError. */
+  signal?: AbortSignal;
+}
+
+/** Thrown (instead of whatever the underlying network failure looked like) when a generation is
+ * cancelled — either before it started (still queued) or while a provider was mid-request. Callers
+ * that want to tell "the user cancelled this" from "it actually failed" can check for this type. */
+export class GenerationCancelledError extends Error {
+  constructor() {
+    super('Generation cancelled.');
+    this.name = 'GenerationCancelledError';
+  }
 }
 
 export interface ImageProvider {

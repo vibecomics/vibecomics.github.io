@@ -315,8 +315,13 @@ export const INPUTS = {
       example: '[{ "mediaId": "media_ab12cd", "note": "use this outfit" }]',
     },
   },
+  'generate.cancelLayer': { panelId: PANEL_ID, layerId: LAYER_ID },
   'generate.layerReferences': { panelId: PANEL_ID, layerId: LAYER_ID },
   'generate.entryReferences': {
+    kind: { type: 'enum', options: ['characters', 'scenes', 'objects'] },
+    id: { type: 'string', example: 'character_ab12cd' },
+  },
+  'generate.cancelReference': {
     kind: { type: 'enum', options: ['characters', 'scenes', 'objects'] },
     id: { type: 'string', example: 'character_ab12cd' },
   },
@@ -343,4 +348,5 @@ export const INPUTS = {
     id: { type: 'string', example: 'character_ab12cd' },
   },
   'generate.queue': {},
+  'generate.cancelQueueItem': { id: { type: 'string', example: '1' } },
 };

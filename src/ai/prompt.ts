@@ -112,7 +112,7 @@ export function buildLayerPromptParts(
 
   const size = layerArtSize(project, panelId, layerId);
   const technical = isForeground
-    ? 'Foreground subject only, on a plain solid white background: no scene, no shadow, no border, no baked-in text.'
+    ? 'A single image of one pose only, on a plain solid white background: no scene, no shadow, no border, no baked-in text. Not a multi-view turnaround sheet or a grid of poses, even if a reference image shows the subject from several angles — pick one pose and draw only that.'
     : `Full-bleed background image, aspect ratio ${size?.aspectRatio ?? 1}:1, no border.`;
 
   const style = { label: 'Style', text: project.metadata.style };
@@ -145,22 +145,44 @@ export interface GenerationReference {
   note?: string;
 }
 
-/** A ready-made note for a reference image that is a story-bible entry's own reference art (its
- * `imageIds` lists this mediaId), naming which entry it is so the generator doesn't have to guess
- * when several reference images are sent together. Checked against `imageIds` rather than the
- * MediaItem's own `subjectId`/`sceneId` tag, since that tag is only set for art generated or uploaded
- * straight onto a layer — a character's own reference images are frequently untagged even though
- * they're unambiguously that character's art. Undefined for an image linked to no entry (a plain
- * upload, say) — the user writes their own note for those. */
-export function defaultReferenceNote(project: ComicProject, mediaId: string): string | undefined {
+/**
+ * A ready-made note for a reference image that is a story-bible entry's own reference art (its
+ * `imageIds` lists this mediaId). Checked against `imageIds` rather than the MediaItem's own
+ * `subjectId`/`sceneId` tag, since that tag is only set for art generated or uploaded straight onto a
+ * layer — a character's own reference images are frequently untagged even though they're
+ * unambiguously that character's art. Undefined for an image linked to no entry (a plain upload,
+ * say) — the user writes their own note for those.
+ *
+ * Names the entry only when it's a *different* one than `currentEntryId` (the character/object/scene
+ * this generation is of, when known) — e.g. a layer showing Ashwini that also references Cupcake's
+ * art needs "this is Cupcake" to disambiguate, but a character's own reference sheet regenerating
+ * from its own past art doesn't: the name carries no visual information and the entry's description
+ * already says who they are, so restating it is just noise (and risks the model rendering it as
+ * baked-in text).
+ */
+export function defaultReferenceNote(
+  project: ComicProject,
+  mediaId: string,
+  currentEntryId?: string
+): string | undefined {
   const character = project.metadata.characters.find((c) => c.imageIds.includes(mediaId));
   if (character) {
-    return `This is ${character.name} — match this character's design exactly (face, proportions, outfit, colors).`;
+    return character.id === currentEntryId
+      ? "Match this character's design exactly (face, proportions, outfit, colors)."
+      : `This is ${character.name} — match this character's design exactly (face, proportions, outfit, colors).`;
   }
   const object = project.metadata.objects.find((o) => o.imageIds.includes(mediaId));
-  if (object) return `This is ${object.name} — match this object's design exactly.`;
+  if (object) {
+    return object.id === currentEntryId
+      ? "Match this object's design exactly."
+      : `This is ${object.name} — match this object's design exactly.`;
+  }
   const scene = project.metadata.scenes.find((s) => s.imageIds.includes(mediaId));
-  if (scene) return `This is the reference for the "${scene.name}" setting — match this location.`;
+  if (scene) {
+    return scene.id === currentEntryId
+      ? 'Match this location exactly.'
+      : `This is the reference for the "${scene.name}" setting — match this location.`;
+  }
   return undefined;
 }
 

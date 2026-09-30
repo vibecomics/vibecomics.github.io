@@ -37,7 +37,21 @@ function QueueButton() {
             ) : (
               <span style={{ width: '1rem' }} />
             )}
-            <span className={item.status === 'queued' ? 'text-muted' : ''}>{item.label}</span>
+            <span className={`flex-grow-1${item.status === 'queued' ? ' text-muted' : ''}`}>
+              {item.label}
+            </span>
+            <button
+              type="button"
+              className="btn btn-link btn-sm p-0 text-danger lh-1"
+              title={`Cancel this ${item.status === 'running' ? 'generation' : 'queued generation'}`}
+              aria-label={`Cancel ${item.label}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                cb().generate.cancelQueueItem(item.id);
+              }}
+            >
+              &times;
+            </button>
           </li>
         ))
       )}

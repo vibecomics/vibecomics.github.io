@@ -96,12 +96,14 @@ export default function ReferenceImages({ kind, entryId, imageIds, media }: Prop
           status={status}
           title="Generate a new reference image"
           onClick={() => setGeneratingModal(true)}
+          onCancel={() => cb().generate.cancelReference(kind, entryId)}
         />
       </div>
       {generatingModal && (
         <GenerateImageModal
           title="Generate reference image"
           project={project}
+          currentEntryId={entryId}
           getDefaultPromptParts={() => cb().generate.referencePromptParts(kind, entryId)}
           getDefaultReferences={() => cb().generate.entryReferences(kind, entryId)}
           media={media}

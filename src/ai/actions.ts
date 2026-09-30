@@ -54,6 +54,9 @@ import type {
 } from './deps';
 import { attachDocs } from './docs';
 import {
+  cancelLayerGeneration,
+  cancelQueueItem as cancelGenerationQueueItem,
+  cancelReferenceGeneration,
   defaultEntryReferences,
   defaultLayerReferences,
   generateAllDirty,
@@ -1307,6 +1310,16 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       ): Promise<GeneratedImage> => generateLayerImage(deps, panelId, layerId, prompt, references),
 
       /**
+       * Cancel a layer's (or background's) outstanding generation request, if it has one: one still
+       * queued is skipped when its turn comes, one already running has its request aborted.
+       * @param panelId - The panel id.
+       * @param layerId - The layer id.
+       * @returns True if something was cancelled, false if there was nothing outstanding for it.
+       */
+      cancelLayer: (panelId: string, layerId: string): boolean =>
+        cancelLayerGeneration(panelId, layerId),
+
+      /**
        * The reference images generate.layer sends by default: those of the layer's character/object
        * (foreground) or scene (background).
        * @param panelId - The panel id.
@@ -1326,6 +1339,16 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         kind: 'characters' | 'scenes' | 'objects',
         id: string
       ): GenerationReference[] => defaultEntryReferences(deps, kind, id),
+
+      /**
+       * Cancel a story-bible entry's outstanding reference-image generation request, if it has one:
+       * one still queued is skipped when its turn comes, one already running has its request aborted.
+       * @param kind - Which story-bible list the entry is in.
+       * @param id - The entry id.
+       * @returns True if something was cancelled, false if there was nothing outstanding for it.
+       */
+      cancelReference: (kind: ReferenceKind, id: string): boolean =>
+        cancelReferenceGeneration(kind, id),
 
       /** How many reference images the configured generator uses (0 if none is configured). */
       maxReferenceImages: (): number => maxReferenceImages(deps),
@@ -1444,6 +1467,14 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @returns [{ id, label, status: "queued" | "running" }].
        */
       queue: (): QueueItem[] => getQueue(),
+
+      /**
+       * Cancel an item straight from generate.queue()'s list, by its id: one still queued is skipped
+       * when its turn comes, one already running has its request aborted.
+       * @param id - A queue item's id, from generate.queue().
+       * @returns True if something was cancelled, false if that id isn't outstanding (e.g. it already finished).
+       */
+      cancelQueueItem: (id: string): boolean => cancelGenerationQueueItem(id),
     },
   };
 

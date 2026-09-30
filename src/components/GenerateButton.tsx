@@ -10,14 +10,19 @@ interface Props {
   /** The tooltip when generating is possible. */
   title: string;
   onClick: () => void;
+  /** Cancels this item's queued or running generation. Omit to hide the cancel button (e.g. a
+   * context with no way to cancel one). Shown only while `status` is "queued" or "running". */
+  onCancel?: () => void;
 }
 
 /** The "✨ Generate" button that opens the generate dialog, disabled (with the reason as its
  * tooltip) while a generation is queued or running for this item, no generator is set up, or
- * `blockedReason` is given. */
-export default function GenerateButton({ status, blockedReason, title, onClick }: Props) {
+ * `blockedReason` is given — alongside a red × button to cancel that queued/running generation, when
+ * `onCancel` is given. */
+export default function GenerateButton({ status, blockedReason, title, onClick, onCancel }: Props) {
   const configured = Boolean(useGeneratorConfig());
   const configProblem = useGeneratorConfigProblem();
+  const active = status === 'running' || status === 'queued';
   const reason =
     status === 'running'
       ? 'A generation for this item is already running'
@@ -30,19 +35,32 @@ export default function GenerateButton({ status, blockedReason, title, onClick }
               'Set up an image generator first (Settings, on the project list)')));
 
   return (
-    // A disabled <button> doesn't show its own title tooltip in most browsers, so the tooltip goes
-    // on this wrapping span instead.
-    <span title={reason ?? title}>
-      <button
-        type="button"
-        className="btn btn-outline-secondary btn-sm"
-        disabled={reason !== null}
-        onClick={onClick}
-      >
-        {status === 'running' && <Spinner />}
-        {status === 'queued' ? '⏳' : '✨'}{' '}
-        {status === 'running' ? 'Generating' : status === 'queued' ? 'Queued' : 'Generate'}
-      </button>
-    </span>
+    <>
+      {/* A disabled <button> doesn't show its own title tooltip in most browsers, so the tooltip
+      goes on this wrapping span instead. */}
+      <span title={reason ?? title}>
+        <button
+          type="button"
+          className="btn btn-outline-secondary btn-sm"
+          disabled={reason !== null}
+          onClick={onClick}
+        >
+          {status === 'running' && <Spinner />}
+          {status === 'queued' ? '⏳' : '✨'}{' '}
+          {status === 'running' ? 'Generating' : status === 'queued' ? 'Queued' : 'Generate'}
+        </button>
+      </span>
+      {active && onCancel && (
+        <button
+          type="button"
+          className="btn btn-outline-danger btn-sm lh-1"
+          title={`Cancel this ${status === 'running' ? 'generation' : 'queued generation'}`}
+          aria-label={`Cancel this ${status === 'running' ? 'generation' : 'queued generation'}`}
+          onClick={onCancel}
+        >
+          &times;
+        </button>
+      )}
+    </>
   );
 }

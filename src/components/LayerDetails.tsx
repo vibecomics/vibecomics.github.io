@@ -115,6 +115,7 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           blockedReason={layer.prompt?.trim() ? undefined : 'Write a prompt first'}
           title="Generate a new image from this prompt"
           onClick={() => setGeneratingModal(true)}
+          onCancel={() => cb().generate.cancelLayer(panelId, layer.id)}
         />
         {layer.mediaId && (
           <button
@@ -141,6 +142,7 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         <GenerateImageModal
           title={`Generate ${background ? 'background' : 'layer'} image`}
           project={project}
+          currentEntryId={linkedId}
           getDefaultPromptParts={() => cb().generate.layerPromptParts(panelId, layer.id)}
           getDefaultReferences={() => cb().generate.layerReferences(panelId, layer.id)}
           media={media}

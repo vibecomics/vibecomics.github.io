@@ -5,6 +5,7 @@
  * in the graph (checkpoint, sampler, LoRAs, ...) is whatever the user built in ComfyUI's own UI.
  */
 import { readFileAsDataUrl } from '../utils/files';
+import { GenerationCancelledError } from './types';
 import type { GenerationRequest, ImageProvider } from './types';
 
 export interface ComfyNodeMapping {
@@ -125,6 +126,26 @@ function dataUrlToBytes(dataUrl: string): Uint8Array {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 }
 
+/** A cancellable wait between history polls: rejects immediately (rather than after the full delay)
+ * once `signal` aborts, so cancelling during the wait doesn't cost up to another 1.5s. */
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new GenerationCancelledError());
+      return;
+    }
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener(
+      'abort',
+      () => {
+        clearTimeout(timer);
+        reject(new GenerationCancelledError());
+      },
+      { once: true }
+    );
+  });
+}
+
 /** The allowed values of one required input of a node type, e.g. the checkpoint filenames a
  * CheckpointLoaderSimple can load, straight from what this ComfyUI server has installed. */
 async function listNodeOptions(
@@ -166,17 +187,21 @@ export function createComfyProvider(
   const clientId = `vibecomics-${Math.random().toString(36).slice(2)}`;
   const maxReferenceImages = config.nodes.referenceImageNodeIds?.length ?? 0;
 
-  async function uploadReferenceImage(dataUrl: string, name: string): Promise<string> {
+  async function uploadReferenceImage(
+    dataUrl: string,
+    name: string,
+    signal?: AbortSignal
+  ): Promise<string> {
     const form = new FormData();
     form.append('image', new Blob([dataUrlToBytes(dataUrl) as BlobPart]), name);
     form.append('overwrite', 'true');
-    const res = await fetchImpl(`${base}/upload/image`, { method: 'POST', body: form });
+    const res = await fetchImpl(`${base}/upload/image`, { method: 'POST', body: form, signal });
     return (await asJson<{ name: string }>(res, 'upload')).name;
   }
 
-  async function waitForResult(promptId: string): Promise<ComfyImageRef> {
+  async function waitForResult(promptId: string, signal?: AbortSignal): Promise<ComfyImageRef> {
     for (;;) {
-      const res = await fetchImpl(`${base}/history/${promptId}`);
+      const res = await fetchImpl(`${base}/history/${promptId}`, { signal });
       const history = await asJson<ComfyHistory>(res, 'history');
       const entry = history[promptId];
       if (entry?.status?.status_str === 'error') {
@@ -184,7 +209,7 @@ export function createComfyProvider(
       }
       const image = entry?.outputs?.[config.nodes.outputNodeId]?.images?.[0];
       if (image) return image;
-      await new Promise((r) => setTimeout(r, 1500));
+      await delay(1500, signal);
     }
   }
 
@@ -196,28 +221,46 @@ export function createComfyProvider(
       if (!res.ok) throw new Error(`ComfyUI at ${base} answered with ${res.status}.`);
     },
 
-    async generate({ prompt, referenceImages, width, height }: GenerationRequest): Promise<string> {
-      const referenceFilenames = await Promise.all(
-        referenceImages
-          .slice(0, maxReferenceImages)
-          .map((dataUrl, i) => uploadReferenceImage(dataUrl, `ref-${i}.png`))
-      );
-      const graph = patchWorkflow(config.workflow, config.nodes, {
-        prompt,
-        referenceFilenames,
-        width,
-        height,
-      });
-      const submitRes = await fetchImpl(`${base}/prompt`, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt: graph, client_id: clientId }),
-      });
-      const { prompt_id: promptId } = await asJson<{ prompt_id: string }>(submitRes, 'submit');
-      const image = await waitForResult(promptId);
-      const viewRes = await fetchImpl(`${base}/view?${new URLSearchParams(Object.entries(image))}`);
-      if (!viewRes.ok) throw new Error(`ComfyUI view failed: ${viewRes.status}`);
-      return readFileAsDataUrl(await viewRes.blob());
+    async generate({
+      prompt,
+      referenceImages,
+      width,
+      height,
+      signal,
+    }: GenerationRequest): Promise<string> {
+      try {
+        const referenceFilenames = await Promise.all(
+          referenceImages
+            .slice(0, maxReferenceImages)
+            .map((dataUrl, i) => uploadReferenceImage(dataUrl, `ref-${i}.png`, signal))
+        );
+        const graph = patchWorkflow(config.workflow, config.nodes, {
+          prompt,
+          referenceFilenames,
+          width,
+          height,
+        });
+        const submitRes = await fetchImpl(`${base}/prompt`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ prompt: graph, client_id: clientId }),
+          signal,
+        });
+        const { prompt_id: promptId } = await asJson<{ prompt_id: string }>(submitRes, 'submit');
+        const image = await waitForResult(promptId, signal);
+        const viewRes = await fetchImpl(
+          `${base}/view?${new URLSearchParams(Object.entries(image))}`,
+          { signal }
+        );
+        if (!viewRes.ok) throw new Error(`ComfyUI view failed: ${viewRes.status}`);
+        return readFileAsDataUrl(await viewRes.blob());
+      } catch (e) {
+        // Whatever shape the underlying fetch rejection took (an AbortError, a network failure from
+        // the connection being torn down mid-request, ...), a signal the caller aborted means this
+        // was a cancellation, not a real failure.
+        if (signal?.aborted) throw new GenerationCancelledError();
+        throw e;
+      }
     },
   };
 }
