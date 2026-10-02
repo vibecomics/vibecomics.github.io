@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { installComicBuilder, uninstallComicBuilder } from './ai/actions';
 import type { ActionResult, ComicBuilderDeps } from './ai/deps';
 import { createMediaDeps, createOrOpenProject } from './ai/storageDeps';
@@ -9,22 +9,27 @@ import type { EditorTab } from './components/editorTabs';
 import { clearMediaCache } from './components/mediaImages';
 import PreviewScreen from './components/PreviewScreen';
 import ProjectTiles from './components/ProjectTiles';
-import SplashScreen from './components/SplashScreen';
 import StatusToast from './components/StatusToast';
 import type { Status } from './components/StatusToast';
 import { awaitDeviceAccess, isDriveConfigured, requestDeviceAccess } from './drive/driveClient';
 import type { DeviceCodeInfo } from './drive/driveClient';
 import { readGeneratorConfig, writeGeneratorConfig } from './generators/browserConfigStore';
 import { removeWhiteBackground } from './utils/removeWhiteBackground';
-import { connectToServer } from './server/serverClient';
+import {
+  connectDriveConnection,
+  connectServerConnection,
+  disconnectConnection,
+  listAllProjects,
+  listConnectionInfo,
+  listConnections,
+  reconnectRememberedServers,
+} from './storage/connections';
 import {
   backendLabel,
-  disconnectActiveBackend,
   downloadFile,
   ensureProjectFolder,
   findFileByName,
-  hasStorageAccess,
-  listProjectFolders,
+  getActiveBackend,
   loadProjectFile,
   saveProjectJson,
   setActiveBackend,
@@ -40,7 +45,7 @@ import type { ComicProject } from './types/comic';
 import { errorMessage } from './utils/errors';
 import { makeThumbnail } from './utils/thumbnail';
 
-type Screen = 'splash' | 'tiles' | 'editor';
+type Screen = 'tiles' | 'editor';
 
 /** The storage calls the ComicBuilder deps make: whichever backend is active. */
 const storage = {
@@ -54,11 +59,11 @@ const storage = {
 };
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>('splash');
+  const [screen, setScreen] = useState<Screen>('tiles');
   const [preview, setPreview] = useState(false);
   const [project, setProject] = useState<ComicProject | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
-  const [folders, setFolders] = useState<ProjectFolder[]>([]);
+  const [projects, setProjects] = useState<ProjectFolder[]>([]);
   const [status, setStatusState] = useState<Status | null>(null);
   const [deviceCode, setDeviceCode] = useState<DeviceCodeInfo | null>(null);
   const [tab, setTab] = useState<EditorTab>('pages');
@@ -132,6 +137,7 @@ export default function App() {
   function dropProject() {
     folderIdRef.current = null;
     setCurrentFolderId(null);
+    setActiveBackend(null);
     setCurrentProject(null);
     selectPage(0);
     setPreview(false);
@@ -141,8 +147,8 @@ export default function App() {
 
   async function refreshTiles(): Promise<ProjectFolder[]> {
     try {
-      const list = await listProjectFolders();
-      setFolders(list);
+      const list = await listAllProjects();
+      setProjects(list);
       return list;
     } catch (e) {
       setStatus(`Could not list project folders: ${errorMessage(e)}`, true);
@@ -156,7 +162,20 @@ export default function App() {
     return list;
   }
 
+  /** Which connection a newly created project goes in, when the caller did not pick one. */
+  function defaultConnectionId(): string | null {
+    const live = listConnections();
+    return live.length === 1 ? live[0].id : null;
+  }
+
   async function openFolder(folder: ProjectFolder): Promise<ActionResult> {
+    const connectionId = folder.connectionId ?? getActiveBackend() ?? listConnections()[0]?.id;
+    if (!connectionId) {
+      const error = 'No storage connection is available.';
+      setStatus(error, true);
+      return { ok: false, error };
+    }
+    setActiveBackend(connectionId);
     setStatus('Loading project…');
     try {
       const { project: opened, version } = await loadProject(folder.id);
@@ -194,8 +213,22 @@ export default function App() {
     }
   }
 
-  // The ComicBuilder API is installed once; every helper it uses goes through refs and setState.
+  // On load: reconnect any remembered HTTP storage servers (no secret, just a health check), then
+  // show whatever projects that and any already-live connection turn up. Drive's token is never
+  // persisted, so it always needs a fresh device-flow connect from Settings.
   useEffect(() => {
+    void reconnectRememberedServers().then(() => refreshTiles());
+    // Runs once on mount; refreshTiles/setStatus close over state setters that never go stale.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The ComicBuilder API is installed once; every helper it uses goes through refs and setState.
+  // A layout effect, not a plain effect: React runs a child's effects before its parent's, and
+  // ProjectTiles (a child, now shown on the very first render) calls cb() from its own mount
+  // effect. All layout effects in a commit finish before any passive effect runs, so this must be
+  // one too, or that child effect can call cb() before window.ComicBuilder exists and crash render
+  // (no error boundary catches it).
+  useLayoutEffect(() => {
     const deps: ComicBuilderDeps = {
       getProject: () => projectRef.current,
 
@@ -224,8 +257,8 @@ export default function App() {
         setDeviceCode(info);
         awaitDeviceAccess()
           .then(() => {
-            setActiveBackend('drive');
-            return showTiles();
+            connectDriveConnection();
+            return refreshTiles();
           })
           .then(() => setStatusState(null))
           .catch((e) => setStatus(`Could not connect: ${errorMessage(e)}`, true))
@@ -235,40 +268,58 @@ export default function App() {
 
       connectStorageWithServer: async (url) => {
         try {
-          await connectToServer(url);
+          await connectServerConnection(url);
         } catch (e) {
           setStatus(`Could not connect: ${errorMessage(e)}`, true);
           throw e;
         }
-        setActiveBackend('server');
-        await showTiles();
+        await refreshTiles();
         setStatusState(null);
       },
 
       disconnectStorage: async () => {
         setDeviceCode(null);
         await saver.save();
-        const label = backendLabel();
-        await disconnectActiveBackend();
+        await Promise.all(listConnections().map((c) => disconnectConnection(c.id)));
         await clearMediaCache();
         dropProject();
-        setFolders([]);
-        setScreen('splash');
-        setStatus(`Disconnected from ${label}.`);
+        setProjects([]);
+        setStatus('Disconnected every storage connection.');
       },
 
       getStorageStatus: () => ({
-        connected: hasStorageAccess(),
+        connected: listConnections().length > 0,
         configured: isDriveConfigured(),
       }),
 
-      listStorageProjects: listProjectFolders,
+      listStorageConnections: async () => listConnectionInfo(),
+
+      disconnectStorageConnection: async (id) => {
+        const label = listConnectionInfo().find((c) => c.id === id)?.label ?? 'storage';
+        if (getActiveBackend() === id) {
+          await saver.save();
+          await clearMediaCache();
+          dropProject();
+        }
+        await disconnectConnection(id);
+        await refreshTiles();
+        setStatus(`Disconnected from ${label}.`);
+      },
+
+      listStorageProjects: listAllProjects,
 
       getGeneratorConfig: readGeneratorConfig,
       setGeneratorConfig: writeGeneratorConfig,
       removeBackground: removeWhiteBackground,
 
-      createStorageProject: async (name, pageSize) => {
+      createStorageProject: async (name, pageSize, connectionId) => {
+        const target = connectionId ?? defaultConnectionId();
+        if (!target) {
+          throw new Error(
+            'Pick a storage connection to create this project in (more than one is connected).'
+          );
+        }
+        setActiveBackend(target);
         const {
           folder,
           project: created,
@@ -322,10 +373,8 @@ export default function App() {
 
   const currentPage = project?.pages[pageIndex];
   let content = null;
-  if (screen === 'splash') {
-    content = <SplashScreen deviceCode={deviceCode} />;
-  } else if (screen === 'tiles') {
-    content = <ProjectTiles folders={folders} />;
+  if (screen === 'tiles') {
+    content = <ProjectTiles projects={projects} deviceCode={deviceCode} />;
   } else if (project && preview && currentPage) {
     content = (
       <PreviewScreen project={project} page={currentPage} pageSize={project.metadata.pageSize} />

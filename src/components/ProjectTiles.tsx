@@ -1,17 +1,31 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { cb } from '../ai/actions';
+import type { DeviceCodeInfo } from '../drive/driveClient';
+import type { StorageConnectionInfo } from '../storage/connections';
 import type { ProjectFolder } from '../storage/types';
 import { PAGE_SIZE_PRESETS } from '../types/comic';
+import ConnectSettings from './ConnectSettings';
 import GeneratorSettings from './GeneratorSettings';
 import Spinner from './Spinner';
 import { useGeneratorConfig, useGeneratorConfigProblem } from './useGeneratorConfig';
 import { useBusy } from './useBusy';
 import { errorMessage } from '../utils/errors';
 
-function NewProjectModal({ onClose }: { onClose: () => void }) {
+const kindLabel = (c: StorageConnectionInfo): string => (c.kind === 'drive' ? 'Google Drive' : c.label);
+
+function NewProjectModal({
+  connections,
+  onClose,
+}: {
+  connections: StorageConnectionInfo[];
+  onClose: () => void;
+}) {
+  const live = connections.filter((c) => c.connected);
+  const defaultConnectionId = live.find((c) => c.kind === 'server')?.id ?? (live[0]?.id ?? '');
   const [name, setName] = useState('');
   const [sizeIndex, setSizeIndex] = useState(0);
+  const [connectionId, setConnectionId] = useState(defaultConnectionId);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState('');
   const trimmedName = name.trim();
@@ -23,7 +37,7 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
     setError('');
     try {
       // On success the app switches to the editor and this modal unmounts.
-      await cb().storage.createProject(trimmedName, PAGE_SIZE_PRESETS[sizeIndex]);
+      await cb().storage.createProject(trimmedName, PAGE_SIZE_PRESETS[sizeIndex], connectionId);
     } catch (e) {
       setError(errorMessage(e));
       setCreating(false);
@@ -70,6 +84,25 @@ function NewProjectModal({ onClose }: { onClose: () => void }) {
                   </option>
                 ))}
               </select>
+              {live.length > 1 && (
+                <>
+                  <label className="form-label mt-3" htmlFor="new-project-connection">
+                    Store in
+                  </label>
+                  <select
+                    id="new-project-connection"
+                    className="form-select"
+                    value={connectionId}
+                    onChange={(e) => setConnectionId(e.target.value)}
+                  >
+                    {live.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {kindLabel(c)}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              )}
               {error && <div className="alert alert-danger mt-3 mb-0">{error}</div>}
             </div>
             <div className="modal-footer">
@@ -125,11 +158,34 @@ function GeneratorSettingsCard() {
   );
 }
 
-/** One card per Drive project folder, plus a dashed tile that creates a new project. */
-export default function ProjectTiles({ folders }: { folders: ProjectFolder[] }) {
+/**
+ * The app's start screen: one card per project across every connected storage location, plus a
+ * dashed tile that creates a new one, and a Settings section below to connect storage and the
+ * image generator.
+ */
+export default function ProjectTiles({
+  projects,
+  deviceCode,
+}: {
+  projects: ProjectFolder[];
+  deviceCode: DeviceCodeInfo | null;
+}) {
   const [showNewModal, setShowNewModal] = useState(false);
   const [openingId, setOpeningId] = useState<string | null>(null);
   const opening = useBusy();
+  const [connections, setConnections] = useState<StorageConnectionInfo[]>([]);
+
+  const refreshConnections = useCallback(() => {
+    void cb().storage.listConnections().then(setConnections);
+  }, []);
+
+  // Re-read connections whenever the project list changes (after a connect/disconnect/create) or
+  // a Drive device-code flow starts or finishes.
+  useEffect(() => {
+    refreshConnections();
+  }, [projects, deviceCode, refreshConnections]);
+
+  const liveCount = connections.filter((c) => c.connected).length;
 
   function open(folderId: string) {
     setOpeningId(folderId);
@@ -140,11 +196,26 @@ export default function ProjectTiles({ folders }: { folders: ProjectFolder[] }) 
     <div className="min-vh-100 bg-body-tertiary">
       <div className="container py-4">
         <h1 className="h4 mb-4">Your comics</h1>
+        {projects.length === 0 && (
+          <p className="text-muted">
+            {liveCount === 0
+              ? 'No storage connected yet. Connect Google Drive or a storage server below to see your comics.'
+              : 'No comics yet here. Create one below.'}
+          </p>
+        )}
         <div className="row g-3">
-          {folders.map((folder) => (
-            <div className="col-12 col-sm-6 col-md-4" key={folder.id}>
+          {projects.map((folder) => (
+            <div
+              className="col-12 col-sm-6 col-md-4"
+              key={`${folder.connectionId ?? ''}:${folder.id}`}
+            >
               <div className="card h-100 shadow-sm">
                 <div className="card-body d-flex flex-column">
+                  {folder.connectionLabel && (
+                    <span className="badge text-bg-secondary align-self-start mb-2 text-truncate">
+                      {folder.connectionLabel}
+                    </span>
+                  )}
                   <h2 className="card-title h6 text-truncate">{folder.name}</h2>
                   <button
                     className="btn btn-primary mt-auto align-self-start"
@@ -162,6 +233,8 @@ export default function ProjectTiles({ folders }: { folders: ProjectFolder[] }) 
             <button
               className="card h-100 w-100 shadow-sm border-2 text-center p-4"
               style={{ borderStyle: 'dashed', minHeight: 120 }}
+              disabled={liveCount === 0}
+              title={liveCount === 0 ? 'Connect a storage location in Settings first.' : undefined}
               onClick={() => setShowNewModal(true)}
             >
               <span className="h1 mb-1">+</span>
@@ -169,13 +242,19 @@ export default function ProjectTiles({ folders }: { folders: ProjectFolder[] }) 
             </button>
           </div>
         </div>
-        <h1 className="h4 mt-5 mb-1">Settings</h1>
-        <p className="text-muted small mb-3">Kept in this browser, not in your comics.</p>
+        <h1 className="h4 mt-5 mb-3">Settings</h1>
         <div className="row g-3">
+          <ConnectSettings
+            connections={connections}
+            deviceCode={deviceCode}
+            onChange={refreshConnections}
+          />
           <GeneratorSettingsCard />
         </div>
       </div>
-      {showNewModal && <NewProjectModal onClose={() => setShowNewModal(false)} />}
+      {showNewModal && (
+        <NewProjectModal connections={connections} onClose={() => setShowNewModal(false)} />
+      )}
     </div>
   );
 }

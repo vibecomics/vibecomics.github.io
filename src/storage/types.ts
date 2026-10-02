@@ -6,6 +6,10 @@
 export interface ProjectFolder {
   id: string;
   name: string;
+  /** Which connection this was listed from, when it came from the aggregated multi-connection list. */
+  connectionId?: string;
+  /** That connection's label, for display (e.g. a tile's badge). */
+  connectionLabel?: string;
 }
 
 /** An image file in a project folder. Files are addressed by name, which is unique in a folder. */
