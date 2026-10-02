@@ -60,19 +60,22 @@ function defaultVariations(kind: StoryKind): Variation[] {
     {
       id: newId('var'),
       name: 'Front view',
-      prompt: 'Front view, facing the camera directly.',
+      prompt:
+        'Front view, facing the camera directly, full body visible, in a relaxed neutral standing pose.',
       imageIds: [],
     },
     {
       id: newId('var'),
       name: 'Back view',
-      prompt: 'Back view, facing directly away from the camera.',
+      prompt:
+        'Back view, facing directly away from the camera, full body visible, showing only the back of the head and body. No face, eyes, or other front-facing features visible anywhere in the image.',
       imageIds: [],
     },
     {
       id: newId('var'),
       name: 'Side view',
-      prompt: 'Side view (profile) or three-quarter view, facing to the side.',
+      prompt:
+        'Side view (profile), facing fully to the side, full body visible, showing only one side of the face and body in profile.',
       imageIds: [],
     },
   ];
@@ -113,11 +116,15 @@ export function variationsApi(deps: ComicBuilderDeps) {
       return variation ? snapshot(variation) : null;
     },
     add: (kind: StoryKind, entryId: string, input: VariationInput): Variation => {
+      const prompt = input.prompt ?? '';
+      const imageIds = input.imageIds ?? [];
       const variation: Variation = {
         id: newId('var'),
         name: input.name,
-        prompt: input.prompt ?? '',
-        imageIds: input.imageIds ?? [],
+        prompt,
+        imageIds,
+        // Mirrors layers.add: dirty when there's a prompt and no image yet, unless given explicitly.
+        dirty: input.dirty ?? (Boolean(prompt.trim()) && imageIds.length === 0),
       };
       mutate(deps, (p) => {
         findEntry(p, kind, entryId).variations.push(variation);
@@ -136,7 +143,20 @@ export function variationsApi(deps: ComicBuilderDeps) {
             (v) => v.id === variationId
           );
           if (!variation) throw new Error(`Variation "${variationId}" not found.`);
-          return Object.assign(variation, definedFields(patch));
+          // Mirrors updateLayer: new images always satisfy whatever prompt asked for them (clears
+          // dirty); otherwise, touching this variation's own prompt makes its current art stale
+          // (dirty) unless that leaves no prompt at all to act on.
+          const swapsImages = patch.imageIds !== undefined;
+          const dirty = swapsImages
+            ? false
+            : patch.prompt !== undefined
+              ? Boolean((patch.prompt ?? variation.prompt ?? '').trim())
+              : undefined;
+          return Object.assign(
+            variation,
+            definedFields(patch),
+            ...(dirty !== undefined ? [{ dirty }] : [])
+          );
         })
       ),
     delete: (kind: StoryKind, entryId: string, variationId: string): boolean =>
@@ -331,16 +351,26 @@ export function storyApi<K extends keyof StoryTypes>(deps: ComicBuilderDeps, key
       return snapshot(entry);
     },
     update: (id: string, patch: StoryEntryPatch): Entry => {
-      const { linkIds, ...fields } = patch;
+      const { linkIds, variations, ...fields } = patch;
       return snapshot(
         mutate(deps, (p) => {
           const entry = entriesOf(p).find((e) => e.id === id);
           if (!entry) throw new Error(`${label} "${id}" not found.`);
-          return Object.assign(
+          Object.assign(
             entry,
             definedFields(fields),
-            linkIds === undefined ? {} : { [linkField]: linkIds }
+            linkIds === undefined ? {} : { [linkField]: linkIds },
+            variations === undefined ? {} : { variations }
           );
+          // The description is the shared prefix of every variation's stitched prompt (entry
+          // description + the variation's own text), so changing it makes every variation's current
+          // art stale — unless this same call also replaced `variations` outright (new art plan).
+          if (fields.description !== undefined && variations === undefined) {
+            for (const v of entry.variations) {
+              v.dirty = Boolean((entry.description || v.prompt || '').trim());
+            }
+          }
+          return entry;
         })
       );
     },
@@ -440,6 +470,49 @@ export function dirtyLayerRefs(project: ComicProject): LayerRef[] {
   return refs;
 }
 
+export interface VariationRef {
+  kind: StoryKind;
+  entryId: string;
+  variationId: string;
+}
+
+/** Every variation (reference art for a character, object or scene), across the whole story bible,
+ * whose art no longer matches its prompt. Mirrors dirtyLayerRefs for layers. */
+export function dirtyVariationRefs(project: ComicProject): VariationRef[] {
+  const refs: VariationRef[] = [];
+  for (const kind of Object.keys(STORY_KINDS) as StoryKind[]) {
+    for (const entry of entriesOfKind(project, kind)) {
+      for (const variation of entry.variations) {
+        if (variation.dirty) refs.push({ kind, entryId: entry.id, variationId: variation.id });
+      }
+    }
+  }
+  return refs;
+}
+
+/**
+ * Marks every layer and story-bible variation that currently has a prompt to act on as dirty: used
+ * when the project's shared STYLE paragraph changes, since it is the first part of every stitched
+ * prompt (layer and reference alike) — changing it makes every image that was generated under the
+ * old one stale, the same way changing one layer's own prompt makes that one layer stale.
+ */
+export function cascadeStyleDirty(project: ComicProject): void {
+  for (const page of project.pages) {
+    for (const panel of page.panels) {
+      for (const layer of panel.layers) {
+        if ((layer.prompt ?? '').trim()) layer.dirty = true;
+      }
+    }
+  }
+  for (const kind of Object.keys(STORY_KINDS) as StoryKind[]) {
+    for (const entry of entriesOfKind(project, kind)) {
+      for (const variation of entry.variations) {
+        if ((entry.description || variation.prompt || '').trim()) variation.dirty = true;
+      }
+    }
+  }
+}
+
 export interface PendingGeneration extends LayerRef {
   /** Zero-based page number, as shown in the UI. */
   page: number;
@@ -470,6 +543,34 @@ export function pendingGenerations(project: ComicProject): PendingGeneration[] {
           kind: layer.kind,
           prompt: layer.prompt,
           hasImage: Boolean(layer.mediaId),
+        }))
+    )
+  );
+}
+
+export interface PendingReference extends VariationRef {
+  entryName: string;
+  variationName: string;
+  prompt?: string;
+  /** False when the variation has no reference art yet; true when its prompt changed since it was made. */
+  hasImage: boolean;
+}
+
+/** What generate.dirtyReferences() would generate, described: dirtyVariationRefs plus the entry's and
+ * variation's names and prompt. Mirrors pendingGenerations for layers. */
+export function pendingReferenceGenerations(project: ComicProject): PendingReference[] {
+  return (Object.keys(STORY_KINDS) as StoryKind[]).flatMap((kind) =>
+    entriesOfKind(project, kind).flatMap((entry) =>
+      entry.variations
+        .filter((v) => v.dirty)
+        .map((v) => ({
+          kind,
+          entryId: entry.id,
+          variationId: v.id,
+          entryName: entry.name || entry.id,
+          variationName: v.name || v.id,
+          prompt: v.prompt,
+          hasImage: v.imageIds.length > 0,
         }))
     )
   );

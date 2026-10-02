@@ -1063,7 +1063,7 @@ test('variations: default seeding, CRUD, layer pinning, and generate() through t
   ).json();
   assert.deepEqual(refs, []);
   const prompt = (await run('generate', 'variationPrompt', 'characters', mira.id, front.id)).json();
-  assert.match(prompt, /Front view, facing the camera directly\./);
+  assert.match(prompt, /Front view, facing the camera directly/);
   const parts = (
     await run('generate', 'variationPromptParts', 'characters', mira.id, front.id)
   ).json();

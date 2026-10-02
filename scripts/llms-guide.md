@@ -94,9 +94,11 @@ concrete:
 - **Level of detail:** simple and iconic, or dense and textured.
 
 Keep it to a few sentences and never change it halfway through the book unless
-the story calls for it. Save it as the project's STYLE paragraph
-(`metadata.style`) so it is always there and gets stitched, verbatim, into
-every image's prompt.
+the story calls for it — changing it marks every layer and every story-bible
+variation that has a prompt as dirty, project-wide, since it is the first part
+of every one of their stitched prompts (see the dirty paragraph in step 9).
+Save it as the project's STYLE paragraph (`metadata.style`) so it is always
+there and gets stitched, verbatim, into every image's prompt.
 
 There is no separate synopsis or outline field: a page-by-page beat sheet
 would get stitched into every single image's prompt too, drowning out what is
@@ -121,6 +123,20 @@ scenes and objects (props). It is the single source of truth for every image.
   to the character. For key places or props do the same. From then on that art
   is the reference for every later image. The user may also have uploaded
   reference images already, so look before you make your own.
+- **A new character's Front/Back/Side view variations are seeded with a default
+  prompt**, written defensively so each orientation stays unambiguous — the
+  Back view prompt, for instance, explicitly says no face or front-facing
+  features should be visible, because without that a generator can otherwise
+  blend in front-view details (a face appearing on a "back view" image).
+  Tighten these further per character if the default still drifts.
+- **Generating one empty variation never sends another variation's image as a
+  reference.** A character's Back view and Front view are different poses: if
+  Back view has no art of its own yet, its generation uses the character's own
+  pose-neutral `imageIds` if any exist, or no reference image at all — never
+  the Front view's photo, which would actively mislead the model about which
+  way the subject is facing. Only when no `variationId` is given at all (a
+  generic "give me art of this character" request) is every existing image,
+  across every variation, fair game as a reference.
 - **Art versus reference art:** a character's or object's `imageIds` are its
   reference art, the images you attach to every generation. Do not add the
   pictures you generate of it to `imageIds`. Tag them instead: upload with
@@ -176,6 +192,16 @@ only what belongs to it, so the parts add up when they are stitched together
     shows (`layers.update(panelId, layerId, { subjectId })`, `null` clears it);
   - set each background layer's `sceneId` to the scene it is the setting of
     (`layers.update(panelId, layerId, { sceneId })`, `null` clears it);
+  - **also set `variationId`** whenever the linked character, object or scene
+    has more than one variation (most characters start with Front/Back/Side
+    view). A character's or object's reference art lives only under its
+    variations, never under the entry itself (`characters.get(id).imageIds` is
+    normally empty) — a layer with a `subjectId`/`sceneId` but no `variationId`
+    has no reference image to send the generator at all, even if the entry has
+    perfectly good turnaround art. Pick the variation that matches the pose the
+    layer prompt describes (a character running or seen in profile → Side
+    view; seen from behind → Back view; everything else → Front view, the
+    usual default);
   - a layer prompt is about that one image: the pose, action, expression and
     gaze of the character, or the look of the background. The setting and the
     character descriptions are not repeated here: they come from the story
@@ -262,6 +288,12 @@ matters:
 - Keep the area where characters will stand and where bubbles will sit
   uncluttered, and lay out the perspective and horizon so a character placed
   on it looks grounded.
+- A scene's own reference art (`scenes.generateImage`, `generate.allVariations`,
+  `generate.dirtyReferences()`) is generated landscape by default, since an
+  establishing shot reads better wide than tall — unlike a character or
+  object's reference art, which stays portrait/square (suited to a standing
+  turnaround). A background _layer_ inside a panel is still sized to that
+  panel's own exact shape, whatever it is.
 
 **Visual consistency across layers and pages**
 
@@ -350,10 +382,27 @@ exactly, attach the reference), regenerate that one image, and swap it in. The
 stored prompts then still describe what produced the image.
 
 Editing a layer's prompt (or, for a background, its scene; or, for a
-foreground layer, its subject) marks that layer `dirty` automatically; setting
-its image clears it. After a round of edits, check `layers.list`/`layers.get`
-for `dirty: true` across the pages you touched to find exactly which layers or
-backgrounds still need a new image, and regenerate only those.
+foreground layer, its subject or variation) marks that layer `dirty`
+automatically; setting its image clears it. After a round of edits, check
+`layers.list`/`layers.get` for `dirty: true` across the pages you touched, or
+just call `generate.pending()` to see every dirty layer at once, then
+`generate.dirty()` to regenerate all of them in one shot.
+
+The same `dirty` concept applies to the story bible: editing a variation's own
+prompt (`variations.update(kind, entryId, variationId, { prompt })`), or a
+character's, object's or scene's `description`
+(`characters.update`/`scenes.update`/`objects.update`), marks that
+variation's reference art `dirty` (a description change dirties _every_
+variation of that entry, since each one's image prompt is the description
+plus its own text) — the same way touching a layer's prompt dirties the
+layer, because a variation's reference art is generated from the same kind of
+prompt. Setting new `imageIds` on a variation clears it, same as a layer's
+`mediaId`. Check `characters.get`/`scenes.get`/`objects.get` (or
+`variations.list`) for `dirty: true`, or call `generate.pendingReferences()`
+to see every dirty variation across the whole bible at once, then
+`generate.dirtyReferences()` to regenerate all of them in one shot — run it
+alongside `generate.dirty()` to catch up everything stale in the project, both
+bible reference art and page art.
 
 ### 10. Keep the bible current, save and report
 
@@ -374,7 +423,9 @@ Before generating any image, confirm:
 - The STYLE paragraph is in the prompt, verbatim.
 - Every character, place and prop in the image is in the prompt with its
   description verbatim.
-- Its reference art is attached, if the generator takes images.
+- Its reference art is attached, if the generator takes images — which means
+  the layer has a `variationId` set whenever its subject or scene has more
+  than one variation, since that is where the reference art actually lives.
 - It is the right kind: a transparent PNG subject for foreground layers, an
   opaque exact-ratio picture for backgrounds.
 - The page prompt, the panel prompt and the layer prompt are written down in the

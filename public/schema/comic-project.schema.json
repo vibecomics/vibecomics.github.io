@@ -405,6 +405,10 @@
         "id": {
           "type": "string"
         },
+        "dirty": {
+          "description": "True when this variation's prompt (its own, or its entry's description) has changed since its reference art was made, so that art no longer matches it. Set automatically by variations.add/update and by characters/scenes/objects.update when description changes. Absent or false means the art is up to date. Mirrors Layer.dirty.",
+          "type": "boolean"
+        },
         "imageIds": {
           "description": "MediaItem ids of this variation's reference art.",
           "items": {

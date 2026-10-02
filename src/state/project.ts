@@ -125,6 +125,9 @@ function checkVariation(value: unknown, path: string): void {
   expectArray(variation.imageIds, path, 'imageIds').forEach((id, i) => {
     if (typeof id !== 'string') fail(`${path}.imageIds[${i}]`, 'expected string id');
   });
+  if (variation.dirty !== undefined && typeof variation.dirty !== 'boolean') {
+    fail(path, '"dirty" must be a boolean');
+  }
 }
 
 function checkPage(value: unknown, path: string): void {

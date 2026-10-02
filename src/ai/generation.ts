@@ -13,11 +13,18 @@
  */
 import { createProvider, GenerationCancelledError } from '../generators/types';
 import type { ImageProvider } from '../generators/types';
-import type { ComicProject, Layer, MediaItem } from '../types/comic';
+import { artPixels } from '../state/layout';
+import type { ComicProject, Layer, MediaItem, StoryEntry } from '../types/comic';
 import { errorMessage } from '../utils/errors';
 import { pngDimensions } from '../utils/image';
-import { dirtyLayerRefs, findPanel, layerArtSize, requireProject } from './builders';
-import type { LayerRef } from './builders';
+import {
+  dirtyLayerRefs,
+  dirtyVariationRefs,
+  findPanel,
+  layerArtSize,
+  requireProject,
+} from './builders';
+import type { LayerRef, VariationRef } from './builders';
 import type { ComicBuilderDeps } from './deps';
 import {
   allEntryImageIds,
@@ -299,6 +306,11 @@ async function runLayerGeneration(
  * background for a character/object, and registers the result. Shared by generateReferenceOne (a
  * single entry or variation) and generateAllVariations (which builds each variation's own final
  * prompt itself, on top of one shared, possibly user-edited base). */
+// A scene is a background/establishing shot: it reads best wide, unlike a character or object
+// turnaround, which the workflow's own default (portrait) already suits. 9in x 6in at the usual
+// generation DPI (see artPixels) lands on a clean 3:2 landscape canvas.
+const SCENE_REFERENCE_SIZE = artPixels(9, 6);
+
 async function runReferenceGeneration(
   deps: ComicBuilderDeps,
   kind: ReferenceKind,
@@ -322,6 +334,10 @@ async function runReferenceGeneration(
   const rawDataUrl = await provider.generate({
     prompt: finalPrompt,
     referenceImages,
+    ...(kind === 'scenes' && {
+      width: SCENE_REFERENCE_SIZE.width,
+      height: SCENE_REFERENCE_SIZE.height,
+    }),
     transparent: kind !== 'scenes',
     signal,
   });
@@ -409,7 +425,10 @@ function commitVariationImage(
   deps.updateProject((p) => {
     const entry = p.metadata[kind].find((e) => e.id === id);
     const variation = entry?.variations.find((v) => v.id === variationId);
-    if (variation && !variation.imageIds.includes(mediaId)) variation.imageIds.push(mediaId);
+    if (!variation) return;
+    if (!variation.imageIds.includes(mediaId)) variation.imageIds.push(mediaId);
+    // A new image satisfies whatever prompt asked for it, same as a layer's image swap.
+    variation.dirty = false;
   });
 }
 
@@ -481,9 +500,18 @@ function referenceTo(
   return note ? { mediaId, note } : { mediaId };
 }
 
+/** The reference images to send for a specific variation that has none of its own yet: the entry's
+ * own pose-neutral `imageIds`, never another variation's — a different pose or orientation (the
+ * Front view's image, say, while generating Back view) actively misleads the model into blending the
+ * two (a face appearing on a "back view," for instance), which is worse than sending nothing. */
+function fallbackReferenceIds(entry: StoryEntry): string[] {
+  return entry.imageIds;
+}
+
 /** The images a layer's generation sends by default: its subject's/scene's chosen variation (see
- * layer.variationId), if it has one and that variation has images yet; otherwise every image the
- * character/object (foreground) or scene (background) it shows has. */
+ * layer.variationId), if it has one and that variation has images yet (else the entry's own
+ * pose-neutral images, never a different variation's — see fallbackReferenceIds); without a
+ * variationId, every image the character/object (foreground) or scene (background) it shows has. */
 export function defaultLayerReferences(
   deps: ComicBuilderDeps,
   panelId: string,
@@ -497,13 +525,17 @@ export function defaultLayerReferences(
   const variation = layer.variationId
     ? subject.variations.find((v) => v.id === layer.variationId)
     : undefined;
-  const ids = variation?.imageIds.length ? variation.imageIds : allEntryImageIds(subject);
+  const ids = variation
+    ? variation.imageIds.length
+      ? variation.imageIds
+      : fallbackReferenceIds(subject)
+    : allEntryImageIds(subject);
   return ids.map((mediaId) => referenceTo(project, mediaId, subject.id));
 }
 
 /** The images a story-bible entry's reference generation sends by default: with `variationId`, that
- * variation's own images (falling back to every image the entry has, across every variation, if that
- * variation has none yet); without one, every image the entry has. */
+ * variation's own images, or (if it has none yet) the entry's own pose-neutral images — never another
+ * variation's, see fallbackReferenceIds; without a variationId, every image the entry has. */
 export function defaultEntryReferences(
   deps: ComicBuilderDeps,
   kind: ReferenceKind,
@@ -514,7 +546,11 @@ export function defaultEntryReferences(
   const entry = project.metadata[kind].find((e) => e.id === id);
   if (!entry) return [];
   const variation = variationId ? entry.variations.find((v) => v.id === variationId) : undefined;
-  const ids = variation?.imageIds.length ? variation.imageIds : allEntryImageIds(entry);
+  const ids = variation
+    ? variation.imageIds.length
+      ? variation.imageIds
+      : fallbackReferenceIds(entry)
+    : allEntryImageIds(entry);
   return ids.map((mediaId) => referenceTo(project, mediaId, id));
 }
 
@@ -600,6 +636,62 @@ export async function generateAllDirty(
     failed
       ? `Generated ${outcomes.length - failed} of ${outcomes.length}; ${failed} failed.`
       : `Generated ${outcomes.length} image${outcomes.length === 1 ? '' : 's'}.`
+  );
+  return outcomes;
+}
+
+/** One dirty variation's outcome from generateAllDirtyVariations. */
+export interface VariationRefOutcome extends VariationRef {
+  ok: boolean;
+  error?: string;
+}
+
+/**
+ * Generates images for every dirty variation (reference art for a character, object or scene) across
+ * the whole story bible, one request at a time, committing each result into that variation's imageIds
+ * as it goes (like generateAllDirty, there's no one to preview a batch for). Mirrors generateAllDirty,
+ * but for story-bible reference art instead of layers.
+ */
+export async function generateAllDirtyVariations(
+  deps: ComicBuilderDeps
+): Promise<VariationRefOutcome[]> {
+  const refs = dirtyVariationRefs(requireProject(deps));
+
+  // Queue every dirty variation's generation up front, not one at a time as each finishes: same
+  // reasoning as generateAllDirty and generateAllVariations.
+  const runs = refs.map((ref) => {
+    const key = variationKey(ref.kind, ref.entryId, ref.variationId);
+    const label = describeVariation(deps, ref.kind, ref.entryId, ref.variationId);
+    const run = trackedGeneration(key, label, async (signal) => {
+      const media = await generateReferenceOne(
+        deps,
+        ref.kind,
+        ref.entryId,
+        ref.variationId,
+        undefined,
+        undefined,
+        signal
+      );
+      commitVariationImage(deps, ref.kind, ref.entryId, ref.variationId, media.id);
+    });
+    return { ref, run };
+  });
+
+  const outcomes: VariationRefOutcome[] = [];
+  for (const { ref, run } of runs) {
+    deps.setStatus(`Generating reference image ${outcomes.length + 1} of ${refs.length}…`);
+    try {
+      await run;
+      outcomes.push({ ...ref, ok: true });
+    } catch (e) {
+      outcomes.push({ ...ref, ok: false, error: errorMessage(e) });
+    }
+  }
+  const failed = outcomes.filter((o) => !o.ok).length;
+  deps.setStatus(
+    failed
+      ? `Generated ${outcomes.length - failed} of ${outcomes.length}; ${failed} failed.`
+      : `Generated ${outcomes.length} reference image${outcomes.length === 1 ? '' : 's'}.`
   );
   return outcomes;
 }

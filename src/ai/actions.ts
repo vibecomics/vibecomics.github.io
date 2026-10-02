@@ -32,6 +32,7 @@ import {
   assertSubject,
   assertOptionalText,
   assertVariation,
+  cascadeStyleDirty,
   definedFields,
   imageSwapPatch,
   layerArtSize,
@@ -39,6 +40,7 @@ import {
   panelItemsApi,
   panelsApi,
   pendingGenerations,
+  pendingReferenceGenerations,
   requirePanel,
   requireProject,
   resolveLayerImage,
@@ -46,7 +48,7 @@ import {
   storyApi,
   variationsApi,
 } from './builders';
-import type { PendingGeneration } from './builders';
+import type { PendingGeneration, PendingReference } from './builders';
 import type {
   ActionResult,
   BubbleInput,
@@ -65,6 +67,7 @@ import {
   defaultEntryReferences,
   defaultLayerReferences,
   generateAllDirty,
+  generateAllDirtyVariations,
   generateAllVariations,
   generateLayerImage,
   generateReferenceImage,
@@ -79,6 +82,7 @@ import type {
   QueueItem,
   ReferenceKind,
   VariationOutcome,
+  VariationRefOutcome,
 } from './generation';
 import {
   buildLayerPrompt,
@@ -1000,12 +1004,17 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * palette, lighting, mood). Stitched, verbatim, into every image's prompt, so keep it to a
        * few sentences and change it only if the story calls for it. There is no separate synopsis
        * field: track story notes elsewhere, since stitching a whole synopsis into every prompt
-       * would drown out what is unique to each image.
+       * would drown out what is unique to each image. Changing it to a different value marks every
+       * layer and story-bible variation that has a prompt as dirty, project-wide (it is the first
+       * part of every one of their stitched prompts) — expect a large `generate.pending()` /
+       * `generate.pendingReferences()` afterward, and treat this as the deliberate, whole-book action
+       * it is.
        * @param text - The new STYLE paragraph.
        * @returns { ok: true }.
        */
       setStyle: (text: string): ActionResult => {
         deps.updateProject((p) => {
+          if (p.metadata.style !== text) cascadeStyleDirty(p);
           p.metadata.style = text;
         });
         return { ok: true };
@@ -1565,6 +1574,32 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @returns A promise resolving to one { pageId, panelId, layerId, ok, error? } per dirty item found when it started.
        */
       dirty: (): Promise<GenerationOutcome[]> => generateAllDirty(deps, setLayerMedia),
+
+      /**
+       * What generate.dirtyReferences() would generate, without generating
+       * anything: every variation (reference art for a character, object or
+       * scene) across the whole story bible whose dirty is true — set
+       * automatically when its own prompt, or its entry's description,
+       * changes (see characters/scenes/objects.update and
+       * variations.add/update). Call this first to see the work, then
+       * generate.dirtyReferences().
+       * @returns One { kind, entryId, variationId, entryName, variationName, prompt?, hasImage } per dirty item. hasImage is false for a variation with no reference art yet.
+       */
+      pendingReferences: (): PendingReference[] =>
+        pendingReferenceGenerations(requireProject(deps)),
+
+      /**
+       * Generate images for every variation (reference art for a character,
+       * object or scene) across the whole story bible whose dirty is true,
+       * one request at a time, committing each result into that variation's
+       * imageIds as it goes (unlike generate.variationImage, there's no one
+       * to preview a batch for). A failure on one item does not stop the
+       * rest. Mirrors generate.dirty(), but for story-bible reference art
+       * instead of layers — run both to regenerate everything stale in the
+       * project.
+       * @returns A promise resolving to one { kind, entryId, variationId, ok, error? } per dirty item found when it started.
+       */
+      dirtyReferences: (): Promise<VariationRefOutcome[]> => generateAllDirtyVariations(deps),
 
       /**
        * Read the image generator configuration. Per-machine, not part of the project.

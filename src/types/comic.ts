@@ -161,6 +161,12 @@ export interface Variation {
   prompt: string;
   /** MediaItem ids of this variation's reference art. */
   imageIds: string[];
+  /** True when this variation's prompt (its own, or its entry's description) has changed since its
+   * reference art was made, so that art no longer matches it. Set automatically by
+   * variations.add/update and by characters/scenes/objects.update when `description` changes (every
+   * variation of that entry goes dirty, since each one's prompt is the description plus its own text).
+   * Absent or false means the art is up to date. Mirrors Layer.dirty. */
+  dirty?: boolean;
 }
 
 /** Shared shape of the story-bible entries: visual description plus reference art. */

@@ -1,0 +1,106 @@
+/// <reference types="node" />
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { createBlankProject } from '../state/project';
+import type { ComicProject } from '../types/comic';
+import type { ComicBuilderDeps } from './deps';
+import { defaultEntryReferences, defaultLayerReferences } from './generation';
+
+/** A minimal ComicBuilderDeps backed by one in-memory project: enough for the pure read-only
+ * reference-picking functions under test, which only call getProject. */
+function makeDeps(project: ComicProject): ComicBuilderDeps {
+  return { getProject: () => project } as unknown as ComicBuilderDeps;
+}
+
+function withCharacter(mutate: (p: ComicProject) => void): ComicProject {
+  const project = createBlankProject('Test');
+  mutate(project);
+  return project;
+}
+
+test("defaultEntryReferences never sends a different variation's images for an empty one", () => {
+  const project = withCharacter((p) => {
+    p.metadata.characters.push({
+      id: 'char1',
+      name: 'Mara',
+      description: 'A girl.',
+      imageIds: [],
+      sceneIds: [],
+      variations: [
+        { id: 'front', name: 'Front view', prompt: 'Front view.', imageIds: ['m-front'] },
+        { id: 'back', name: 'Back view', prompt: 'Back view.', imageIds: [] },
+      ],
+    });
+  });
+  const deps = makeDeps(project);
+
+  const note = "Match this character's design exactly (face, proportions, outfit, colors).";
+
+  // The empty "back" variation must not fall back to "front"'s image — a different orientation
+  // would mislead the model (e.g. drawing a face on a back view).
+  assert.deepEqual(defaultEntryReferences(deps, 'characters', 'char1', 'back'), []);
+  // The populated variation still sends its own image.
+  assert.deepEqual(defaultEntryReferences(deps, 'characters', 'char1', 'front'), [
+    { mediaId: 'm-front', note },
+  ]);
+  // No variationId at all: any existing art across every variation is fair game.
+  assert.deepEqual(defaultEntryReferences(deps, 'characters', 'char1'), [
+    { mediaId: 'm-front', note },
+  ]);
+});
+
+test("defaultEntryReferences falls back to the entry's own pose-neutral imageIds, not another variation's", () => {
+  const project = withCharacter((p) => {
+    p.metadata.characters.push({
+      id: 'char1',
+      name: 'Mara',
+      description: 'A girl.',
+      imageIds: ['m-neutral'],
+      sceneIds: [],
+      variations: [
+        { id: 'front', name: 'Front view', prompt: 'Front view.', imageIds: ['m-front'] },
+        { id: 'back', name: 'Back view', prompt: 'Back view.', imageIds: [] },
+      ],
+    });
+  });
+  const deps = makeDeps(project);
+
+  assert.deepEqual(defaultEntryReferences(deps, 'characters', 'char1', 'back'), [
+    {
+      mediaId: 'm-neutral',
+      note: "Match this character's design exactly (face, proportions, outfit, colors).",
+    },
+  ]);
+});
+
+test('defaultLayerReferences mirrors defaultEntryReferences for a layer pinned to an empty variation', () => {
+  const project = withCharacter((p) => {
+    p.metadata.characters.push({
+      id: 'char1',
+      name: 'Mara',
+      description: 'A girl.',
+      imageIds: [],
+      sceneIds: [],
+      variations: [
+        { id: 'front', name: 'Front view', prompt: 'Front view.', imageIds: ['m-front'] },
+        { id: 'back', name: 'Back view', prompt: 'Back view.', imageIds: [] },
+      ],
+    });
+    p.pages[0].panels[0].layers.push({
+      id: 'l1',
+      name: 'Mara running',
+      kind: 'foreground',
+      visible: true,
+      x: 0,
+      y: 0,
+      width: 100,
+      rotation: 0,
+      opacity: 1,
+      subjectId: 'char1',
+      variationId: 'back',
+    });
+  });
+  const deps = makeDeps(project);
+
+  assert.deepEqual(defaultLayerReferences(deps, project.pages[0].panels[0].id, 'l1'), []);
+});

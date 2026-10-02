@@ -109,6 +109,8 @@ export interface VariationInput {
   prompt?: string;
   /** MediaItem ids of this variation's reference art. */
   imageIds?: string[];
+  /** Set automatically (true when there's a prompt and no image yet) unless given explicitly. */
+  dirty?: boolean;
 }
 
 /** Patch for variations.update(). Only the given fields change; imageIds replaces the list. */
