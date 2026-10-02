@@ -59,6 +59,7 @@ import type {
 } from './deps';
 import { attachDocs } from './docs';
 import {
+  cancelAllGenerations,
   cancelLayerGeneration,
   cancelQueueItem as cancelGenerationQueueItem,
   cancelReferenceGeneration,
@@ -1779,6 +1780,15 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @returns True if something was cancelled, false if that id isn't outstanding (e.g. it already finished).
        */
       cancelQueueItem: (id: string): boolean => cancelGenerationQueueItem(id),
+
+      /**
+       * Cancel every outstanding item in generate.queue() at once — everything still queued or
+       * running, across layers, reference art and variations alike. Use this to stop a whole
+       * generate.dirty()/dirtyReferences() batch partway through, rather than cancelling one row at a
+       * time.
+       * @returns How many items were cancelled.
+       */
+      cancelAll: (): number => cancelAllGenerations(),
 
       /**
        * Remove every finished (done or error) item from generate.queue()'s list; anything still

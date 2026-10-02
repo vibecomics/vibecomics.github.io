@@ -136,6 +136,20 @@ export function cancelQueueItem(id: string): boolean {
   return cancelGeneration(id);
 }
 
+/**
+ * Cancels every outstanding generation at once — everything still queued or running, across layers,
+ * reference art and variations alike. A batch call (generate.dirty(), generate.dirtyReferences()) has
+ * already enqueued every one of its items up front (see trackedGeneration): aborting each one here
+ * makes its turn, when it comes, throw immediately instead of actually generating, so the batch's own
+ * loop unwinds on its own almost at once rather than needing a separate "stop" flag threaded through
+ * it. Returns how many were cancelled.
+ */
+export function cancelAllGenerations(): number {
+  const keys = [...abortControllers.keys()];
+  for (const key of keys) cancelGeneration(key);
+  return keys.length;
+}
+
 /** One request in the generation queue: what it's for, and how far it's gotten. Unlike the old
  * queue, a finished item (done or error) stays here, in place, until clearCompletedQueueItems()
  * removes it — so a panel listing the queue can show what was generated, not just what's in flight. */

@@ -63,6 +63,7 @@ export default function GenerationPanel({ onClose }: Props) {
   // overlay instead (see the wide/narrow split below) — the same trade-off InspectorPane makes.
   const wide = useMediaQuery('(min-width: 768px)');
   const completedCount = queue.filter((i) => i.status === 'done' || i.status === 'error').length;
+  const activeCount = queue.filter((i) => i.status === 'queued' || i.status === 'running').length;
 
   const content: ReactNode = (
     <>
@@ -94,9 +95,13 @@ export default function GenerationPanel({ onClose }: Props) {
               : `Generate images for every layer, background and story-bible reference (cast, objects, scenes) whose art no longer matches its prompt (${dirtyCount})`
           }
           onClick={() =>
-            void task.run(() =>
-              Promise.all([cb().generate.dirty(), cb().generate.dirtyReferences()])
-            )
+            void task.run(async () => {
+              // Reference art (cast/objects/scenes) first: a layer's or background's own generation
+              // reads whatever reference images its subject/scene currently has, so those should be
+              // fresh before any layer that might use them runs, not generated after or alongside it.
+              await cb().generate.dirtyReferences();
+              await cb().generate.dirty();
+            })
           }
         >
           {task.busy && (
@@ -108,6 +113,16 @@ export default function GenerationPanel({ onClose }: Props) {
           )}
           {task.busy ? 'Generating…' : `🪄 Generate all${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
         </button>
+        {activeCount > 0 && (
+          <button
+            type="button"
+            className="btn btn-outline-danger btn-sm text-nowrap"
+            title="Cancel everything still queued or running, not just one row"
+            onClick={() => cb().generate.cancelAll()}
+          >
+            Stop all
+          </button>
+        )}
         <button
           type="button"
           className="btn btn-outline-secondary btn-sm ms-auto"
