@@ -103,12 +103,13 @@ function subjectLabel(project: ComicProject, layer: Layer): string {
 }
 
 /**
- * The labeled parts of a layer's (or background's) image prompt: Style, then, for a background, the
- * page and panel prompts and its scene (it's meant to depict that setting); for a foreground layer,
- * only its subject's description (not the page/panel prompts, and not its panel's background scene
- * either — any setting language anywhere in the prompt makes this model draw a full scene instead of
- * an isolated cutout, confirmed by testing a "for context only, do not draw it" scene description).
- * Then the layer prompt, then a technical requirements line.
+ * The labeled parts of a layer's (or background's) image prompt: Style, the linked entry's
+ * description (a background's scene, or a foreground layer's character/object), the layer prompt,
+ * then a technical requirements line. The page and panel prompts are deliberately left out of both:
+ * they narrate the whole panel (people, action), so on a background they got drawn into the scene,
+ * and on a foreground any setting language makes this model draw a full scene instead of an isolated
+ * cutout (an earlier test of a "for context only, do not draw it" scene description didn't prevent
+ * that for foregrounds; a disclaimer on page/panel prompts for backgrounds hasn't been tried).
  */
 export function buildLayerPromptParts(
   project: ComicProject,
@@ -118,7 +119,6 @@ export function buildLayerPromptParts(
   const panel = findPanel(project, panelId);
   const layer = panel?.layers.find((l) => l.id === layerId);
   if (!panel || !layer) throw new Error(`Layer "${layerId}" not found.`);
-  const page = project.pages.find((p) => p.panels.some((pp) => pp.id === panelId));
   const isForeground = layer.kind === 'foreground';
 
   const subject = layerSubject(project, layer);
@@ -133,18 +133,7 @@ export function buildLayerPromptParts(
   const layerPart = { label: 'Layer prompt', text: layer.prompt };
   const technicalPart = { label: 'Technical requirements', text: technical };
 
-  return keepNonEmpty(
-    isForeground
-      ? [style, subjectPart, layerPart, technicalPart]
-      : [
-          style,
-          { label: 'Page', text: page?.prompt },
-          { label: 'Panel', text: panel.prompt },
-          subjectPart,
-          layerPart,
-          technicalPart,
-        ]
-  );
+  return keepNonEmpty([style, subjectPart, layerPart, technicalPart]);
 }
 
 /** Stitches the prompt for a layer's (or background's) image (see buildLayerPromptParts). */
