@@ -38,8 +38,9 @@ function referenceTechnical(kind: ReferenceKind): string {
   }
   const subject = kind === 'characters' ? 'Character' : 'Object';
   return (
-    `${subject} reference image: a single, clear view of the ${subject.toLowerCase()}, on a plain ` +
-    'solid white background: no scene, no shadow, no border, no baked-in text. Not a multi-view ' +
+    `${subject} reference image: a single, clear view of the ${subject.toLowerCase()}, on a flat, ` +
+    'solid pure-white background (#FFFFFF): no scene, no gradient, no drop shadow or cast shadow, ' +
+    'no ground plane or floor line, no border, no vignette, no baked-in text. Not a multi-view ' +
     'turnaround sheet or a grid of poses — pick one clear view and draw only that.'
   );
 }
@@ -124,7 +125,7 @@ export function buildLayerPromptParts(
 
   const size = layerArtSize(project, panelId, layerId);
   const technical = isForeground
-    ? 'A single image of one pose only, on a plain solid white background: no scene, no shadow, no border, no baked-in text. Not a multi-view turnaround sheet or a grid of poses, even if a reference image shows the subject from several angles — pick one pose and draw only that.'
+    ? 'A single image of one pose only, on a flat, solid pure-white background (#FFFFFF): no scene, no gradient, no drop shadow or cast shadow, no ground plane or floor line, no border, no vignette, no baked-in text. Not a multi-view turnaround sheet or a grid of poses, even if a reference image shows the subject from several angles — pick one pose and draw only that.'
     : `Full-bleed background image, aspect ratio ${size?.aspectRatio ?? 1}:1, no border.`;
 
   const style = { label: 'Style', text: project.metadata.style };

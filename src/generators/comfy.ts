@@ -170,39 +170,6 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-/** The allowed values of one required input of a node type, e.g. the checkpoint filenames a
- * CheckpointLoaderSimple can load, straight from what this ComfyUI server has installed. */
-async function listNodeOptions(
-  baseUrl: string,
-  fetchImpl: typeof fetch,
-  classType: string,
-  inputName: string
-): Promise<string[]> {
-  const base = baseUrl.replace(/\/+$/, '');
-  const res = await fetchImpl(`${base}/object_info/${classType}`);
-  const info = await asJson<Record<string, { input?: { required?: Record<string, [unknown]> } }>>(
-    res,
-    'object_info'
-  );
-  const options = info[classType]?.input?.required?.[inputName]?.[0];
-  return Array.isArray(options) ? (options as string[]) : [];
-}
-
-/** The split-loader model files (UNET/CLIP/VAE/LoRA) installed, for models like Qwen-Image that have
- * no single checkpoint file. Empty arrays mean that loader type isn't installed. */
-export async function listComfyQwenModels(
-  baseUrl: string,
-  fetchImpl: typeof fetch = fetch
-): Promise<{ unet: string[]; clip: string[]; vae: string[]; lora: string[] }> {
-  const [unet, clip, vae, lora] = await Promise.all([
-    listNodeOptions(baseUrl, fetchImpl, 'UNETLoader', 'unet_name'),
-    listNodeOptions(baseUrl, fetchImpl, 'CLIPLoader', 'clip_name'),
-    listNodeOptions(baseUrl, fetchImpl, 'VAELoader', 'vae_name'),
-    listNodeOptions(baseUrl, fetchImpl, 'LoraLoaderModelOnly', 'lora_name'),
-  ]);
-  return { unet, clip, vae, lora };
-}
-
 export function createComfyProvider(
   config: ComfyConfig,
   fetchImpl: typeof fetch = fetch

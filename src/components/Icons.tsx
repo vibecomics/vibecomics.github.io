@@ -18,6 +18,16 @@ export function TrashIcon() {
   );
 }
 
+/** A big sparkle beside a small one: generate. */
+export function SparklesIcon() {
+  return (
+    <svg {...icon} fill="currentColor" stroke="none">
+      <path d="M7 1.5c.3 2.2 1 3.7 1.9 4.6S11 7.7 13.2 8c-2.2.3-3.7 1-4.6 1.9S7.3 12.8 7 15c-.3-2.2-1-3.7-1.9-4.6S2.2 9.3 0 9c2.2-.3 3.7-1 4.6-1.9S6.7 3.7 7 1.5z" />
+      <path d="M13 9c.15 1 .5 1.65.9 2.05s1.05.75 2.05.9c-1 .15-1.65.5-2.05.9s-.75 1.05-.9 2.05c-.15-1-.5-1.65-.9-2.05s-1.05-.75-2.05-.9c1-.15 1.65-.5 2.05-.9s.75-1.05.9-2.05z" />
+    </svg>
+  );
+}
+
 /** Two halves of a shape either side of a dashed axis: mirrors left to right. */
 export function FlipIcon() {
   return (

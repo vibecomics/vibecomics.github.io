@@ -695,6 +695,18 @@
   border-color: #0d6efd;
 }
 
+/* A small square button holding just an icon or a single character (generate, cancel, delete),
+kept the same size regardless of that content so a row of them lines up evenly. */
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 31px;
+  height: 31px;
+  padding: 0;
+  line-height: 1;
+}
+
 .media-slot-busy {
   position: absolute;
   inset: 0;

@@ -1,14 +1,12 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cb } from '../ai/actions';
-import { listComfyQwenModels } from '../generators/comfy';
 import {
   detectComfyNodes,
   listComfyWorkflows,
   loadComfyWorkflow,
 } from '../generators/comfyWorkflows';
 import type { ComfyNodeMapping } from '../generators/comfy';
-import { QWEN_IMAGE_EDIT_NODES, buildQwenImageEditWorkflow } from '../generators/defaultWorkflow';
 import type { GeneratorConfig } from '../generators/types';
 import { useTask } from './useTask';
 
@@ -32,6 +30,16 @@ const splitIds = (text: string): string[] =>
     .map((id) => id.trim())
     .filter(Boolean);
 
+const EMPTY_FIELDS: NodeFields = {
+  positivePromptNodeId: '',
+  promptField: '',
+  outputNodeId: '',
+  transparentOutputNodeId: '',
+  referenceImageNodeIds: '',
+  sizeNodeId: '',
+  seedNodeId: '',
+};
+
 const nodeFieldsOf = (nodes: ComfyNodeMapping): NodeFields => ({
   positivePromptNodeId: nodes.positivePromptNodeId,
   promptField: nodes.promptField ?? '',
@@ -42,8 +50,10 @@ const nodeFieldsOf = (nodes: ComfyNodeMapping): NodeFields => ({
   seedNodeId: nodes.seedNodeId ?? '',
 });
 
-/** Configure the image generator: currently a self-hosted ComfyUI instance. Only the server URL is
- * required; the workflow and its node mapping default to a built-in starter graph. */
+/** Configure the image generator: currently a self-hosted ComfyUI instance. The workflow is never
+ * defined here — only a server URL and the name of a workflow already saved in ComfyUI's own
+ * workflows folder. Its node mapping is guessed automatically (see detectComfyNodes) and only
+ * shown under "Advanced" for a manual correction if the guess is wrong. */
 export default function GeneratorSettings({ onClose }: Props) {
   const existing = cb().generate.getConfig();
   const task = useTask();
@@ -52,7 +62,7 @@ export default function GeneratorSettings({ onClose }: Props) {
     existing ? JSON.stringify(existing.comfy.workflow, null, 2) : ''
   );
   const [fields, setFields] = useState<NodeFields>(
-    nodeFieldsOf(existing?.comfy.nodes ?? QWEN_IMAGE_EDIT_NODES)
+    existing ? nodeFieldsOf(existing.comfy.nodes) : EMPTY_FIELDS
   );
   const [workflowName, setWorkflowName] = useState(existing?.comfy.workflowName ?? '');
   // The workflows saved on the server, listed once a URL is entered (null until then).
@@ -119,50 +129,25 @@ export default function GeneratorSettings({ onClose }: Props) {
     };
   }
 
-  /** With no workflow yet (nothing saved, nothing pasted into Advanced), build the Qwen-Image-Edit
-   * starter from whatever UNET/CLIP/VAE/LoRA files the server actually has installed. */
-  async function withDetectedModel(): Promise<{ workflowText: string; fields: NodeFields }> {
-    if (workflowText.trim()) return { workflowText, fields };
-    const models = await listComfyQwenModels(baseUrl);
-    if (!models.unet[0] || !models.clip[0] || !models.vae[0]) {
-      throw new Error(
-        'No Qwen-Image-style models (UNET/CLIP/VAE) found on that server. Paste your own workflow under "Advanced" instead.'
-      );
+  async function saveConfig(): Promise<void> {
+    if (!workflowName || !workflowText.trim()) {
+      throw new Error('Select a workflow saved in ComfyUI first.');
     }
-    const workflow = buildQwenImageEditWorkflow({
-      unet: models.unet[0],
-      clip: models.clip[0],
-      vae: models.vae[0],
-      lora: models.lora[0] ?? '',
-    });
-    return {
-      workflowText: JSON.stringify(workflow, null, 2),
-      fields: nodeFieldsOf(QWEN_IMAGE_EDIT_NODES),
-    };
-  }
-
-  async function saveConfig(workflowSource: string, nodeFields: NodeFields): Promise<void> {
-    const result = cb().generate.setConfig(buildConfig(workflowSource, nodeFields));
+    const result = cb().generate.setConfig(buildConfig(workflowText, fields));
     if (!result.ok) throw new Error(result.error);
   }
 
   function save() {
     void task.run(async () => {
-      const detected = await withDetectedModel();
-      setWorkflowText(detected.workflowText);
-      setFields(detected.fields);
-      await saveConfig(detected.workflowText, detected.fields);
+      await saveConfig();
       onClose();
     });
   }
 
   function testConnection() {
     void task.run(async () => {
-      // Saved first, so it reads what's on screen (with any auto-detected model).
-      const detected = await withDetectedModel();
-      setWorkflowText(detected.workflowText);
-      setFields(detected.fields);
-      await saveConfig(detected.workflowText, detected.fields);
+      // Saved first, so it reads what's on screen.
+      await saveConfig();
       const result = await cb().generate.testConnection();
       if (!result.ok) throw new Error(result.error);
     });
@@ -193,11 +178,6 @@ export default function GeneratorSettings({ onClose }: Props) {
                 value={baseUrl}
                 onChange={(e) => setBaseUrl(e.target.value)}
               />
-              <div className="form-text mb-2">
-                Uses a built-in Qwen-Image-Edit starter workflow, filled in from whatever models
-                your server has installed, when you test the connection. Open "Advanced" below only
-                if you want to use your own ComfyUI workflow instead.
-              </div>
               {available && (
                 <>
                   <label className="form-label small">Workflow</label>
@@ -206,7 +186,7 @@ export default function GeneratorSettings({ onClose }: Props) {
                     value={workflowName}
                     onChange={(e) => chooseWorkflow(e.target.value)}
                   >
-                    <option value="">Built-in starter (or the one pasted under Advanced)</option>
+                    <option value="">Select a workflow saved in ComfyUI…</option>
                     {[...new Set([...(workflowName ? [workflowName] : []), ...available])].map(
                       (name) => (
                         <option key={name} value={name}>
@@ -226,26 +206,13 @@ export default function GeneratorSettings({ onClose }: Props) {
               {task.error && <div className="text-danger small mb-2">{task.error}</div>}
 
               <details>
-                <summary className="small mb-2">Advanced: workflow &amp; node mapping</summary>
+                <summary className="small mb-2">Advanced: node mapping</summary>
                 <div className="mt-2">
-                  <label className="form-label small">
-                    Workflow JSON (ComfyUI's "Save (API Format)" export)
-                  </label>
-                  {!workflowText.trim() && (
+                  {!workflowName && (
                     <div className="text-muted small mb-1">
-                      Empty: "Test connection" or "Save" will fill in the built-in Qwen-Image-Edit
-                      starter from your server's installed models.
+                      Pick a workflow saved on the server above to guess these automatically.
                     </div>
                   )}
-                  <textarea
-                    className="form-control form-control-sm mb-2 font-monospace"
-                    rows={8}
-                    value={workflowText}
-                    onChange={(e) => {
-                      setWorkflowText(e.target.value);
-                      setWorkflowName('');
-                    }}
-                  />
                   <div className="row g-2 mb-2">
                     <div className="col-6">
                       <label className="form-label small">Positive prompt node id</label>
@@ -330,7 +297,11 @@ export default function GeneratorSettings({ onClose }: Props) {
                 type="button"
                 className="btn btn-primary btn-sm"
                 disabled={
-                  task.busy || !baseUrl || !fields.positivePromptNodeId || !fields.outputNodeId
+                  task.busy ||
+                  !baseUrl ||
+                  !workflowName ||
+                  !fields.positivePromptNodeId ||
+                  !fields.outputNodeId
                 }
                 onClick={save}
               >

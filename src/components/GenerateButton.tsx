@@ -1,4 +1,5 @@
 import type { GenerationStatus } from '../ai/generation';
+import { SparklesIcon } from './Icons';
 import Spinner from './Spinner';
 import { useGeneratorConfig, useGeneratorConfigProblem } from './useGeneratorConfig';
 
@@ -15,8 +16,8 @@ interface Props {
   onCancel?: () => void;
 }
 
-/** The "✨ Generate" button that opens the generate dialog, disabled (with the reason as its
- * tooltip) while a generation is queued or running for this item, no generator is set up, or
+/** The sparkles button that opens the generate dialog, disabled (with the reason as its tooltip)
+ * while a generation is queued or running for this item, no generator is set up, or
  * `blockedReason` is given — alongside a red × button to cancel that queued/running generation, when
  * `onCancel` is given. */
 export default function GenerateButton({ status, blockedReason, title, onClick, onCancel }: Props) {
@@ -33,6 +34,7 @@ export default function GenerateButton({ status, blockedReason, title, onClick, 
             ? null
             : (configProblem ??
               'Set up an image generator first (Settings, on the project list)')));
+  const label = status === 'running' ? 'Generating' : status === 'queued' ? 'Queued' : 'Generate';
 
   return (
     <>
@@ -41,19 +43,18 @@ export default function GenerateButton({ status, blockedReason, title, onClick, 
       <span title={reason ?? title}>
         <button
           type="button"
-          className="btn btn-outline-secondary btn-sm"
+          className="btn btn-outline-secondary btn-sm btn-icon"
+          aria-label={label}
           disabled={reason !== null}
           onClick={onClick}
         >
-          {status === 'running' && <Spinner />}
-          {status === 'queued' ? '⏳' : '✨'}{' '}
-          {status === 'running' ? 'Generating' : status === 'queued' ? 'Queued' : 'Generate'}
+          {status === 'running' ? <Spinner /> : status === 'queued' ? '⏳' : <SparklesIcon />}
         </button>
       </span>
       {active && onCancel && (
         <button
           type="button"
-          className="btn btn-outline-danger btn-sm lh-1"
+          className="btn btn-outline-danger btn-sm btn-icon"
           title={`Cancel this ${status === 'running' ? 'generation' : 'queued generation'}`}
           aria-label={`Cancel this ${status === 'running' ? 'generation' : 'queued generation'}`}
           onClick={onCancel}

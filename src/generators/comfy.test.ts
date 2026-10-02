@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assertValidComfyConfig, createComfyProvider, listComfyQwenModels } from './comfy';
+import { assertValidComfyConfig, createComfyProvider } from './comfy';
 import type { ComfyConfig } from './comfy';
 import { GenerationCancelledError } from './types';
 
@@ -189,28 +189,5 @@ test('createComfyProvider reads from the transparent-output node when the reques
     prompt: 'a cat',
     referenceImages: [],
     transparent: true,
-  });
-});
-
-test('listComfyQwenModels reads the installed UNET/CLIP/VAE/LoRA filenames from object_info', async () => {
-  const byClass: Record<string, [string, string]> = {
-    UNETLoader: ['unet_name', 'u.safetensors'],
-    CLIPLoader: ['clip_name', 'c.safetensors'],
-    VAELoader: ['vae_name', 'v.safetensors'],
-    LoraLoaderModelOnly: ['lora_name', 'l.safetensors'],
-  };
-  const fetchImpl = (async (input: RequestInfo | URL) => {
-    const classType = String(input).split('/object_info/')[1];
-    const [inputName, value] = byClass[classType];
-    return new Response(
-      JSON.stringify({ [classType]: { input: { required: { [inputName]: [[value]] } } } }),
-      { status: 200 }
-    );
-  }) as typeof fetch;
-  assert.deepEqual(await listComfyQwenModels('http://comfy.local:8188', fetchImpl), {
-    unet: ['u.safetensors'],
-    clip: ['c.safetensors'],
-    vae: ['v.safetensors'],
-    lora: ['l.safetensors'],
   });
 });

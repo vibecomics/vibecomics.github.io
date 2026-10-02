@@ -125,34 +125,13 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           ))}
         </select>
       </div>
-      <div className="mb-2 d-flex align-items-start gap-2">
+      <div className="mb-2">
         <MediaSlot
           item={media.find((m) => m.id === layer.mediaId)}
           label={`${layer.mediaId ? 'Change' : 'Add'} ${background ? 'background' : 'layer'} image`}
           busy={task.busy}
           onClick={() => setPicking(true)}
         />
-        <GenerateButton
-          status={status}
-          blockedReason={layer.prompt?.trim() ? undefined : 'Write a prompt first'}
-          title="Generate a new image from this prompt"
-          onClick={() => setGeneratingModal(true)}
-          onCancel={() => cb().generate.cancelLayer(panelId, layer.id)}
-        />
-        {layer.mediaId && (
-          <button
-            type="button"
-            className="btn btn-outline-secondary btn-sm"
-            disabled={task.busy}
-            title="Delete this image (it stops being this layer's image)"
-            aria-label="Delete this layer's image"
-            onClick={() =>
-              void task.run(async () => void (await cb().media.delete(layer.mediaId!)))
-            }
-          >
-            <TrashIcon />
-          </button>
-        )}
       </div>
       <LayerHistoryStrip
         historyIds={layer.mediaHistory ?? []}
@@ -209,14 +188,39 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         />
       )}
       {task.error && <div className="text-danger small mb-2">{task.error}</div>}
-      <SliderRow
-        label="Opacity"
-        value={layer.opacity}
-        min={0}
-        max={1}
-        step={0.05}
-        onChange={(opacity) => update({ opacity })}
-      />
+      <div className="d-flex align-items-center gap-2">
+        <GenerateButton
+          status={status}
+          blockedReason={layer.prompt?.trim() ? undefined : 'Write a prompt first'}
+          title="Generate a new image from this prompt"
+          onClick={() => setGeneratingModal(true)}
+          onCancel={() => cb().generate.cancelLayer(panelId, layer.id)}
+        />
+        {layer.mediaId && (
+          <button
+            type="button"
+            className="btn btn-outline-secondary btn-sm btn-icon"
+            disabled={task.busy}
+            title="Delete this image (it stops being this layer's image)"
+            aria-label="Delete this layer's image"
+            onClick={() =>
+              void task.run(async () => void (await cb().media.delete(layer.mediaId!)))
+            }
+          >
+            <TrashIcon />
+          </button>
+        )}
+        <div className="flex-grow-1">
+          <SliderRow
+            label="Opacity"
+            value={layer.opacity}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={(opacity) => update({ opacity })}
+          />
+        </div>
+      </div>
     </div>
   );
 }
