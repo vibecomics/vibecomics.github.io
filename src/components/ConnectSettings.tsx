@@ -15,7 +15,8 @@ interface Props {
   onChange: () => void;
 }
 
-const kindLabel = (c: StorageConnectionInfo): string => (c.kind === 'drive' ? 'Google Drive' : c.label);
+const kindLabel = (c: StorageConnectionInfo): string =>
+  c.kind === 'drive' ? 'Google Drive' : c.label;
 
 function ModalShell({
   title,
@@ -133,7 +134,11 @@ function ConnectServerModal({
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className="btn btn-primary" disabled={connecting.busy || !url.trim()}>
+          <button
+            type="submit"
+            className="btn btn-primary"
+            disabled={connecting.busy || !url.trim()}
+          >
             {connecting.busy && <Spinner />}
             Connect
           </button>

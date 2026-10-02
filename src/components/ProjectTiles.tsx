@@ -12,7 +12,8 @@ import { useGeneratorConfig, useGeneratorConfigProblem } from './useGeneratorCon
 import { useBusy } from './useBusy';
 import { errorMessage } from '../utils/errors';
 
-const kindLabel = (c: StorageConnectionInfo): string => (c.kind === 'drive' ? 'Google Drive' : c.label);
+const kindLabel = (c: StorageConnectionInfo): string =>
+  c.kind === 'drive' ? 'Google Drive' : c.label;
 
 function NewProjectModal({
   connections,
@@ -22,7 +23,7 @@ function NewProjectModal({
   onClose: () => void;
 }) {
   const live = connections.filter((c) => c.connected);
-  const defaultConnectionId = live.find((c) => c.kind === 'server')?.id ?? (live[0]?.id ?? '');
+  const defaultConnectionId = live.find((c) => c.kind === 'server')?.id ?? live[0]?.id ?? '';
   const [name, setName] = useState('');
   const [sizeIndex, setSizeIndex] = useState(0);
   const [connectionId, setConnectionId] = useState(defaultConnectionId);
