@@ -208,6 +208,39 @@ test('a layer is dirty while its prompt has no matching image, and clean once on
   assert.equal(flipped.json().dirty, true);
 });
 
+test('unlinking a layer image (mediaId: null) keeps the media registered but drops it from the layer entirely', async () => {
+  const { run, login, work } = setup();
+  await login();
+  await run('storage', 'createProject', 'Unlink');
+  const panelId = (await run('panels', 'list')).json()[0].id;
+  fs.writeFileSync(path.join(work, 'hero.png'), PNG);
+  const media = (await run('media', 'upload', 'hero.png')).json();
+  const layer = await run(
+    'layers',
+    'add',
+    panelId,
+    JSON.stringify({ prompt: 'A hero mid-leap', mediaId: media.id })
+  );
+  const layerId = layer.json().id;
+
+  const unlinked = await run(
+    'layers',
+    'update',
+    panelId,
+    layerId,
+    JSON.stringify({ mediaId: null })
+  );
+  assert.equal(unlinked.json().mediaId, undefined);
+  // Not kept in history either — unlinked means "no longer this layer's", not "set aside to restore".
+  assert.equal(unlinked.json().mediaHistory, undefined);
+  // Still has a prompt and no image: dirty again, the same as any other layer in that state.
+  assert.equal(unlinked.json().dirty, true);
+
+  // Not deleted from the project: still registered, unlike media.delete.
+  const stillThere = await run('media', 'get', media.id);
+  assert.equal(stillThere.json().id, media.id);
+});
+
 test('--project opens another project first, and other projects are listed', async () => {
   const { run, login } = setup();
   await login();

@@ -662,8 +662,7 @@
   border-radius: 0.25rem;
 }
 
-.media-tile-image img,
-.media-slot img {
+.media-tile-image img {
   width: 100%;
   height: 100%;
   object-fit: contain;
@@ -674,25 +673,6 @@
   font-size: 0.75rem;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-/* The image a layer uses; opens the picker. */
-.media-slot {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 128px;
-  height: 96px;
-  padding: 0;
-  overflow: hidden;
-  border: 1px solid var(--bs-border-color);
-  border-radius: 0.375rem;
-}
-
-.media-slot:hover:not(:disabled),
-.media-slot:focus-visible {
-  border-color: #0d6efd;
 }
 
 /* A small square button holding just an icon or a single character (generate, cancel, delete),
@@ -707,13 +687,56 @@ kept the same size regardless of that content so a row of them lines up evenly. 
   line-height: 1;
 }
 
-.media-slot-busy {
+/* A layer's (or background's) images: current image plus history, in one row — side by side when
+   they fit, overlapping when they don't (see LayerImageStrip, which computes each slot's left
+   offset against the row's own measured width). */
+.layer-image-strip {
+  position: relative;
+  width: 100%;
+}
+
+.layer-image-strip-slot {
   position: absolute;
-  inset: 0;
+  top: 0;
+  transition:
+    left 0.15s ease,
+    filter 0.1s ease;
+}
+
+.layer-image-strip-slot:hover {
+  filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
+}
+
+.layer-image-strip-current {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #0d6efd;
+  border: 1px solid #fff;
+  pointer-events: none;
+}
+
+.layer-image-strip-add {
+  position: absolute;
+  top: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(var(--bs-body-bg-rgb), 0.7);
+  padding: 0;
+  border: 1px dashed var(--bs-border-color);
+  border-radius: 0.375rem;
+  background-color: var(--bs-body-bg);
+  color: var(--bs-secondary-color);
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.layer-image-strip-add:hover:not(:disabled) {
+  border-color: #0d6efd;
+  color: #0d6efd;
 }
 
 /* ---- Story bible: variation tabs ------------------------------------------ */

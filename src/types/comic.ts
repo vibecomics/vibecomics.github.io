@@ -211,9 +211,23 @@ export interface PageSize {
 
 export interface ProjectMetadata {
   /** A short paragraph fixing the visual style (medium, line, palette, lighting, mood): stitched,
-   * verbatim, into every image's prompt. Keep it to a few sentences; there is no synopsis field —
-   * track story notes elsewhere, since stitching a whole synopsis into every prompt drowns it out. */
+   * verbatim, into every image's prompt, of every kind (character, object or scene) alike. Keep it to
+   * a few sentences; there is no synopsis field — track story notes elsewhere, since stitching a
+   * whole synopsis into every prompt drowns it out. Keep it to what's true of every image: wording
+   * that only makes sense for a figure (e.g. eye style, skin tone) belongs in characterStyle instead,
+   * since stitching it into an object's or scene's prompt too is what suggests a person where there
+   * shouldn't be one. */
   style: string;
+  /** A short addendum to style, stitched in only for a character's prompt (reference art, or a
+   * foreground layer whose subject is a character): design language that only makes sense for a
+   * figure, e.g. eye style, proportions, skin-tone rendering. Left out of object and scene prompts
+   * entirely, rather than included and then negated — a character may be a person or an animal, so
+   * this never assumes a person either. */
+  characterStyle?: string;
+  /** A short addendum to style, stitched in only for a scene's prompt (reference art, or a
+   * background layer): rendering notes specific to establishing/background art, e.g. level of detail,
+   * atmosphere. Left out of character and object prompts entirely. */
+  sceneStyle?: string;
   pageSize: PageSize;
   characters: Character[];
   scenes: Scene[];
@@ -246,6 +260,8 @@ export const DEFAULT_PAGE_SIZE: PageSize = PAGE_SIZE_PRESETS[0];
 export function blankMetadata(pageSize: PageSize = DEFAULT_PAGE_SIZE): ProjectMetadata {
   return {
     style: '',
+    characterStyle: '',
+    sceneStyle: '',
     pageSize: { ...pageSize },
     characters: [],
     scenes: [],

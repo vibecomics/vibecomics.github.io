@@ -219,6 +219,8 @@ export const INPUTS = {
   'bubbles.delete': { panelId: PANEL_ID, bubbleId: BUBBLE_ID },
 
   'metadata.setStyle': { text: { type: 'multiline', allowEmpty: true } },
+  'metadata.setCharacterStyle': { text: { type: 'multiline', allowEmpty: true } },
+  'metadata.setSceneStyle': { text: { type: 'multiline', allowEmpty: true } },
   'metadata.setPageSize': { pageSize: PAGE_SIZE },
 
   'characters.get': STORY_ENTRY.get,

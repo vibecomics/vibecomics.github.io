@@ -3,6 +3,7 @@ import { cb } from '../ai/actions';
 import type { MediaItem } from '../types/comic';
 import { errorMessage } from '../utils/errors';
 import { ExternalIcon, TrashIcon } from './Icons';
+import ImageLightbox from './ImageLightbox';
 import { openInNewTab } from './mediaImages';
 import {
   groupMedia,
@@ -49,11 +50,14 @@ interface TileProps {
   uses: number;
   deleting: boolean;
   onPick?: (item: MediaItem) => void;
+  /** Opens this image full size, with prev/next across the grid (see ImageLightbox). Used for the
+   * tile's main click when there's no onPick (a view-only grid, e.g. the Media tab). */
+  onOpen: (item: MediaItem) => void;
   onPreview: (item: MediaItem) => void;
   onDelete: (item: MediaItem) => void;
 }
 
-function Tile({ item, current, uses, deleting, onPick, onPreview, onDelete }: TileProps) {
+function Tile({ item, current, uses, deleting, onPick, onOpen, onPreview, onDelete }: TileProps) {
   // The image is fetched only once its tile has scrolled into view.
   const [ref, seen] = useSeen<HTMLDivElement>();
   const { url, failed, error } = useMediaUrl(seen ? item : null);
@@ -65,7 +69,7 @@ function Tile({ item, current, uses, deleting, onPick, onPreview, onDelete }: Ti
         aria-pressed={onPick ? current : undefined}
         title={error ? `${item.name}: ${error}` : item.name}
         disabled={deleting}
-        onClick={() => (onPick ? onPick(item) : onPreview(item))}
+        onClick={() => (onPick ? onPick(item) : onOpen(item))}
       >
         <span className="media-tile-image checker">
           {url ? (
@@ -141,6 +145,9 @@ export default function MediaGrid({
   const more = useRef<HTMLDivElement>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The id of the image open in the lightbox (view-only grids, e.g. the Media tab): prev/next
+  // cycles across every image currently shown in the grid, not just the one clicked.
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const project = useProject();
   const { infos, ready } = useMediaInfos(media);
   const [text, setText] = useState('');
@@ -259,6 +266,7 @@ export default function MediaGrid({
                 uses={useCounts.get(item.id) ?? 0}
                 deleting={item.id === deletingId}
                 onPick={onPick}
+                onOpen={(target) => setViewingId(target.id)}
                 onPreview={preview}
                 onDelete={(target) => void remove(target)}
               />
@@ -273,6 +281,17 @@ export default function MediaGrid({
             ? `${media.length} images`
             : `${found.length} of ${media.length} images`}
         </span>
+      )}
+      {viewingId !== null && (
+        <ImageLightbox
+          items={shown.flatMap((group) => group.items)}
+          start={Math.max(
+            0,
+            shown.flatMap((group) => group.items).findIndex((item) => item.id === viewingId)
+          )}
+          onClose={() => setViewingId(null)}
+          onDelete={(item) => void remove(item)}
+        />
       )}
     </div>
   );

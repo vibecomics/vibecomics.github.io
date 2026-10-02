@@ -7,10 +7,13 @@ import type { ComicBuilderDeps } from './deps';
 import {
   addToHistoryPatch,
   assertVariation,
+  cascadeCharacterStyleDirty,
+  cascadeSceneStyleDirty,
   cascadeStyleDirty,
   dirtyLayerRefs,
   dirtyVariationRefs,
   imageSwapPatch,
+  imageUnlinkPatch,
   storyApi,
   variationsApi,
 } from './builders';
@@ -49,6 +52,21 @@ test('imageSwapPatch on a layer with no previous image sets no history', () => {
 test('addToHistoryPatch adds the image to the front of history without touching mediaId', () => {
   const layer = { mediaId: 'm1', mediaHistory: ['m0'] } as never;
   assert.deepEqual(addToHistoryPatch(layer, 'm2'), { mediaHistory: ['m2', 'm0'] });
+});
+
+test('imageUnlinkPatch goes dirty again when there is a prompt, without touching history', () => {
+  const layer = { mediaId: 'm1', mediaHistory: ['m0'], prompt: 'A table.', dirty: false } as never;
+  assert.deepEqual(imageUnlinkPatch(layer), { dirty: true });
+});
+
+test('imageUnlinkPatch leaves dirty false when there is no prompt to act on', () => {
+  const layer = { mediaId: 'm1', prompt: '', dirty: false } as never;
+  assert.deepEqual(imageUnlinkPatch(layer), { dirty: false });
+});
+
+test('imageUnlinkPatch on a layer with no current image still just reports dirty', () => {
+  const layer = { prompt: '', dirty: false } as never;
+  assert.deepEqual(imageUnlinkPatch(layer), { dirty: false });
 });
 
 test('addToHistoryPatch moves an image already in history back to the front', () => {
@@ -270,6 +288,109 @@ test('cascadeStyleDirty marks every layer and variation with a prompt dirty, and
       .variations.every((v) => v.dirty === true)
   );
   assert.ok(!storyApi(deps, 'objects').get(noDescription.id)!.variations[0].dirty);
+});
+
+test('cascadeCharacterStyleDirty and cascadeSceneStyleDirty only dirty their own kind', () => {
+  const deps = makeDeps(createBlankProject('Test'));
+  const char = storyApi(deps, 'characters').create({ name: 'Mara', description: 'A girl.' });
+  const obj = storyApi(deps, 'objects').create({ name: 'Table', description: 'Wooden.' });
+  const scene = storyApi(deps, 'scenes').create({ name: 'Room', description: 'A room.' });
+  const variations = variationsApi(deps);
+  for (const [kind, entry] of [
+    ['characters', char],
+    ['objects', obj],
+    ['scenes', scene],
+  ] as const) {
+    for (const v of entry.variations) {
+      variations.update(kind, entry.id, v.id, { imageIds: [`m-${v.id}`] });
+    }
+  }
+  const baseLayer = {
+    visible: true,
+    x: 0,
+    y: 0,
+    width: 100,
+    rotation: 0,
+    opacity: 1,
+    dirty: false,
+  };
+  deps.updateProject((p) => {
+    p.pages[0].panels[0].layers.push(
+      {
+        ...baseLayer,
+        id: 'charL',
+        name: 'C',
+        kind: 'foreground',
+        subjectId: char.id,
+        prompt: 'Mara.',
+      },
+      {
+        ...baseLayer,
+        id: 'objL',
+        name: 'O',
+        kind: 'foreground',
+        subjectId: obj.id,
+        prompt: 'Table.',
+      },
+      {
+        ...baseLayer,
+        id: 'bgL',
+        name: 'B',
+        kind: 'background',
+        sceneId: scene.id,
+        prompt: 'Room bg.',
+      }
+    );
+  });
+
+  cascadeCharacterStyleDirty(deps.getProject()!);
+  let layers = deps.getProject()!.pages[0].panels[0].layers;
+  assert.equal(layers.find((l) => l.id === 'charL')?.dirty, true);
+  assert.ok(!layers.find((l) => l.id === 'objL')?.dirty);
+  assert.ok(!layers.find((l) => l.id === 'bgL')?.dirty);
+  assert.ok(
+    storyApi(deps, 'characters')
+      .get(char.id)!
+      .variations.every((v) => v.dirty === true)
+  );
+  assert.ok(
+    storyApi(deps, 'objects')
+      .get(obj.id)!
+      .variations.every((v) => !v.dirty)
+  );
+  assert.ok(
+    storyApi(deps, 'scenes')
+      .get(scene.id)!
+      .variations.every((v) => !v.dirty)
+  );
+
+  // Reset and check the scene scope is the mirror image.
+  deps.updateProject((p) => {
+    for (const layer of p.pages[0].panels[0].layers) layer.dirty = false;
+    for (const kind of ['characters', 'objects', 'scenes'] as const) {
+      for (const entry of p.metadata[kind]) for (const v of entry.variations) v.dirty = false;
+    }
+  });
+  cascadeSceneStyleDirty(deps.getProject()!);
+  layers = deps.getProject()!.pages[0].panels[0].layers;
+  assert.ok(!layers.find((l) => l.id === 'charL')?.dirty);
+  assert.ok(!layers.find((l) => l.id === 'objL')?.dirty);
+  assert.equal(layers.find((l) => l.id === 'bgL')?.dirty, true);
+  assert.ok(
+    storyApi(deps, 'characters')
+      .get(char.id)!
+      .variations.every((v) => !v.dirty)
+  );
+  assert.ok(
+    storyApi(deps, 'objects')
+      .get(obj.id)!
+      .variations.every((v) => !v.dirty)
+  );
+  assert.ok(
+    storyApi(deps, 'scenes')
+      .get(scene.id)!
+      .variations.every((v) => v.dirty === true)
+  );
 });
 
 test('metadata.setStyle cascades dirty only when the text actually changes', () => {

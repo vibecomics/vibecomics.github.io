@@ -33,8 +33,11 @@ import {
   assertOptionalText,
   assertVariation,
   cascadeStyleDirty,
+  cascadeCharacterStyleDirty,
+  cascadeSceneStyleDirty,
   definedFields,
   imageSwapPatch,
+  imageUnlinkPatch,
   layerArtSize,
   mutate,
   panelItemsApi,
@@ -118,13 +121,16 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     const project = requireProject(deps);
     const current = layers.get(panelId, layerId);
     if (!current) throw new Error(`Layer "${layerId}" not found.`);
-    const swapsImage = patch.mediaId !== undefined;
+    const { subjectId, sceneId, variationId, mediaId, ...rest } = patch;
+    const swapsImage = typeof mediaId === 'string';
+    const unlinksImage = mediaId === null;
     let image: Partial<Layer> = {};
     if (swapsImage) {
-      resolveLayerImage(project, patch);
-      image = imageSwapPatch(current, patch.mediaId!);
+      resolveLayerImage(project, { mediaId });
+      image = imageSwapPatch(current, mediaId);
+    } else if (unlinksImage) {
+      image = imageUnlinkPatch(current);
     }
-    const { subjectId, sceneId, variationId, ...rest } = patch;
     if (typeof subjectId === 'string') assertSubject(project, subjectId);
     if (typeof sceneId === 'string') assertScene(project, sceneId);
     const subjectChanged = subjectId !== undefined && subjectId !== current.subjectId;
@@ -153,11 +159,12 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       subjectId !== undefined ||
       sceneId !== undefined ||
       variationId !== undefined;
-    const dirty = swapsImage
-      ? undefined
-      : touchesPrompt
-        ? Boolean((patch.prompt ?? current.prompt ?? '').trim())
-        : undefined;
+    const dirty =
+      swapsImage || unlinksImage
+        ? undefined
+        : touchesPrompt
+          ? Boolean((patch.prompt ?? current.prompt ?? '').trim())
+          : undefined;
     return layers.update(
       panelId,
       layerId,
@@ -173,6 +180,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         ...(subjectId === null ? ['subjectId'] : []),
         ...(sceneId === null ? ['sceneId'] : []),
         ...(variationId === null || clearsVariation ? ['variationId'] : []),
+        ...(unlinksImage ? ['mediaId'] : []),
       ]
     );
   }
@@ -733,17 +741,22 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * HOW THE PROMPT FOR AN IMAGE IS BUILT. The layer prompt is only one part,
      * and a background's image is built differently from a foreground layer's:
      *
-     * - Background: the STYLE paragraph (metadata.style), the PAGE prompt
-     *   (page.update), the PANEL prompt (panels.update), the SCENE description,
-     *   then the LAYER prompt. It is meant to depict that page/panel/scene, so
-     *   all of it belongs in the prompt.
-     * - Foreground: only the STYLE paragraph, the character's or object's
-     *   description, and the LAYER prompt. The page prompt, panel prompt, and
-     *   the panel's background scene are all left out, even as "context only,
-     *   do not draw it": most image generators draw the literal setting the
-     *   moment any place or scene language appears anywhere in the prompt,
-     *   caveat or not, which ruins an isolated cutout. So only the layer's own
-     *   prompt says what this character is doing, never where.
+     * - Background: the STYLE paragraph (metadata.style), the SCENE STYLE
+     *   addendum (metadata.sceneStyle), the SCENE description, then the LAYER
+     *   prompt.
+     * - Foreground: the STYLE paragraph, the CHARACTER STYLE addendum
+     *   (metadata.characterStyle, only when the subject is a character — an
+     *   object gets no addendum), the character's or object's description, and
+     *   the LAYER prompt.
+     *
+     * Neither includes the page prompt (page.update), the panel prompt
+     * (panels.update), or — on a foreground — the panel's background scene,
+     * even as "context only, do not draw it": most image generators draw the
+     * literal setting the moment any place or scene language appears anywhere
+     * in the prompt, caveat or not, which ruins an isolated cutout (worse on a
+     * foreground, where it also fights the "no scene" in its own technical
+     * requirements). So only a layer's own prompt says what it's doing, never
+     * where.
      *
      * Each level says only what belongs to it, so the parts add up without
      * repeating or contradicting each other. Read them back with page.select
@@ -831,12 +844,13 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * Update a layer: move (x/y), resize (width), rotate, change opacity or
-       * visibility, flip it left to right (flipX), rename, edit its prompt, set what it shows (subjectId: a character or object id) or, for a background, the scene it is the setting of (sceneId), pin it to one of that entry's variations (variationId), any of the three either null to clear it, or swap its image (mediaId).
+       * visibility, flip it left to right (flipX), rename, edit its prompt, set what it shows (subjectId: a character or object id) or, for a background, the scene it is the setting of (sceneId), pin it to one of that entry's variations (variationId), any of the three either null to clear it, swap its image (mediaId), or unlink its image (mediaId: null) — it stays in the project's media registry (unlike media.delete, which removes it everywhere), but it's no longer this layer's in any way, not even its history.
        * Only the given fields change. dirty tracks itself: editing prompt,
        * subjectId, sceneId or variationId turns it on (off again if that leaves no prompt);
-       * setting mediaId turns it off, even in the same call. Changing subjectId or sceneId to a
-       * different id (or clearing it) clears variationId too, unless this same call also gives a new
-       * one — a variation belongs to one specific entry.
+       * setting mediaId turns it off, even in the same call; unlinking it (mediaId: null) turns it on
+       * again if there's still a prompt to act on, the same as any other layer left with no image.
+       * Changing subjectId or sceneId to a different id (or clearing it) clears variationId too,
+       * unless this same call also gives a new one — a variation belongs to one specific entry.
        * @param panelId - The panel id.
        * @param layerId - The layer id.
        * @param patch - Partial layer fields.
@@ -990,24 +1004,29 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     },
 
     /**
-     * The project's story bible: the STYLE paragraph plus the media registry.
-     * Use characters/scenes/objects for the individual entries.
+     * The project's story bible: the STYLE paragraph (plus its characterStyle/sceneStyle addenda)
+     * and the media registry. Use characters/scenes/objects for the individual entries.
      */
     metadata: {
       /**
-       * Read the whole metadata block (style, characters, scenes, objects, media).
+       * Read the whole metadata block (style, characterStyle, sceneStyle, characters, scenes,
+       * objects, media).
        * @returns A deep-cloned metadata snapshot. Read-only: mutate via the dedicated functions.
        */
       get: () => snapshot(requireProject(deps).metadata),
 
       /**
        * Set the STYLE paragraph: a short, fixed description of the visual style (medium, line,
-       * palette, lighting, mood). Stitched, verbatim, into every image's prompt, so keep it to a
-       * few sentences and change it only if the story calls for it. There is no separate synopsis
-       * field: track story notes elsewhere, since stitching a whole synopsis into every prompt
-       * would drown out what is unique to each image. Changing it to a different value marks every
-       * layer and story-bible variation that has a prompt as dirty, project-wide (it is the first
-       * part of every one of their stitched prompts) — expect a large `generate.pending()` /
+       * palette, lighting, mood). Stitched, verbatim, into every image's prompt of every kind
+       * (character, object and scene alike), so keep it to a few sentences and change it only if the
+       * story calls for it. Keep it to what's true of every image: wording that only makes sense for
+       * a figure (eye style, skin tone, proportions) belongs in setCharacterStyle instead — stitching
+       * it into an object's or scene's prompt too is what suggests a person where there shouldn't be
+       * one, no matter how firmly the rest of the prompt says otherwise. There is no separate
+       * synopsis field: track story notes elsewhere, since stitching a whole synopsis into every
+       * prompt would drown out what is unique to each image. Changing it to a different value marks
+       * every layer and story-bible variation that has a prompt as dirty, project-wide (it is the
+       * first part of every one of their stitched prompts) — expect a large `generate.pending()` /
        * `generate.pendingReferences()` afterward, and treat this as the deliberate, whole-book action
        * it is.
        * @param text - The new STYLE paragraph.
@@ -1017,6 +1036,42 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         deps.updateProject((p) => {
           if (p.metadata.style !== text) cascadeStyleDirty(p);
           p.metadata.style = text;
+        });
+        return { ok: true };
+      },
+
+      /**
+       * Set the CHARACTER STYLE addendum: design language that only makes sense for a figure (eye
+       * style, proportions, skin-tone rendering). Stitched in only for a character's prompt —
+       * reference art, or a foreground layer whose subject is a character — right after the shared
+       * STYLE paragraph; left out of object and scene prompts entirely. A character may be a person
+       * or an animal, so keep this to what's true of either, not "person" specifically. Changing it
+       * marks every character layer and character variation that has a prompt as dirty (not objects
+       * or scenes, since they never stitch this in).
+       * @param text - The new CHARACTER STYLE addendum.
+       * @returns { ok: true }.
+       */
+      setCharacterStyle: (text: string): ActionResult => {
+        deps.updateProject((p) => {
+          if (p.metadata.characterStyle !== text) cascadeCharacterStyleDirty(p);
+          p.metadata.characterStyle = text;
+        });
+        return { ok: true };
+      },
+
+      /**
+       * Set the SCENE STYLE addendum: rendering notes specific to establishing/background art (level
+       * of detail, atmosphere). Stitched in only for a scene's prompt — reference art, or a
+       * background layer — right after the shared STYLE paragraph; left out of character and object
+       * prompts entirely. Changing it marks every background layer and scene variation that has a
+       * prompt as dirty (not characters or objects, since they never stitch this in).
+       * @param text - The new SCENE STYLE addendum.
+       * @returns { ok: true }.
+       */
+      setSceneStyle: (text: string): ActionResult => {
+        deps.updateProject((p) => {
+          if (p.metadata.sceneStyle !== text) cascadeSceneStyleDirty(p);
+          p.metadata.sceneStyle = text;
         });
         return { ok: true };
       },

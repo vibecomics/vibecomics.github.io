@@ -308,6 +308,10 @@
     "ProjectMetadata": {
       "description": "Story bible + media registry for the project.",
       "properties": {
+        "characterStyle": {
+          "description": "A short addendum to style, stitched in only for a character's prompt (reference art, or a foreground layer whose subject is a character): design language that only makes sense for a figure (eye style, proportions, skin tone). Left out of object and scene prompts entirely.",
+          "type": "string"
+        },
         "characters": {
           "items": {
             "$ref": "#/$defs/Character"
@@ -329,6 +333,10 @@
         "pageSize": {
           "$ref": "#/$defs/PageSize"
         },
+        "sceneStyle": {
+          "description": "A short addendum to style, stitched in only for a scene's prompt (reference art, or a background layer): rendering notes specific to establishing/background art, e.g. level of detail, atmosphere. Left out of character and object prompts entirely.",
+          "type": "string"
+        },
         "scenes": {
           "items": {
             "$ref": "#/$defs/Scene"
@@ -336,7 +344,7 @@
           "type": "array"
         },
         "style": {
-          "description": "A short paragraph fixing the visual style (medium, line, palette, lighting, mood), stitched verbatim into every image's prompt. No synopsis field: track story notes elsewhere.",
+          "description": "A short paragraph fixing the visual style (medium, line, palette, lighting, mood), stitched verbatim into every image's prompt of every kind. Keep it to what's true of every image; put figure-only wording in characterStyle instead. No synopsis field: track story notes elsewhere.",
           "type": "string"
         }
       },

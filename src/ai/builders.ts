@@ -446,6 +446,17 @@ export function imageSwapPatch(
 }
 
 /**
+ * What changes on a layer when its current image is unlinked (not deleted from the project, unlike
+ * media.delete): just dirty, recomputed the same way as any other layer left with no image. mediaId
+ * itself is cleared separately (updateLayer passes 'mediaId' in layers.update's `clear` list), and
+ * nothing moves into mediaHistory — unlinking means this image is no longer part of the layer at
+ * all, not "set aside to restore later" (that's what a swap's history push is for).
+ */
+export function imageUnlinkPatch(current: Layer): Pick<Layer, 'dirty'> {
+  return { dirty: Boolean((current.prompt ?? '').trim()) };
+}
+
+/**
  * Adds an image to a layer's history without making it the active image: used the instant a
  * generation succeeds (see GenerateImageModal), so the image — already registered in the project's
  * media — is attached to the layer right away rather than waiting on a later "Use this image" click
@@ -496,27 +507,57 @@ export function dirtyVariationRefs(project: ComicProject): VariationRef[] {
   return refs;
 }
 
+type StyleScope = 'all' | 'characters' | 'scenes';
+
+/** Whether a layer's prompt includes the given style field: style ('all') is in every prompt; a
+ * background's prompt includes sceneStyle; a foreground layer whose subject is a character (not an
+ * object — objects get no style addendum) includes characterStyle. Mirrors how buildLayerPromptParts
+ * (src/ai/prompt.ts) decides which style addendum to stitch in. */
+function layerInStyleScope(project: ComicProject, layer: Layer, scope: StyleScope): boolean {
+  if (scope === 'all') return true;
+  if (layer.kind === 'background') return scope === 'scenes';
+  return scope === 'characters' && !project.metadata.objects.some((o) => o.id === layer.subjectId);
+}
+
 /**
- * Marks every layer and story-bible variation that currently has a prompt to act on as dirty: used
- * when the project's shared STYLE paragraph changes, since it is the first part of every stitched
- * prompt (layer and reference alike) — changing it makes every image that was generated under the
- * old one stale, the same way changing one layer's own prompt makes that one layer stale.
+ * Marks every layer and story-bible variation whose stitched prompt includes the given style field,
+ * and currently has a prompt to act on, as dirty: used when that field changes, since changing it
+ * makes every image generated under the old wording stale, the same way changing one layer's own
+ * prompt makes that one layer stale. 'all' (the shared STYLE paragraph) reaches every layer and
+ * variation; 'characters'/'scenes' (the kind-specific style addenda) reach only that kind's.
  */
-export function cascadeStyleDirty(project: ComicProject): void {
+function cascadeDirty(project: ComicProject, scope: StyleScope): void {
   for (const page of project.pages) {
     for (const panel of page.panels) {
       for (const layer of panel.layers) {
-        if ((layer.prompt ?? '').trim()) layer.dirty = true;
+        if ((layer.prompt ?? '').trim() && layerInStyleScope(project, layer, scope))
+          layer.dirty = true;
       }
     }
   }
-  for (const kind of Object.keys(STORY_KINDS) as StoryKind[]) {
+  const kinds: StoryKind[] = scope === 'all' ? (Object.keys(STORY_KINDS) as StoryKind[]) : [scope];
+  for (const kind of kinds) {
     for (const entry of entriesOfKind(project, kind)) {
       for (const variation of entry.variations) {
         if (hasEffectivePrompt(entry.description, variation)) variation.dirty = true;
       }
     }
   }
+}
+
+/** See cascadeDirty: dirties everything, since the shared STYLE paragraph is in every prompt. */
+export function cascadeStyleDirty(project: ComicProject): void {
+  cascadeDirty(project, 'all');
+}
+
+/** See cascadeDirty: dirties only character layers and character variations. */
+export function cascadeCharacterStyleDirty(project: ComicProject): void {
+  cascadeDirty(project, 'characters');
+}
+
+/** See cascadeDirty: dirties only background layers and scene variations. */
+export function cascadeSceneStyleDirty(project: ComicProject): void {
+  cascadeDirty(project, 'scenes');
 }
 
 export interface PendingGeneration extends LayerRef {

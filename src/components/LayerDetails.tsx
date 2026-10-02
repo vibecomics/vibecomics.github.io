@@ -6,10 +6,8 @@ import type { Layer, MediaItem } from '../types/comic';
 import { uploadImage, setLayerMedia } from './panelActions';
 import GenerateButton from './GenerateButton';
 import GenerateImageModal from './GenerateImageModal';
-import { TrashIcon } from './Icons';
-import LayerHistoryStrip from './LayerHistoryStrip';
+import LayerImageStrip, { type LayerImage } from './LayerImageStrip';
 import MediaPicker from './MediaPicker';
-import MediaSlot from './MediaSlot';
 import { useProject } from './ProjectContext';
 import SliderRow from './SliderRow';
 import { useLayerGenerationStatus } from './useGenerationStatus';
@@ -39,6 +37,26 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
     ? scenes.find((s) => s.id === layer.sceneId)
     : [...characters, ...objects].find((e) => e.id === layer.subjectId);
   const variationKnown = linkedEntry?.variations.some((v) => v.id === layer.variationId) ?? false;
+  const currentItem = media.find((m) => m.id === layer.mediaId);
+  const historyItems = (layer.mediaHistory ?? []).flatMap((id) => {
+    const item = media.find((m) => m.id === id);
+    return item ? [item] : [];
+  });
+  const images: LayerImage[] = [
+    ...(currentItem ? [{ item: currentItem, current: true }] : []),
+    ...historyItems.map((item) => ({ item, current: false })),
+  ];
+
+  /** Unlinks one image from the layer — the current image is cleared (it moves to history), a
+   * history image is dropped from history — without deleting it from the project (contrast
+   * media.delete, which would remove it everywhere it's used). */
+  function unlinkImage(id: string) {
+    if (id === layer.mediaId) {
+      update({ mediaId: null });
+    } else {
+      update({ mediaHistory: (layer.mediaHistory ?? []).filter((h) => h !== id) });
+    }
+  }
 
   return (
     <div className="mt-2">
@@ -126,19 +144,15 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         </select>
       </div>
       <div className="mb-2">
-        <MediaSlot
-          item={media.find((m) => m.id === layer.mediaId)}
-          label={`${layer.mediaId ? 'Change' : 'Add'} ${background ? 'background' : 'layer'} image`}
+        <LayerImageStrip
+          images={images}
           busy={task.busy}
-          onClick={() => setPicking(true)}
+          addLabel={`${layer.mediaId ? 'Change' : 'Add'} ${background ? 'background' : 'layer'} image`}
+          onSelect={(id) => update({ mediaId: id })}
+          onUnlink={unlinkImage}
+          onAdd={() => setPicking(true)}
         />
       </div>
-      <LayerHistoryStrip
-        historyIds={layer.mediaHistory ?? []}
-        media={media}
-        onRestore={(id) => update({ mediaId: id })}
-        onDelete={(id) => void task.run(async () => void (await cb().media.delete(id)))}
-      />
       {generatingModal && (
         <GenerateImageModal
           title={`Generate ${background ? 'background' : 'layer'} image`}
@@ -196,20 +210,6 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           onClick={() => setGeneratingModal(true)}
           onCancel={() => cb().generate.cancelLayer(panelId, layer.id)}
         />
-        {layer.mediaId && (
-          <button
-            type="button"
-            className="btn btn-outline-secondary btn-sm btn-icon"
-            disabled={task.busy}
-            title="Delete this image (it stops being this layer's image)"
-            aria-label="Delete this layer's image"
-            onClick={() =>
-              void task.run(async () => void (await cb().media.delete(layer.mediaId!)))
-            }
-          >
-            <TrashIcon />
-          </button>
-        )}
         <div className="flex-grow-1">
           <SliderRow
             label="Opacity"

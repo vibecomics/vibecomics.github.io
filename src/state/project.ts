@@ -28,6 +28,8 @@ export function normalizeProject(p: ComicProject): void {
     p.metadata.style = legacy.outline;
   }
   p.metadata.style ??= '';
+  p.metadata.characterStyle ??= '';
+  p.metadata.sceneStyle ??= '';
   delete legacy.outline;
   p.metadata.pageSize ??= { ...DEFAULT_PAGE_SIZE };
   for (const entry of [...p.metadata.characters, ...p.metadata.scenes, ...p.metadata.objects]) {
@@ -75,6 +77,8 @@ function checkMetadata(value: unknown, path: string): void {
   if (m.style === undefined && m.outline === undefined) fail(path, 'expected string "style"');
   optionalString(m, path, 'style');
   optionalString(m, path, 'outline');
+  optionalString(m, path, 'characterStyle');
+  optionalString(m, path, 'sceneStyle');
   if (m.pageSize !== undefined) checkPageSize(m.pageSize, `${path}.pageSize`);
   const characters = expectArray(m.characters, path, 'characters');
   const scenes = expectArray(m.scenes, path, 'scenes');

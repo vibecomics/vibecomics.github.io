@@ -6,6 +6,7 @@ import type { ComicProject } from '../types/comic';
 import {
   allEntryImageIds,
   buildLayerPrompt,
+  buildLayerPromptParts,
   buildReferencePromptParts,
   defaultReferenceNote,
 } from './prompt';
@@ -105,6 +106,66 @@ test('buildLayerPrompt throws when the layer is not found', () => {
   assert.throws(() => buildLayerPrompt(project, project.pages[0].panels[0].id, 'nope'));
 });
 
+test('buildLayerPromptParts includes Scene style (not Character style) for a background layer', () => {
+  const project = projectWithScene();
+  project.metadata.sceneStyle = 'Atmospheric backgrounds.';
+  project.metadata.characterStyle = 'Big expressive eyes.';
+  const panelId = project.pages[0].panels[0].id;
+  const parts = buildLayerPromptParts(project, panelId, 'bg1');
+  assert.deepEqual(
+    parts.map((p) => p.label),
+    ['Style', 'Scene style', 'Scene', 'Layer prompt', 'Technical requirements']
+  );
+  assert.equal(parts[1].text, 'Atmospheric backgrounds.');
+});
+
+test('buildLayerPromptParts includes Character style for a character foreground layer, not for an object one', () => {
+  const project = createBlankProject('Test');
+  project.metadata.style = 'STYLE: watercolor comic.';
+  project.metadata.characterStyle = 'Big expressive eyes.';
+  project.metadata.sceneStyle = 'Atmospheric backgrounds.';
+  project.metadata.characters.push({
+    id: 'char1',
+    name: 'Ashwini',
+    description: 'A girl.',
+    sceneIds: [],
+    imageIds: [],
+    variations: [],
+  });
+  project.metadata.objects.push({
+    id: 'obj1',
+    name: 'Table',
+    description: 'Wooden.',
+    imageIds: [],
+    sceneIds: [],
+    variations: [],
+  });
+  const panelId = project.pages[0].panels[0].id;
+  const baseLayer = {
+    kind: 'foreground' as const,
+    visible: true,
+    x: 0,
+    y: 0,
+    width: 100,
+    rotation: 0,
+    opacity: 1,
+  };
+  project.pages[0].panels[0].layers.push(
+    { ...baseLayer, id: 'charL', name: 'C', subjectId: 'char1', prompt: 'Smiling.' },
+    { ...baseLayer, id: 'objL', name: 'O', subjectId: 'obj1', prompt: 'On the floor.' }
+  );
+
+  const charParts = buildLayerPromptParts(project, panelId, 'charL');
+  assert.deepEqual(
+    charParts.map((p) => p.label),
+    ['Style', 'Character style', 'Character', 'Layer prompt', 'Technical requirements']
+  );
+  assert.equal(charParts[1].text, 'Big expressive eyes.');
+
+  const objParts = buildLayerPromptParts(project, panelId, 'objL');
+  assert.ok(!objParts.some((p) => p.label.includes('style')));
+});
+
 function projectWithCharacterAndScene(): ComicProject {
   const project = createBlankProject('Test');
   project.metadata.characters.push({
@@ -201,6 +262,49 @@ test('buildReferencePromptParts omits the Variation part when no variationId is 
   ];
   const parts = buildReferencePromptParts(project, 'characters', 'char1');
   assert.ok(!parts.some((p) => p.label === 'Variation'));
+});
+
+test('buildReferencePromptParts includes the Character style addendum right after Style, for a character', () => {
+  const project = projectWithCharacterAndScene();
+  project.metadata.style = 'STYLE: watercolor comic.';
+  project.metadata.characterStyle = 'Simple, iconic designs with big eyes.';
+  project.metadata.sceneStyle = 'Atmospheric backgrounds.';
+  project.metadata.characters[0].description = 'A girl.';
+  const parts = buildReferencePromptParts(project, 'characters', 'char1');
+  assert.deepEqual(
+    parts.map((p) => p.label),
+    ['Style', 'Character style', 'Character', 'Technical requirements']
+  );
+  assert.equal(parts[1].text, 'Simple, iconic designs with big eyes.');
+});
+
+test('buildReferencePromptParts includes the Scene style addendum for a scene, not the Character one', () => {
+  const project = projectWithCharacterAndScene();
+  project.metadata.characterStyle = 'Simple, iconic designs with big eyes.';
+  project.metadata.sceneStyle = 'Atmospheric backgrounds.';
+  project.metadata.scenes[0].description = 'A rooftop.';
+  const parts = buildReferencePromptParts(project, 'scenes', 'scene1');
+  assert.deepEqual(
+    parts.map((p) => p.label),
+    ['Scene style', 'Scene', 'Technical requirements']
+  );
+  assert.equal(parts[0].text, 'Atmospheric backgrounds.');
+});
+
+test('buildReferencePromptParts omits any style addendum for an object', () => {
+  const project = createBlankProject('Test');
+  project.metadata.characterStyle = 'Simple, iconic designs with big eyes.';
+  project.metadata.sceneStyle = 'Atmospheric backgrounds.';
+  project.metadata.objects.push({
+    id: 'obj1',
+    name: 'Table',
+    description: 'Wooden.',
+    imageIds: [],
+    sceneIds: [],
+    variations: [],
+  });
+  const parts = buildReferencePromptParts(project, 'objects', 'obj1');
+  assert.ok(!parts.some((p) => p.label.includes('style')));
 });
 
 test('buildReferencePromptParts throws for a variationId not on the entry', () => {

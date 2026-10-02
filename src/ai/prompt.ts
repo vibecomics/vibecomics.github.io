@@ -27,21 +27,31 @@ export function joinPromptParts(parts: PromptPart[]): string {
 }
 
 /** The technical requirements line for a story-bible entry's reference art: a scene gets an
- * establishing shot of the place itself, since that art is meant to be a background. A character or
- * object gets a single isolated view — never several poses baked into one turnaround sheet, which
- * confuses later prompting that references it. Use variations (see Variation) to get more than one
- * pose or state, each its own image: buildReferencePromptParts appends the chosen variation's own
- * prompt (e.g. "Front view") as the last part, saying which view to draw. */
+ * establishing shot of the place itself, since that art is meant to be a background, so it always
+ * rules out characters, people, animals or monsters — the entry's own description never has to say
+ * so. A character or object gets a single isolated view with clean, well-defined outlines ready for a
+ * clean cutout — never several poses baked into one turnaround sheet, which confuses later prompting
+ * that references it; an object additionally always rules out people or human figures, since a prop
+ * entry is never a person (a character might be an animal rather than a person, so that kind gets no
+ * such blanket rule). These rule-outs are a backstop, not the main defense: the main defense is
+ * styleAddendum (below) never putting figure-only language — the actual source of unwanted people —
+ * into an object's or scene's prompt in the first place. Use variations (see Variation) to get more
+ * than one pose or state, each its own image: buildReferencePromptParts appends the chosen
+ * variation's own prompt (e.g. "Front view") as the last part, saying which view to draw. */
 function referenceTechnical(kind: ReferenceKind): string {
   if (kind === 'scenes') {
-    return 'Establishing reference image for this setting: a clear, well-lit view of the location itself, no characters, animals or monsters in it, matching the description exactly.';
+    return 'Establishing reference image for this setting: a clear, well-lit view of the location itself, no characters, people, animals or monsters in it, matching the description exactly.';
   }
   const subject = kind === 'characters' ? 'Character' : 'Object';
+  const isObject = kind === 'objects';
+  const noPeople = isObject ? ', no people or human figures in it' : '';
+  const variety = isObject ? 'views' : 'poses';
   return (
-    `${subject} reference image: a single, clear view of the ${subject.toLowerCase()}, on a flat, ` +
-    'solid pure-white background (#FFFFFF): no scene, no gradient, no drop shadow or cast shadow, ' +
-    'no ground plane or floor line, no border, no vignette, no baked-in text. Not a multi-view ' +
-    'turnaround sheet or a grid of poses — pick one clear view and draw only that.'
+    `${subject} reference image: a single, clear view of the ${subject.toLowerCase()}${noPeople}, with ` +
+    'clean, well-defined outlines ready for a clean cutout, on a flat, solid pure-white background ' +
+    '(#FFFFFF): no scene, no gradient, no drop shadow or cast shadow, no ground plane or floor line, ' +
+    `no border, no vignette, no baked-in text. Not a multi-view turnaround sheet or a grid of ${variety} ` +
+    '— pick one clear view and draw only that.'
   );
 }
 
@@ -51,11 +61,28 @@ const ENTRY_LABEL: Record<ReferenceKind, string> = {
   scenes: 'Scene',
 };
 
-/** The labeled parts of a story-bible entry's reference art prompt: Style, its description (labeled
- * by kind), the kind-appropriate technical requirements (see referenceTechnical), then, when
- * `variationId` names one of the entry's variations, that variation's own prompt last (e.g. "Front
- * view, facing the camera directly.") — the most specific instruction, so it lands right before
- * generation. */
+/** The kind-specific addendum to Style (metadata.characterStyle/sceneStyle) a reference-art or layer
+ * prompt stitches in right after the shared Style paragraph: design language that only makes sense
+ * for a figure (characters) or background-specific rendering notes (scenes). An object gets none —
+ * there's currently no object-specific style language, and leaving the slot empty rather than
+ * inventing content for it is the point: a kind only gets what's actually true of it. */
+function styleAddendum(project: ComicProject, kind: ReferenceKind): string | undefined {
+  if (kind === 'characters') return project.metadata.characterStyle;
+  if (kind === 'scenes') return project.metadata.sceneStyle;
+  return undefined;
+}
+
+const STYLE_ADDENDUM_LABEL: Record<ReferenceKind, string> = {
+  characters: 'Character style',
+  objects: 'Object style',
+  scenes: 'Scene style',
+};
+
+/** The labeled parts of a story-bible entry's reference art prompt: Style, the kind's style addendum
+ * (see styleAddendum — omitted for an object), its description (labeled by kind), the kind-appropriate
+ * technical requirements (see referenceTechnical), then, when `variationId` names one of the entry's
+ * variations, that variation's own prompt last (e.g. "Front view, facing the camera directly.") — the
+ * most specific instruction, so it lands right before generation. */
 export function buildReferencePromptParts(
   project: ComicProject,
   kind: ReferenceKind,
@@ -70,6 +97,7 @@ export function buildReferencePromptParts(
   }
   return keepNonEmpty([
     { label: 'Style', text: project.metadata.style },
+    { label: STYLE_ADDENDUM_LABEL[kind], text: styleAddendum(project, kind) },
     { label: ENTRY_LABEL[kind], text: entry.description },
     { label: 'Technical requirements', text: referenceTechnical(kind) },
     { label: 'Variation', text: variation?.prompt },
@@ -102,14 +130,29 @@ function subjectLabel(project: ComicProject, layer: Layer): string {
   return project.metadata.objects.some((o) => o.id === layer.subjectId) ? 'Object' : 'Character';
 }
 
+/** A layer's style-addendum label, matching STYLE_ADDENDUM_LABEL: "Character style" for a character
+ * foreground, "Scene style" for a background, nothing for an object foreground (no object-specific
+ * style language exists). */
+function layerStyleAddendum(project: ComicProject, label: string): string | undefined {
+  if (label === 'Character') return project.metadata.characterStyle;
+  if (label === 'Scene') return project.metadata.sceneStyle;
+  return undefined;
+}
+
 /**
- * The labeled parts of a layer's (or background's) image prompt: Style, the linked entry's
- * description (a background's scene, or a foreground layer's character/object), the layer prompt,
- * then a technical requirements line. The page and panel prompts are deliberately left out of both:
- * they narrate the whole panel (people, action), so on a background they got drawn into the scene,
- * and on a foreground any setting language makes this model draw a full scene instead of an isolated
- * cutout (an earlier test of a "for context only, do not draw it" scene description didn't prevent
- * that for foregrounds; a disclaimer on page/panel prompts for backgrounds hasn't been tried).
+ * The labeled parts of a layer's (or background's) image prompt: Style, the kind's style addendum
+ * (see layerStyleAddendum — omitted for an object), the linked entry's description (a background's
+ * scene, or a foreground layer's character/object), the layer prompt, then a technical requirements
+ * line. The page and panel prompts are deliberately left out of both: they narrate the whole panel
+ * (people, action), so on a background they got drawn into the scene, and on a foreground any setting
+ * language makes this model draw a full scene instead of an isolated cutout (an earlier test of a
+ * "for context only, do not draw it" scene description didn't prevent that for foregrounds; a
+ * disclaimer on page/panel prompts for backgrounds hasn't been tried).
+ *
+ * Keeping an object's or scene's prompt free of figure-only language (never putting characterStyle
+ * into either, and never putting a character description into a background) is the main defense
+ * against an unwanted person showing up — not the "no people"/"no characters" rule-outs in the
+ * technical line below, which exist only as a backstop.
  */
 export function buildLayerPromptParts(
   project: ComicProject,
@@ -122,18 +165,23 @@ export function buildLayerPromptParts(
   const isForeground = layer.kind === 'foreground';
 
   const subject = layerSubject(project, layer);
+  const label = subjectLabel(project, layer);
+  const isObject = isForeground && label === 'Object';
 
   const size = layerArtSize(project, panelId, layerId);
-  const technical = isForeground
-    ? 'A single image of one pose only, on a flat, solid pure-white background (#FFFFFF): no scene, no gradient, no drop shadow or cast shadow, no ground plane or floor line, no border, no vignette, no baked-in text. Not a multi-view turnaround sheet or a grid of poses, even if a reference image shows the subject from several angles — pick one pose and draw only that.'
-    : `Full-bleed background image, aspect ratio ${size?.aspectRatio ?? 1}:1, no border.`;
+  const technical = isObject
+    ? 'A single image of one view only with clean, well-defined outlines ready for a clean cutout, on a flat, solid pure-white background (#FFFFFF): no scene, no gradient, no drop shadow or cast shadow, no ground plane or floor line, no border, no vignette, no baked-in text, no people, no hands. Not a multi-view turnaround sheet or a grid of views, even if a reference image shows the subject from several angles — pick one view and draw only that.'
+    : isForeground
+      ? 'A single image of one pose only with clean, well-defined outlines ready for a clean cutout, on a flat, solid pure-white background (#FFFFFF): no scene, no gradient, no drop shadow or cast shadow, no ground plane or floor line, no border, no vignette, no baked-in text. Not a multi-view turnaround sheet or a grid of poses, even if a reference image shows the subject from several angles — pick one pose and draw only that.'
+      : `Full-bleed background image, aspect ratio ${size?.aspectRatio ?? 1}:1, no border, no characters, people, animals or monsters in it — a pure setting, nothing else is drawn on it.`;
 
   const style = { label: 'Style', text: project.metadata.style };
-  const subjectPart = { label: subjectLabel(project, layer), text: subject?.description };
+  const styleAddendumPart = { label: `${label} style`, text: layerStyleAddendum(project, label) };
+  const subjectPart = { label, text: subject?.description };
   const layerPart = { label: 'Layer prompt', text: layer.prompt };
   const technicalPart = { label: 'Technical requirements', text: technical };
 
-  return keepNonEmpty([style, subjectPart, layerPart, technicalPart]);
+  return keepNonEmpty([style, styleAddendumPart, subjectPart, layerPart, technicalPart]);
 }
 
 /** Stitches the prompt for a layer's (or background's) image (see buildLayerPromptParts). */

@@ -74,11 +74,15 @@ export interface ComicBuilderDeps {
 export type LayerInput = Partial<Omit<Layer, 'id'>>;
 /** Patch for layers.update(). Only the given fields change. */
 export type LayerPatch = Partial<Omit<Layer, 'id'>>;
-/** A LayerPatch as the API takes it: `subjectId`, `sceneId` or `variationId` set to null clears it. */
-export type LayerUpdate = Omit<LayerPatch, 'subjectId' | 'sceneId' | 'variationId'> & {
+/** A LayerPatch as the API takes it: `subjectId`, `sceneId` or `variationId` set to null clears it.
+ * `mediaId` set to null unlinks the layer's current image — it's no longer this layer's in any way,
+ * not even its history — without touching the project's media registry, unlike media.delete, which
+ * removes the image everywhere it's used. */
+export type LayerUpdate = Omit<LayerPatch, 'subjectId' | 'sceneId' | 'variationId' | 'mediaId'> & {
   subjectId?: string | null;
   sceneId?: string | null;
   variationId?: string | null;
+  mediaId?: string | null;
 };
 /** Input for bubbles.add(). Position and size are in % of panel size. */
 export type BubbleInput = Partial<Omit<Bubble, 'id'>> & { text: string };
