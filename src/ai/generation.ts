@@ -14,7 +14,7 @@
 import { createProvider, GenerationCancelledError } from '../generators/types';
 import type { ImageProvider } from '../generators/types';
 import { artPixels } from '../state/layout';
-import type { ComicProject, Layer, MediaItem, StoryEntry } from '../types/comic';
+import type { ComicProject, Layer, MediaItem, StoryEntry, Variation } from '../types/comic';
 import { errorMessage } from '../utils/errors';
 import { pngDimensions } from '../utils/image';
 import {
@@ -504,14 +504,19 @@ function referenceTo(
  * own pose-neutral `imageIds`, never another variation's — a different pose or orientation (the
  * Front view's image, say, while generating Back view) actively misleads the model into blending the
  * two (a face appearing on a "back view," for instance), which is worse than sending nothing. */
-function fallbackReferenceIds(entry: StoryEntry): string[] {
-  return entry.imageIds;
+/** The reference image ids to use for a given variation (or, with none picked, the whole entry): that
+ * variation's own images; if it has none yet, the entry's own pose-neutral `imageIds` (never another
+ * variation's — a different pose or orientation, the Front view's image while generating Back view,
+ * say, actively misleads the model into blending the two); with no variation picked at all, every
+ * image the entry has, across every variation, since no particular pose was requested. */
+function referenceIdsFor(entry: StoryEntry, variation: Variation | undefined): string[] {
+  if (!variation) return allEntryImageIds(entry);
+  return variation.imageIds.length ? variation.imageIds : entry.imageIds;
 }
 
 /** The images a layer's generation sends by default: its subject's/scene's chosen variation (see
- * layer.variationId), if it has one and that variation has images yet (else the entry's own
- * pose-neutral images, never a different variation's — see fallbackReferenceIds); without a
- * variationId, every image the character/object (foreground) or scene (background) it shows has. */
+ * layer.variationId) if it has one and that variation has images yet; otherwise every image the
+ * character/object (foreground) or scene (background) it shows has — see referenceIdsFor. */
 export function defaultLayerReferences(
   deps: ComicBuilderDeps,
   panelId: string,
@@ -525,17 +530,13 @@ export function defaultLayerReferences(
   const variation = layer.variationId
     ? subject.variations.find((v) => v.id === layer.variationId)
     : undefined;
-  const ids = variation
-    ? variation.imageIds.length
-      ? variation.imageIds
-      : fallbackReferenceIds(subject)
-    : allEntryImageIds(subject);
+  const ids = referenceIdsFor(subject, variation);
   return ids.map((mediaId) => referenceTo(project, mediaId, subject.id));
 }
 
 /** The images a story-bible entry's reference generation sends by default: with `variationId`, that
- * variation's own images, or (if it has none yet) the entry's own pose-neutral images — never another
- * variation's, see fallbackReferenceIds; without a variationId, every image the entry has. */
+ * variation's own images (or, with none yet, every image the entry has); without one, every image the
+ * entry has — see referenceIdsFor. */
 export function defaultEntryReferences(
   deps: ComicBuilderDeps,
   kind: ReferenceKind,
@@ -546,11 +547,7 @@ export function defaultEntryReferences(
   const entry = project.metadata[kind].find((e) => e.id === id);
   if (!entry) return [];
   const variation = variationId ? entry.variations.find((v) => v.id === variationId) : undefined;
-  const ids = variation
-    ? variation.imageIds.length
-      ? variation.imageIds
-      : fallbackReferenceIds(entry)
-    : allEntryImageIds(entry);
+  const ids = referenceIdsFor(entry, variation);
   return ids.map((mediaId) => referenceTo(project, mediaId, id));
 }
 

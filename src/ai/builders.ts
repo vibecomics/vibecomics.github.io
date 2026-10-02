@@ -85,6 +85,14 @@ function entriesOfKind(project: ComicProject, kind: StoryKind): StoryEntry[] {
   return project.metadata[kind] as unknown as StoryEntry[];
 }
 
+/** Whether a variation's stitched prompt (its entry's description, plus its own text) has anything
+ * in it to act on — the same test updateLayer uses for a layer's own prompt, applied to a variation's
+ * two-part one. Used both when one entry's description changes (storyApi.update) and when the whole
+ * project's STYLE does (cascadeStyleDirty). */
+function hasEffectivePrompt(description: string, variation: Variation): boolean {
+  return Boolean((description || variation.prompt || '').trim());
+}
+
 function findEntry(project: ComicProject, kind: StoryKind, entryId: string): StoryEntry {
   const entry = entriesOfKind(project, kind).find((e) => e.id === entryId);
   if (!entry) throw new Error(`"${entryId}" not found in ${kind}.`);
@@ -366,9 +374,7 @@ export function storyApi<K extends keyof StoryTypes>(deps: ComicBuilderDeps, key
           // description + the variation's own text), so changing it makes every variation's current
           // art stale — unless this same call also replaced `variations` outright (new art plan).
           if (fields.description !== undefined && variations === undefined) {
-            for (const v of entry.variations) {
-              v.dirty = Boolean((entry.description || v.prompt || '').trim());
-            }
+            for (const v of entry.variations) v.dirty = hasEffectivePrompt(entry.description, v);
           }
           return entry;
         })
@@ -507,7 +513,7 @@ export function cascadeStyleDirty(project: ComicProject): void {
   for (const kind of Object.keys(STORY_KINDS) as StoryKind[]) {
     for (const entry of entriesOfKind(project, kind)) {
       for (const variation of entry.variations) {
-        if ((entry.description || variation.prompt || '').trim()) variation.dirty = true;
+        if (hasEffectivePrompt(entry.description, variation)) variation.dirty = true;
       }
     }
   }

@@ -45,16 +45,18 @@ function QueueRow({ item }: { item: QueueItem }) {
 
 /**
  * The right-side panel opened by the toolbar's 🪄 button: every generation that's queued, running,
- * or has finished since the queue was last cleared, plus a button to queue every dirty layer. Unlike
- * the old queue dropdown, finished rows stay put until "Clear generated" removes them, so you can see
- * what was actually produced. Not modal: it stays open (no backdrop, no click-outside-to-close) while
- * you keep working elsewhere — e.g. switching tabs to start another generation — closing only when
- * its own × is clicked, so you can watch a batch run while doing something else.
+ * or has finished since the queue was last cleared, plus one "Generate all" button that queues every
+ * dirty layer *and* every dirty story-bible reference (cast, objects, scenes) together — there is no
+ * separate button per category, since from here "dirty" just means "needs a new image," regardless of
+ * what it's for. Unlike the old queue dropdown, finished rows stay put until "Clear generated" removes
+ * them, so you can see what was actually produced. Not modal: it stays open (no backdrop, no
+ * click-outside-to-close) while you keep working elsewhere — e.g. switching tabs to start another
+ * generation — closing only when its own × is clicked, so you can watch a batch run while doing
+ * something else.
  */
 export default function GenerationPanel({ onClose }: Props) {
   const project = useProject();
-  const dirtyCount = dirtyLayerRefs(project).length;
-  const referencesDirtyCount = dirtyVariationRefs(project).length;
+  const dirtyCount = dirtyLayerRefs(project).length + dirtyVariationRefs(project).length;
   const queue = useGenerationQueue();
   const task = useBusy();
   // A full-width flex sibling would squeeze the comic page to nothing on a phone, so there it's an
@@ -88,10 +90,14 @@ export default function GenerationPanel({ onClose }: Props) {
           disabled={dirtyCount === 0 || task.busy}
           title={
             dirtyCount === 0
-              ? 'Nothing is dirty — every layer already matches its prompt'
-              : `Generate images for every layer whose art no longer matches its prompt (${dirtyCount})`
+              ? 'Nothing is dirty — every layer, character, object and scene already matches its prompt'
+              : `Generate images for every layer, background and story-bible reference (cast, objects, scenes) whose art no longer matches its prompt (${dirtyCount})`
           }
-          onClick={() => void task.run(() => cb().generate.dirty())}
+          onClick={() =>
+            void task.run(() =>
+              Promise.all([cb().generate.dirty(), cb().generate.dirtyReferences()])
+            )
+          }
         >
           {task.busy && (
             <span
@@ -100,20 +106,7 @@ export default function GenerationPanel({ onClose }: Props) {
               aria-label="Generating"
             />
           )}
-          {task.busy ? 'Generating…' : `🪄 Generate${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
-        </button>
-        <button
-          type="button"
-          className="btn btn-outline-primary btn-sm text-nowrap"
-          disabled={referencesDirtyCount === 0 || task.busy}
-          title={
-            referencesDirtyCount === 0
-              ? 'Nothing is dirty — every character, object and scene reference already matches its prompt'
-              : `Generate images for every character, object and scene reference (variation) whose art no longer matches its prompt (${referencesDirtyCount})`
-          }
-          onClick={() => void task.run(() => cb().generate.dirtyReferences())}
-        >
-          🪄 Cast/scenes{referencesDirtyCount > 0 ? ` (${referencesDirtyCount})` : ''}
+          {task.busy ? 'Generating…' : `🪄 Generate all${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
         </button>
         <button
           type="button"
