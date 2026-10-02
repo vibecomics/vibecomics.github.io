@@ -41,19 +41,18 @@ function projectWithScene(): ComicProject {
   return project;
 }
 
-test('buildLayerPrompt stitches STYLE, page, panel, scene and layer prompts in order', () => {
+test('buildLayerPrompt stitches STYLE, scene and layer prompts in order, without page or panel prompts', () => {
   const project = projectWithScene();
   const panelId = project.pages[0].panels[0].id;
   const prompt = buildLayerPrompt(project, panelId, 'bg1');
   const parts = prompt.split('\n\n');
-  assert.deepEqual(parts.slice(0, 5), [
+  assert.deepEqual(parts.slice(0, 3), [
     'STYLE: watercolor comic.',
-    'The chase ends here.',
-    'Wide shot, low angle.',
     'A rooftop at dusk, orange sky.',
     'Rain-slicked tiles in the foreground.',
   ]);
-  assert.match(parts[5], /full-bleed/i);
+  assert.match(parts[3], /full-bleed/i);
+  assert.doesNotMatch(prompt, /chase ends here|Wide shot, low angle/);
 });
 
 test('buildLayerPrompt skips empty parts', () => {
