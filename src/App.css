@@ -541,6 +541,17 @@
   right: 4rem;
 }
 
+.lightbox-use {
+  top: 0.75rem;
+  left: 0.75rem;
+  width: auto;
+  height: auto;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  white-space: nowrap;
+}
+
 .lightbox-prev,
 .lightbox-next {
   top: 50%;

@@ -1,7 +1,7 @@
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { cb } from '../ai/actions';
-import { dirtyLayerRefs } from '../ai/builders';
+import { dirtyLayerRefs, dirtyVariationRefs } from '../ai/builders';
 import type { QueueItem } from '../ai/generation';
 import { useMediaQuery } from '../utils/useViewport';
 import { useProject } from './ProjectContext';
@@ -52,7 +52,9 @@ function QueueRow({ item }: { item: QueueItem }) {
  * its own × is clicked, so you can watch a batch run while doing something else.
  */
 export default function GenerationPanel({ onClose }: Props) {
-  const dirtyCount = dirtyLayerRefs(useProject()).length;
+  const project = useProject();
+  const dirtyCount = dirtyLayerRefs(project).length;
+  const referencesDirtyCount = dirtyVariationRefs(project).length;
   const queue = useGenerationQueue();
   const task = useBusy();
   // A full-width flex sibling would squeeze the comic page to nothing on a phone, so there it's an
@@ -79,7 +81,7 @@ export default function GenerationPanel({ onClose }: Props) {
         )}
       </div>
 
-      <div className="border-top px-3 py-2 d-flex align-items-center gap-2">
+      <div className="border-top px-3 py-2 d-flex align-items-center gap-2 flex-wrap">
         <button
           type="button"
           className="btn btn-primary btn-sm text-nowrap"
@@ -99,6 +101,19 @@ export default function GenerationPanel({ onClose }: Props) {
             />
           )}
           {task.busy ? 'Generating…' : `🪄 Generate${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
+        </button>
+        <button
+          type="button"
+          className="btn btn-outline-primary btn-sm text-nowrap"
+          disabled={referencesDirtyCount === 0 || task.busy}
+          title={
+            referencesDirtyCount === 0
+              ? 'Nothing is dirty — every character, object and scene reference already matches its prompt'
+              : `Generate images for every character, object and scene reference (variation) whose art no longer matches its prompt (${referencesDirtyCount})`
+          }
+          onClick={() => void task.run(() => cb().generate.dirtyReferences())}
+        >
+          🪄 Cast/scenes{referencesDirtyCount > 0 ? ` (${referencesDirtyCount})` : ''}
         </button>
         <button
           type="button"

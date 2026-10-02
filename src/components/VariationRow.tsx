@@ -53,17 +53,28 @@ export default function VariationRow({
   return (
     <div className="d-flex gap-2 align-items-stretch">
       {currentItem ? (
-        <MediaThumb
-          item={currentItem}
-          width={72}
-          fillHeight
-          onOpen={() => onOpenImage(currentItem.id)}
-          onRemove={() =>
-            cb().variations.update(kind, entryId, variation.id, {
-              imageIds: variation.imageIds.filter((id) => id !== currentItem.id),
-            })
-          }
-        />
+        <div className="position-relative" style={{ flexShrink: 0 }}>
+          <MediaThumb
+            item={currentItem}
+            width={72}
+            fillHeight
+            onOpen={() => onOpenImage(currentItem.id)}
+            onRemove={() =>
+              cb().variations.update(kind, entryId, variation.id, {
+                imageIds: variation.imageIds.filter((id) => id !== currentItem.id),
+              })
+            }
+          />
+          {variation.imageIds.length > 1 && (
+            <span
+              className="badge bg-secondary position-absolute bottom-0 start-0 m-1"
+              style={{ fontSize: '0.6rem' }}
+              title={`${variation.imageIds.length} images for this variation; click the thumbnail to browse and pick one`}
+            >
+              {variation.imageIds.length}
+            </span>
+          )}
+        </div>
       ) : (
         <div
           className="checker rounded d-flex align-items-center justify-content-center text-muted small text-center"

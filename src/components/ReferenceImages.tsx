@@ -32,10 +32,27 @@ export default function ReferenceImages({ kind, entryId, imageIds, variations, m
   const [activeVariationId, setActiveVariationId] = useState<string | null>(
     () => variations[0]?.id ?? null
   );
+  // Which variation (if any) each image belongs to, so the lightbox can say "Front view" etc. and
+  // offer to make an older image of a variation the active one again (see promoteImage).
   const allImages = [
-    ...imageIds.flatMap((id) => media.find((m) => m.id === id) ?? []),
-    ...variations.flatMap((v) => v.imageIds.flatMap((id) => media.find((m) => m.id === id) ?? [])),
+    ...imageIds.flatMap((id) => {
+      const item = media.find((m) => m.id === id);
+      return item ? [{ item, variation: null as Variation | null }] : [];
+    }),
+    ...variations.flatMap((v) =>
+      v.imageIds.flatMap((id) => {
+        const item = media.find((m) => m.id === id);
+        return item ? [{ item, variation: v }] : [];
+      })
+    ),
   ];
+  const lightboxItems = allImages.map((a) => a.item);
+  const lightboxLabels = allImages.map((a) => (a.variation ? a.variation.name : 'Reference image'));
+  // The active image of a variation is the last one in its imageIds (see VariationRow); offering to
+  // "use" it again would be a no-op, so hide the button for it.
+  const lightboxCanUse = allImages.map(
+    (a) => a.variation !== null && a.variation.imageIds.at(-1) !== a.item.id
+  );
   const status = useReferenceGenerationStatus(kind, entryId);
   const activeVariation =
     variations.find((v) => v.id === activeVariationId) ?? variations[0] ?? null;
@@ -44,6 +61,16 @@ export default function ReferenceImages({ kind, entryId, imageIds, variations, m
     const message = `Delete "${item.name}"? It moves to the storage trash and is removed from every layer and reference that uses it.`;
     if (!window.confirm(message)) return;
     void task.run(async () => void (await cb().media.delete(item.id)));
+  }
+
+  /** Makes `item` the active image of the variation it belongs to again, by moving it to the end of
+   * that variation's imageIds (the convention VariationRow and layer-reference defaults read). */
+  function promoteImage(item: MediaItem) {
+    const owner = allImages.find((a) => a.item.id === item.id)?.variation;
+    if (!owner) return;
+    const ids = owner.imageIds.filter((id) => id !== item.id);
+    ids.push(item.id);
+    cb().variations.update(kind, entryId, owner.id, { imageIds: ids });
   }
 
   function addVariation() {
@@ -73,10 +100,25 @@ export default function ReferenceImages({ kind, entryId, imageIds, variations, m
         <ul className="nav nav-tabs flex-grow-1 mb-0">
           {variations.map((variation) => {
             const isActive = variation.id === activeVariation?.id;
+            const dirtyDot = variation.dirty && (
+              <button
+                type="button"
+                className="btn btn-link text-warning text-decoration-none p-0 ms-1"
+                style={{ fontSize: '0.55rem', lineHeight: 1 }}
+                title="The prompt changed since this image was made; click to mark it as up to date"
+                aria-label="Prompt changed since the image was made; click to mark it as up to date"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  cb().variations.update(kind, entryId, variation.id, { dirty: false });
+                }}
+              >
+                ●
+              </button>
+            );
             return (
               <li className="nav-item" key={variation.id}>
                 {isActive ? (
-                  <span className="nav-link active">
+                  <span className="nav-link active d-inline-flex align-items-center">
                     <input
                       key={variation.id}
                       className="variation-tab-name-input"
@@ -92,14 +134,16 @@ export default function ReferenceImages({ kind, entryId, imageIds, variations, m
                       }}
                       onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
                     />
+                    {dirtyDot}
                   </span>
                 ) : (
                   <button
                     type="button"
-                    className="nav-link"
+                    className="nav-link d-inline-flex align-items-center"
                     onClick={() => setActiveVariationId(variation.id)}
                   >
                     {variation.name || 'Untitled'}
+                    {dirtyDot}
                   </button>
                 )}
               </li>
@@ -167,13 +211,16 @@ export default function ReferenceImages({ kind, entryId, imageIds, variations, m
       )}
       {viewingId !== null && (
         <ImageLightbox
-          items={allImages}
+          items={lightboxItems}
+          labels={lightboxLabels}
+          canUse={lightboxCanUse}
           start={Math.max(
             0,
-            allImages.findIndex((item) => item.id === viewingId)
+            lightboxItems.findIndex((item) => item.id === viewingId)
           )}
           onClose={() => setViewingId(null)}
           onDelete={deleteMedia}
+          onUse={promoteImage}
         />
       )}
       {task.error && <div className="text-danger small mt-2">{task.error}</div>}

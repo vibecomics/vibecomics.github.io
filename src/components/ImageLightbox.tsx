@@ -8,14 +8,31 @@ interface Props {
   items: MediaItem[];
   /** Index of the image to open on. */
   start: number;
+  /** Parallel to items: a caption for where each one comes from, e.g. its variation's name
+   * ("Front view") or "Reference image" for art not tied to any variation. */
+  labels?: string[];
   onClose: () => void;
   /** Deletes the image outright (not just from whatever list opened this lightbox). Omit to hide the
    * delete button, e.g. where the caller has no way to remove media. */
   onDelete?: (item: MediaItem) => void;
+  /** Makes this the active image for whatever it belongs to (e.g. a variation with several images,
+   * where the most recently used one is what shows elsewhere). Shown as "Use this image". */
+  onUse?: (item: MediaItem) => void;
+  /** Parallel to items: whether to show the "Use this image" button for each (e.g. hidden for one
+   * already active, or for art with no notion of "active"). Omit to show it for every item. */
+  canUse?: boolean[];
 }
 
 /** A full-size popup over the page for a set of images, with prev/next arrows when there are several. */
-export default function ImageLightbox({ items, start, onClose, onDelete }: Props) {
+export default function ImageLightbox({
+  items,
+  start,
+  labels,
+  onClose,
+  onDelete,
+  onUse,
+  canUse,
+}: Props) {
   const [index, setIndex] = useState(Math.min(start, items.length - 1));
   const [loaded, setLoaded] = useState<{ id: string; url: string | null } | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
@@ -91,6 +108,17 @@ export default function ImageLightbox({ items, start, onClose, onDelete }: Props
           <TrashIcon />
         </button>
       )}
+      {onUse && (canUse ? canUse[index] : true) && (
+        <button
+          type="button"
+          className="lightbox-btn lightbox-use"
+          aria-label={`Use ${item.name}`}
+          title="Use this image"
+          onClick={() => onUse(item)}
+        >
+          Use this image
+        </button>
+      )}
       {many && (
         <button
           type="button"
@@ -119,6 +147,7 @@ export default function ImageLightbox({ items, start, onClose, onDelete }: Props
         </button>
       )}
       <div className="lightbox-caption">
+        {labels?.[index] && <strong>{labels[index]}: </strong>}
         {item.name}
         {many && ` (${index + 1} / ${items.length})`}
       </div>
