@@ -11,6 +11,7 @@
  */
 
 import type { DeviceCodeInfo } from '../drive/deviceOAuth';
+import type { StorageConnectionInfo } from '../storage/connections';
 import type { ProjectFolder } from '../storage/types';
 import { assertValidGeneratorConfig, createProvider } from '../generators/types';
 import type { GeneratorConfig } from '../generators/types';
@@ -206,52 +207,80 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      */
     storage: {
       /**
-       * Connect to Google Drive via the OAuth device flow. Resolves promptly
-       * with { url, code, expiresInSeconds }: show the user the URL and code
-       * (they open the URL on any device, a phone works, enter the code, and
-       * approve). Then poll storage.status() until connected is true and
-       * continue. If the user denies the request or the code expires,
-       * status().connected simply stays false (the app shows the reason).
-       * Rejects immediately if the device client is not configured. Works from
-       * injected scripts: no popup, no user gesture needed, so the same button
-       * works for a human or an AI assistant. The device client secret ships in
-       * the app bundle by design (Google's device-client model: distributed
-       * apps cannot keep secrets; scope stays limited to drive.file, and the
-       * access token itself is memory-only).
+       * Connect Google Drive via the OAuth device flow, as an additional
+       * connection (it does not replace Drive or any server already
+       * connected). Resolves promptly with { url, code, expiresInSeconds }:
+       * show the user the URL and code (they open the URL on any device, a
+       * phone works, enter the code, and approve). Then poll
+       * storage.listConnections() until Drive appears with connected: true.
+       * If the user denies the request or the code expires, it simply never
+       * appears (the app shows the reason). Rejects immediately if the device
+       * client is not configured. Works from injected scripts: no popup, no
+       * user gesture needed, so the same button works for a human or an AI
+       * assistant. The device client secret ships in the app bundle by design
+       * (Google's device-client model: distributed apps cannot keep secrets;
+       * scope stays limited to drive.file, and the access token itself is
+       * memory-only, so this must be run again after every page reload).
        * @returns The verification URL, user code, and code expiry.
        */
       connectWithDevice: (): Promise<DeviceCodeInfo> => deps.connectStorageWithDevice(),
 
       /**
-       * Connect to a self-hosted HTTP storage server at this base URL (see
-       * http-storage/). The server has no login: this just checks it answers
-       * GET /health, then makes it the active store. The URL is remembered
-       * only to prefill the connect screen's field next time; it does not
-       * reconnect on its own.
+       * Connect a self-hosted HTTP storage server at this base URL (see
+       * http-storage/), as an additional connection alongside any others
+       * already connected (Drive, or other servers). The server has no
+       * login: this just checks it answers GET /health, then adds it. Its
+       * URL is remembered and reconnected automatically on the next page
+       * load (no secret is involved, unlike Drive).
        * @param url - The server's base URL, e.g. "http://localhost:8081".
-       * @returns A promise that resolves once connected; check storage.status().connected.
+       * @returns A promise that resolves once connected.
        */
       connectWithServer: (url: string): Promise<void> => deps.connectStorageWithServer(url),
 
       /**
-       * Disconnect storage: save any unsaved changes, then drop the connection
-       * (revoking the grant at Google, if that is what is connected) and return
-       * to the connect screen. The next connect starts fresh.
+       * Disconnect every connection: save any unsaved changes, then drop
+       * them all (revoking the grant at Google, if Drive is connected). To
+       * disconnect just one, use storage.disconnectConnection(id) instead.
        * @returns A promise that resolves when disconnection is complete.
        */
       disconnect: (): Promise<void> => deps.disconnectStorage(),
 
       /**
+       * List every known connection: Google Drive when connected this
+       * session, and every HTTP storage server (connected now, or remembered
+       * from a previous session but not yet reconnected).
+       * @returns A promise resolving to [{ id, kind, label, connected }].
+       */
+      listConnections: async (): Promise<StorageConnectionInfo[]> =>
+        (await deps.listStorageConnections?.()) ?? [],
+
+      /**
+       * Disconnect one connection by id (from storage.listConnections()). If
+       * it is currently backing the open project, unsaved changes are saved
+       * first and the project is closed. Removes a remembered-but-not-yet-
+       * reconnected server the same way.
+       * @param id - A connection id from storage.listConnections().
+       * @returns A promise that resolves once it is disconnected.
+       */
+      disconnectConnection: async (id: string): Promise<void> => {
+        await deps.disconnectStorageConnection?.(id);
+      },
+
+      /**
        * Report the storage connection state.
-       * @returns { connected, configured }: connected means storage has a live connection; configured means Drive's device OAuth client is set (irrelevant once a server is connected).
+       * @returns { connected, configured }: connected means at least one connection is live; configured means Drive's device OAuth client is set (irrelevant once a server is connected).
        */
       status: (): { connected: boolean; configured: boolean } => deps.getStorageStatus(),
 
       /**
-       * List every project folder in the active store (on Drive: files.list
-       * under the drive.file scope, so the app is blind to everything else on
-       * the user's Drive), sorted by name, at most 100.
-       * @returns A promise resolving to [{ id, name }] of project folders.
+       * List every project folder across every connected storage location
+       * (on Drive: files.list under the drive.file scope, so the app is
+       * blind to everything else on the user's Drive), sorted by name. When
+       * a project of the same name exists in more than one connection, only
+       * one is listed (a self-hosted server's copy is preferred over
+       * Drive's) — each entry's connectionId/connectionLabel says where it
+       * came from.
+       * @returns A promise resolving to [{ id, name, connectionId, connectionLabel }] of project folders.
        */
       listProjects: (): Promise<ProjectFolder[]> => deps.listStorageProjects(),
 
@@ -265,10 +294,16 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @param pageSize - Optional { label, widthIn, heightIn } physical page
        *   dimensions (see the page size presets in the data model). Defaults to
        *   US Comic (6.625" × 10.25").
+       * @param connectionId - Which connection (from storage.listConnections())
+       *   to create it in. Required when more than one is connected; with
+       *   exactly one, that one is used.
        * @returns A promise resolving to { id, name } of the new folder.
        */
-      createProject: (name: string, pageSize?: PageSize): Promise<ProjectFolder> =>
-        deps.createStorageProject(name, pageSize),
+      createProject: (
+        name: string,
+        pageSize?: PageSize,
+        connectionId?: string
+      ): Promise<ProjectFolder> => deps.createStorageProject(name, pageSize, connectionId),
 
       /**
        * Open a project: load the folder's project.json into the editor. A

@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { startServer } from '../../http-storage/server';
 import { COMMAND_TABLE } from './commands.gen';
 import { runCli } from './main';
 import { createFakeGoogle } from './testing/fakeGoogle';
@@ -110,7 +111,7 @@ test('without a login, Drive commands say how to log in', async () => {
   const { run } = setup();
   const result = await run('storage', 'listProjects');
   assert.equal(result.code, 1);
-  assert.match(result.err, /Not connected to Google Drive\. Run "vibecomics auth login"/);
+  assert.match(result.err, /Not connected to any storage.*vibecomics auth login/);
 });
 
 test('a project persists on Drive and is picked up by the next command', async () => {
@@ -317,11 +318,97 @@ test('mistakes are reported clearly and change nothing', async () => {
   assert.equal(content(), before);
 });
 
-test('storage connectWithServer explains the CLI does not support it yet', async () => {
+test('storage connectWithServer reports a non-VibeComics server clearly', async () => {
+  // The fake Google endpoint answers everything with a 500: close enough to "some other server".
   const { run } = setup();
-  const result = await run('storage', 'connectWithServer', 'http://localhost:4000');
+  const result = await run('storage', 'connectWithServer', 'http://localhost:1');
   assert.equal(result.code, 1);
-  assert.match(result.err, /auth login/);
+  assert.match(
+    result.err,
+    /http:\/\/localhost:1 answered with 500: is this a VibeComics storage server\?/
+  );
+});
+
+test('storage connectWithServer reports an unreachable server clearly', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'vibecomics-home-'));
+  let err = '';
+  const code = await runCli(['storage', 'connectWithServer', 'http://127.0.0.1:1'], {
+    env: { VIBECOMICS_HOME: home },
+    cwd: fs.mkdtempSync(path.join(os.tmpdir(), 'vibecomics-work-')),
+    stdout: () => undefined,
+    stderr: (text) => void (err += text),
+    deviceClient: null,
+  });
+  assert.equal(code, 1);
+  assert.match(err, /Could not reach http:\/\/127\.0\.0\.1:1.*Is the server running\?/);
+});
+
+test('a project persists on a self-hosted server and is picked up by the next command', async () => {
+  const dataRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'vibecomics-server-data-'));
+  const server = await startServer({
+    port: 0,
+    host: '127.0.0.1',
+    root: dataRoot,
+    log: () => undefined,
+  });
+  try {
+    const address = server.address();
+    const url = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : ''}`;
+
+    // The real server needs the real network, not the fake Google fetch `setup()` wires up.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'vibecomics-home-'));
+    async function run(...argv: string[]) {
+      let out = '';
+      let err = '';
+      const code = await runCli(argv, {
+        env: { VIBECOMICS_HOME: home },
+        cwd: fs.mkdtempSync(path.join(os.tmpdir(), 'vibecomics-work-')),
+        stdout: (text) => void (out += text),
+        stderr: (text) => void (err += text),
+        deviceClient: { clientId: 'client', clientSecret: 'secret' },
+      });
+      return { code, out, err, json: () => JSON.parse(out) };
+    }
+
+    const connected = await run('storage', 'connectWithServer', url);
+    assert.equal(connected.code, 0, connected.err);
+
+    const connections = (await run('storage', 'listConnections')).json();
+    assert.deepEqual(
+      connections.find((c: { id: string }) => c.id === `server:${url}`),
+      { id: `server:${url}`, kind: 'server', label: url, connected: true }
+    );
+
+    const created = await run(
+      'storage',
+      'createProject',
+      'Server Demo',
+      '--connectionId',
+      `server:${url}`
+    );
+    assert.equal(created.code, 0, created.err);
+    const folder = created.json();
+    assert.equal(folder.name, 'Server Demo');
+
+    // A separate command picks the open project back up from the state file, same as with Drive.
+    const page = await run('page', 'add', '--title', 'Chapter 1');
+    assert.equal(page.json().title, 'Chapter 1');
+    assert.equal((await run('page', 'count')).json(), 2);
+
+    // It really is the server's project.json on disk, not something only the CLI's state remembers.
+    const onDisk = JSON.parse(
+      fs.readFileSync(path.join(dataRoot, 'Server Demo', 'project.json'), 'utf8')
+    );
+    assert.equal(onDisk.pages.length, 2);
+    assert.equal(onDisk.pages[1].title, 'Chapter 1');
+
+    const disconnected = await run('storage', 'disconnectConnection', `server:${url}`);
+    assert.equal(disconnected.code, 0, disconnected.err);
+    assert.equal((await run('storage', 'listProjects')).code, 1);
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+    fs.rmSync(dataRoot, { recursive: true, force: true });
+  }
 });
 
 test('every command has help that starts with its own usage line', async () => {

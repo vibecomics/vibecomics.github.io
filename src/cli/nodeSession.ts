@@ -1,10 +1,11 @@
 /**
  * The CLI's counterpart of App.tsx: the ComicBuilderDeps for one command run in
- * Node. The project is loaded from Drive before the command (when one is open),
- * changed in memory by the API, and written back after it. The Google login and
- * the open project persist in the state file between runs. The Drive calls, the
- * media and project-folder logic are the same code the page uses (driveRest.ts,
- * storageDeps.ts).
+ * Node. The project is loaded from its storage connection before the command
+ * (when one is open), changed in memory by the API, and written back after it.
+ * The Google login, any connected HTTP storage servers, and the open project
+ * (and which connection it came from) persist in the state file between runs.
+ * The Drive and server REST calls, the media and project-folder logic are the
+ * same code the page uses (driveRest.ts, serverRest.ts, storageDeps.ts).
  */
 import type { ComicBuilderDeps } from '../ai/deps';
 import { createMediaDeps, createOrOpenProject, parseProject } from '../ai/storageDeps';
@@ -16,6 +17,9 @@ import {
 } from '../drive/deviceOAuth';
 import type { DeviceClient, DeviceCodeInfo } from '../drive/deviceOAuth';
 import { createDriveRest } from '../drive/driveRest';
+import { checkServerHealth, normalizeServerUrl } from '../server/serverClient';
+import { createServerRest } from '../server/serverRest';
+import type { StorageConnectionInfo } from '../storage/connections';
 import { ProjectChangedError } from '../storage/types';
 import type { ProjectFolder } from '../storage/types';
 import { mergeProjects } from '../state/merge';
@@ -25,6 +29,9 @@ import { errorMessage } from '../utils/errors';
 import { StateStore } from './state';
 
 const TOKEN_EXPIRY_MARGIN_MS = 60_000;
+const DRIVE_CONNECTION_ID = 'drive';
+/** Matches storage/connections.ts's id scheme for a server connection, so ids read the same in both. */
+const serverConnectionId = (url: string): string => `server:${url}`;
 
 export interface NodeSessionOptions {
   store: StateStore;
@@ -99,6 +106,66 @@ export function createNodeSession(options: NodeSessionOptions) {
   };
 
   const drive = createDriveRest({ getToken: validToken, fetch: fetchImpl });
+  const driveConnected = (): boolean => Boolean(validToken() || state.auth?.refreshToken);
+
+  /** One connection's REST calls: Drive, or a server built fresh from its remembered URL. */
+  function repoFor(connectionId: string) {
+    if (connectionId === DRIVE_CONNECTION_ID) return drive;
+    if (connectionId.startsWith('server:')) {
+      const url = connectionId.slice('server:'.length);
+      return createServerRest({ getBaseUrl: () => url, fetch: fetchImpl });
+    }
+    throw new Error(`Unknown storage connection "${connectionId}".`);
+  }
+
+  /** The connection the open project (if any) came from; absent means an older state file, i.e. Drive. */
+  const projectConnectionId = (): string => state.project?.connectionId ?? DRIVE_CONNECTION_ID;
+
+  /** Every project folder across Drive (if logged in) and every connected server, tagged with where it came from. */
+  async function listAllProjectFolders(): Promise<ProjectFolder[]> {
+    if (!driveConnected() && (state.servers?.length ?? 0) === 0) {
+      throw new Error(
+        'Not connected to any storage. Run "vibecomics auth login" for Google Drive, or ' +
+          '"vibecomics storage connectWithServer <url>" for a self-hosted server.'
+      );
+    }
+    const found: ProjectFolder[] = [];
+    if (driveConnected()) {
+      try {
+        const folders = await drive.listProjectFolders();
+        found.push(
+          ...folders.map((f) => ({
+            ...f,
+            connectionId: DRIVE_CONNECTION_ID,
+            connectionLabel: 'Google Drive',
+          }))
+        );
+      } catch {
+        // Drive is logged in but unreachable right now: skip it like a dead server rather than failing the list.
+      }
+    }
+    for (const url of state.servers ?? []) {
+      try {
+        const folders = await repoFor(serverConnectionId(url)).listProjectFolders();
+        found.push(
+          ...folders.map((f) => ({
+            ...f,
+            connectionId: serverConnectionId(url),
+            connectionLabel: url,
+          }))
+        );
+      } catch {
+        // Remembered but not reachable right now.
+      }
+    }
+    // A project of the same name in more than one connection: the server's copy wins (matches the app).
+    const byName = new Map<string, ProjectFolder>();
+    for (const f of found) {
+      const existing = byName.get(f.name);
+      if (!existing || existing.connectionId === DRIVE_CONNECTION_ID) byName.set(f.name, f);
+    }
+    return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+  }
 
   /** Make sure there is a fresh access token if the user is logged in at all. */
   async function ensureAccess(): Promise<boolean> {
@@ -232,15 +299,31 @@ export function createNodeSession(options: NodeSessionOptions) {
       }
     },
 
-    /** Revoke the login at Google and forget it, and the open project, on this machine. */
+    /**
+     * Revoke the Drive login at Google and forget it on this machine. Leaves any connected
+     * servers and the open project alone unless that project came from Drive, in which case it
+     * is dropped too (unsaved changes are lost, same as the browser disconnecting Drive).
+     */
     async logout(): Promise<AuthReport> {
       const { refreshToken, accessToken } = state.auth ?? {};
       const token = refreshToken ?? accessToken;
       if (token) await revokeToken(token, fetchImpl);
-      dirty = false;
-      project = null;
-      setState(() => ({}));
-      return report({ connected: false, project: null });
+      const wasDriveProject =
+        Boolean(state.project) && projectConnectionId() === DRIVE_CONNECTION_ID;
+      if (wasDriveProject) {
+        dirty = false;
+        project = null;
+        base = null;
+      }
+      setState((s) => ({
+        ...s,
+        auth: undefined,
+        ...(wasDriveProject ? { project: undefined, pageIndex: undefined } : {}),
+      }));
+      return report({
+        connected: false,
+        project: wasDriveProject ? null : (state.project?.name ?? null),
+      });
     },
   };
 
@@ -251,14 +334,19 @@ export function createNodeSession(options: NodeSessionOptions) {
   function showProject(
     opened: ComicProject,
     folder: ProjectFolder,
-    openedVersion: string | null
+    openedVersion: string | null,
+    connectionId: string
   ): void {
     project = opened;
     base = structuredClone(opened);
     version = openedVersion;
     dirty = false;
     pageIndex = 0;
-    setState((s) => ({ ...s, project: { id: folder.id, name: folder.name }, pageIndex: 0 }));
+    setState((s) => ({
+      ...s,
+      project: { id: folder.id, name: folder.name, connectionId },
+      pageIndex: 0,
+    }));
   }
 
   function dropProject(): void {
@@ -270,16 +358,18 @@ export function createNodeSession(options: NodeSessionOptions) {
   }
 
   /**
-   * Write the project to Drive if the command changed it. If somebody else saved since it was
-   * loaded, their changes are merged into ours first; if the two clash, nothing is written.
+   * Write the project to its storage connection if the command changed it. If somebody else saved
+   * since it was loaded, their changes are merged into ours first; if the two clash, nothing is
+   * written.
    */
   async function save(): Promise<void> {
     const id = folderId();
     if (!project || !base || !id || !dirty) return;
+    const repo = repoFor(projectConnectionId());
     for (let attempt = 0; ; attempt++) {
       const savedAt = new Date(now()).toISOString();
       try {
-        version = await drive.saveProjectJson(
+        version = await repo.saveProjectJson(
           id,
           { ...project, savedAt, updatedAt: savedAt },
           version
@@ -290,7 +380,7 @@ export function createNodeSession(options: NodeSessionOptions) {
         return;
       } catch (e) {
         if (!(e instanceof ProjectChangedError) || attempt >= 3) throw e;
-        const file = await drive.loadProjectFile(id);
+        const file = await repo.loadProjectFile(id);
         const theirs = parseProject(file.json);
         const { merged, conflicts } = mergeProjects(base, project, theirs);
         if (conflicts.length > 0) throw new ConflictError(conflicts);
@@ -302,11 +392,11 @@ export function createNodeSession(options: NodeSessionOptions) {
     }
   }
 
-  /** Load the open project from Drive, if there is one. */
+  /** Load the open project from its storage connection, if there is one. */
   async function loadOpenProject(): Promise<void> {
     const id = folderId();
     if (!id || project) return;
-    const file = await drive.loadProjectFile(id);
+    const file = await repoFor(projectConnectionId()).loadProjectFile(id);
     project = parseProject(file.json);
     base = structuredClone(project);
     version = file.version;
@@ -316,7 +406,13 @@ export function createNodeSession(options: NodeSessionOptions) {
     getProject: () => project,
     getFolderId: folderId,
     updateProject: (mutation) => deps.updateProject(mutation),
-    storage: drive,
+    // Resolved per call rather than once, since the open project's connection can change between runs.
+    storage: {
+      uploadImage: (fid, file, name) => repoFor(projectConnectionId()).uploadImage(fid, file, name),
+      trashFile: (fid, fileName) => repoFor(projectConnectionId()).trashFile(fid, fileName),
+      downloadFile: (fid, fileName) => repoFor(projectConnectionId()).downloadFile(fid, fileName),
+      findFileByName: (fid, name) => repoFor(projectConnectionId()).findFileByName(fid, name),
+    },
   });
 
   const deps: ComicBuilderDeps = {
@@ -351,37 +447,98 @@ export function createNodeSession(options: NodeSessionOptions) {
     setStatus: () => undefined,
 
     connectStorageWithDevice: startLogin,
-    connectStorageWithServer: () => {
-      throw new Error(
-        'The CLI does not support a storage server yet: it only works against Google Drive. Use ' +
-          '"vibecomics auth login".'
-      );
+    connectStorageWithServer: async (url) => {
+      const normalized = normalizeServerUrl(url);
+      await checkServerHealth(normalized, fetchImpl);
+      setState((s) => ({
+        ...s,
+        servers: (s.servers ?? []).includes(normalized)
+          ? s.servers
+          : [...(s.servers ?? []), normalized],
+      }));
     },
     disconnectStorage: async () => {
       await save();
-      await auth.logout();
+      const { refreshToken, accessToken } = state.auth ?? {};
+      const token = refreshToken ?? accessToken;
+      if (token) await revokeToken(token, fetchImpl).catch(() => undefined);
+      project = null;
+      base = null;
+      dirty = false;
+      setState(() => ({}));
     },
     getStorageStatus: () => ({
-      connected: Boolean(validToken() || state.auth?.refreshToken),
+      connected: driveConnected() || (state.servers?.length ?? 0) > 0,
       configured: deviceClient !== null,
     }),
+    listStorageConnections: async (): Promise<StorageConnectionInfo[]> => {
+      const result: StorageConnectionInfo[] = [
+        {
+          id: DRIVE_CONNECTION_ID,
+          kind: 'drive',
+          label: 'Google Drive',
+          connected: driveConnected(),
+        },
+      ];
+      for (const url of state.servers ?? []) {
+        let connected = true;
+        try {
+          await checkServerHealth(url, fetchImpl);
+        } catch {
+          connected = false;
+        }
+        result.push({ id: serverConnectionId(url), kind: 'server', label: url, connected });
+      }
+      return result;
+    },
+    disconnectStorageConnection: async (id) => {
+      if (state.project && projectConnectionId() === id) {
+        await save();
+        dropProject();
+      }
+      if (id === DRIVE_CONNECTION_ID) {
+        await auth.logout();
+      } else if (id.startsWith('server:')) {
+        const url = id.slice('server:'.length);
+        setState((s) => ({ ...s, servers: (s.servers ?? []).filter((u) => u !== url) }));
+      }
+    },
 
-    listStorageProjects: () => drive.listProjectFolders(),
+    listStorageProjects: () => listAllProjectFolders(),
 
     getGeneratorConfig: () => state.generator ?? null,
     setGeneratorConfig: (config) => setState((s) => ({ ...s, generator: config ?? undefined })),
     generatorFetch: fetchImpl,
 
-    createStorageProject: async (name, pageSize) => {
-      const created = await createOrOpenProject(drive, name, pageSize);
-      showProject(created.project, created.folder, created.version);
+    createStorageProject: async (name, pageSize, connectionId) => {
+      const resolved =
+        connectionId ??
+        (() => {
+          const live = [
+            ...(driveConnected() ? [DRIVE_CONNECTION_ID] : []),
+            ...(state.servers ?? []).map(serverConnectionId),
+          ];
+          if (live.length === 1) return live[0];
+          if (live.length === 0) {
+            throw new Error(
+              `No storage connection is live. ${LOGIN_HINT} or run "storage connectWithServer <url>".`
+            );
+          }
+          throw new Error(
+            `More than one storage connection is live (${live.join(', ')}); pass --connectionId.`
+          );
+        })();
+      const repo = repoFor(resolved);
+      const created = await createOrOpenProject(repo, name, pageSize);
+      showProject(created.project, created.folder, created.version, resolved);
       return created.folder;
     },
 
     openStorageProject: async (folder) => {
+      const connectionId = folder.connectionId ?? DRIVE_CONNECTION_ID;
       try {
-        const file = await drive.loadProjectFile(folder.id);
-        showProject(parseProject(file.json), folder, file.version);
+        const file = await repoFor(connectionId).loadProjectFile(folder.id);
+        showProject(parseProject(file.json), folder, file.version, connectionId);
         return { ok: true };
       } catch (e) {
         return { ok: false, error: `Could not open "${folder.name}": ${errorMessage(e)}` };
@@ -393,7 +550,7 @@ export function createNodeSession(options: NodeSessionOptions) {
       dropProject();
     },
 
-    showProjectTiles: () => drive.listProjectFolders(),
+    showProjectTiles: () => listAllProjectFolders(),
 
     flushStorageSave: async () => {
       if (!project) return { ok: false, error: 'No project is open.' };

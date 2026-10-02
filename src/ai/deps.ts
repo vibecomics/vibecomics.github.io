@@ -1,5 +1,6 @@
 import type { MediaRemoval } from '../state/media';
 import type { DeviceCodeInfo } from '../drive/deviceOAuth';
+import type { StorageConnectionInfo } from '../storage/connections';
 import type { ProjectFolder } from '../storage/types';
 import type { GeneratorConfig } from '../generators/types';
 import type { Bubble, ComicProject, Layer, MediaItem, PageSize, Variation } from '../types/comic';
@@ -21,12 +22,25 @@ export interface ComicBuilderDeps {
   setPageIndex(i: number): void;
   setPreview(open: boolean): void;
   setStatus(msg: string): void;
+  /** Connect Google Drive as an additional connection (it does not replace any other). */
   connectStorageWithDevice(): Promise<DeviceCodeInfo>;
+  /** Connect an HTTP storage server as an additional connection; several can be connected at once. */
   connectStorageWithServer(url: string): Promise<void>;
+  /** Disconnect every live connection (the browser) or log out of Drive (the CLI). */
   disconnectStorage(): Promise<void>;
+  /** `connected` is true when at least one connection is live. */
   getStorageStatus(): { connected: boolean; configured: boolean };
+  /** Every connection currently live (both the browser and the CLI can have several at once). */
+  listStorageConnections?(): Promise<StorageConnectionInfo[]>;
+  /** Disconnect one connection by id (see listStorageConnections). */
+  disconnectStorageConnection?(id: string): Promise<void>;
   listStorageProjects(): Promise<ProjectFolder[]>;
-  createStorageProject(name: string, pageSize?: PageSize): Promise<ProjectFolder>;
+  /** `connectionId` picks which connection to create it in; required when more than one is live. */
+  createStorageProject(
+    name: string,
+    pageSize?: PageSize,
+    connectionId?: string
+  ): Promise<ProjectFolder>;
   openStorageProject(folder: ProjectFolder): Promise<ActionResult>;
   /** Save unsaved changes, then close the project (it stays open if saving fails). */
   closeStorageProject(): Promise<void>;
