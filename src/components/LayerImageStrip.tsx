@@ -10,12 +10,12 @@ const MIN_STEP = 22;
 
 export interface LayerImage {
   item: MediaItem;
-  /** Whether this is the layer's current image (the rest is its history). */
+  /** Whether this is the layer's current image (the rest are its history). */
   current: boolean;
 }
 
 interface Props {
-  /** Every image this layer (or background) has, current first. */
+  /** Every image this layer (or background) has, in a fixed order; the current one is flagged. */
   images: LayerImage[];
   busy: boolean;
   /** Label for the trailing "+" tile, e.g. "Add background image". */
@@ -60,7 +60,7 @@ export default function LayerImageStrip({
       {images.map(({ item, current }, i) => (
         <div
           key={item.id}
-          className="layer-image-strip-slot"
+          className={current ? 'layer-image-strip-slot is-current' : 'layer-image-strip-slot'}
           style={{ left: i * step, zIndex: hoveredId === item.id ? images.length + 1 : i }}
           onMouseEnter={() => setHoveredId(item.id)}
           onMouseLeave={() => setHoveredId((id) => (id === item.id ? null : id))}
@@ -79,13 +79,6 @@ export default function LayerImageStrip({
             removeGlyph="🔗"
             removeTitle="Unlink this image from the layer (it stays in the project)"
           />
-          {current && (
-            <span
-              className="layer-image-strip-current"
-              title="This layer's current image"
-              aria-hidden="true"
-            />
-          )}
         </div>
       ))}
       <button

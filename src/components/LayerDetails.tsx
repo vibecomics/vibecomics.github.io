@@ -37,24 +37,26 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
     ? scenes.find((s) => s.id === layer.sceneId)
     : [...characters, ...objects].find((e) => e.id === layer.subjectId);
   const variationKnown = linkedEntry?.variations.some((v) => v.id === layer.variationId) ?? false;
-  const currentItem = media.find((m) => m.id === layer.mediaId);
-  const historyItems = (layer.mediaHistory ?? []).flatMap((id) => {
-    const item = media.find((m) => m.id === id);
-    return item ? [item] : [];
-  });
-  const images: LayerImage[] = [
-    ...(currentItem ? [{ item: currentItem, current: true }] : []),
-    ...historyItems.map((item) => ({ item, current: false })),
-  ];
+  // In the media registry's own order (it only ever grows), so an image keeps its slot in the strip
+  // when it's selected or unselected; the current one is flagged, not moved to the front.
+  const ownIds = new Set([layer.mediaId, ...(layer.mediaHistory ?? [])]);
+  const images: LayerImage[] = media
+    .filter((item) => ownIds.has(item.id))
+    .map((item) => ({ item, current: item.id === layer.mediaId }));
+
+  /** The layer as it is right now: `layer` is the snapshot this render was given, which can be stale
+   * by the time a modal's callback runs (a generation may have just set its image). */
+  const live = () => cb().layers.get(panelId, layer.id) ?? layer;
 
   /** Unlinks one image from the layer — the current image is cleared (it moves to history), a
    * history image is dropped from history — without deleting it from the project (contrast
    * media.delete, which would remove it everywhere it's used). */
   function unlinkImage(id: string) {
-    if (id === layer.mediaId) {
+    const current = live();
+    if (id === current.mediaId) {
       update({ mediaId: null });
     } else {
-      update({ mediaHistory: (layer.mediaHistory ?? []).filter((h) => h !== id) });
+      update({ mediaHistory: (current.mediaHistory ?? []).filter((h) => h !== id) });
     }
   }
 
@@ -168,7 +170,7 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
             update(
               primary
                 ? { mediaId: result.id, aspectRatio: result.aspectRatio }
-                : addToHistoryPatch(layer, result.id)
+                : addToHistoryPatch(live(), result.id)
             )
           }
           onClose={() => setGeneratingModal(false)}

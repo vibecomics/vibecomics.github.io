@@ -74,6 +74,11 @@ test('addToHistoryPatch moves an image already in history back to the front', ()
   assert.deepEqual(addToHistoryPatch(layer, 'm0'), { mediaHistory: ['m0', 'm1'] });
 });
 
+test('addToHistoryPatch leaves history alone when the image is already the current one', () => {
+  const layer = { mediaId: 'm2', mediaHistory: ['m1'] } as never;
+  assert.deepEqual(addToHistoryPatch(layer, 'm2'), {});
+});
+
 test('dirtyLayerRefs finds every dirty layer across pages and panels', () => {
   const project: ComicProject = createBlankProject('Test');
   project.pages[0].panels[0].layers.push(

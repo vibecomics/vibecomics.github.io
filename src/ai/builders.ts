@@ -463,6 +463,8 @@ export function imageUnlinkPatch(current: Layer): Pick<Layer, 'dirty'> {
  * that the user might never get to.
  */
 export function addToHistoryPatch(current: Layer, mediaId: string): Pick<Layer, 'mediaHistory'> {
+  // The current image is already on the layer; listing it in history too would show it twice.
+  if (mediaId === current.mediaId) return {};
   const history = (current.mediaHistory ?? []).filter((id) => id !== mediaId);
   history.unshift(mediaId);
   return { mediaHistory: history.slice(0, MEDIA_HISTORY_LIMIT) };

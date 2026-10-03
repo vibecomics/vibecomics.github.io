@@ -104,3 +104,41 @@ test('defaultLayerReferences mirrors defaultEntryReferences for a layer pinned t
 
   assert.deepEqual(defaultLayerReferences(deps, project.pages[0].panels[0].id, 'l1'), []);
 });
+
+test("defaultLayerReferences sends the layer's own images first, then the subject's, once each", () => {
+  const project = withCharacter((p) => {
+    p.metadata.characters.push({
+      id: 'char1',
+      name: 'Mara',
+      description: 'A girl.',
+      imageIds: ['m-sheet'],
+      sceneIds: [],
+      variations: [],
+    });
+    for (const id of ['m-current', 'm-old', 'm-sheet']) {
+      p.metadata.media.push({ id, name: id, fileName: `${id}.png`, mimeType: 'image/png' });
+    }
+    p.pages[0].panels[0].layers.push({
+      id: 'l1',
+      name: 'Mara running',
+      kind: 'foreground',
+      visible: true,
+      x: 0,
+      y: 0,
+      width: 100,
+      rotation: 0,
+      opacity: 1,
+      subjectId: 'char1',
+      mediaId: 'm-current',
+      mediaHistory: ['m-old', 'm-sheet', 'm-gone'],
+    });
+  });
+  const deps = makeDeps(project);
+
+  const note = "Match this character's design exactly (face, proportions, outfit, colors).";
+  assert.deepEqual(defaultLayerReferences(deps, project.pages[0].panels[0].id, 'l1'), [
+    { mediaId: 'm-current' },
+    { mediaId: 'm-old' },
+    { mediaId: 'm-sheet', note },
+  ]);
+});

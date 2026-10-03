@@ -1527,8 +1527,9 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     generate: {
       /**
        * Generate a new image for one layer (or background), regardless of
-       * dirty. Registers the image but does not set it as the layer's image —
-       * review it, then commit it yourself with layers.update(panelId,
+       * dirty. Registers the image. If the layer has no image yet, the new one
+       * becomes its image straight away; otherwise it does not replace the
+       * current one — review it, then commit it yourself with layers.update(panelId,
        * layerId, { mediaId, aspectRatio }) (the previous image, if any, is
        * kept in the layer's history rather than discarded when you do; see
        * mediaHistory in the data model).
@@ -1538,12 +1539,21 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @param references - Optional reference images to send instead of the defaults (see generate.layerReferences), each { mediaId, note? }; a note says how to use that image and is added to the prompt. Extras beyond generate.maxReferenceImages are ignored.
        * @returns A promise resolving to the new MediaItem, plus the aspect ratio the image actually came out at. Rejects when no generator is configured, or generation fails.
        */
-      layer: (
+      layer: async (
         panelId: string,
         layerId: string,
         prompt?: string,
         references?: GenerationReference[]
-      ): Promise<GeneratedImage> => generateLayerImage(deps, panelId, layerId, prompt, references),
+      ): Promise<GeneratedImage> => {
+        const image = await generateLayerImage(deps, panelId, layerId, prompt, references);
+        // A layer with no image yet takes its first generated one; once it has one, a new generation
+        // waits for an explicit choice so the current image isn't swapped out from under the user.
+        const layer = layers.get(panelId, layerId);
+        if (layer && !layer.mediaId) {
+          setLayerMedia(panelId, layerId, image.id, image.aspectRatio);
+        }
+        return image;
+      },
 
       /**
        * Cancel a layer's (or background's) outstanding generation request, if it has one: one still
@@ -1556,8 +1566,9 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         cancelLayerGeneration(panelId, layerId),
 
       /**
-       * The reference images generate.layer sends by default: those of the layer's character/object
-       * (foreground) or scene (background).
+       * The reference images generate.layer sends by default: the layer's own images (its current
+       * image, then its history), then those of the layer's character/object (foreground) or scene
+       * (background).
        * @param panelId - The panel id.
        * @param layerId - The layer id.
        * @returns The references, in the order they're sent.

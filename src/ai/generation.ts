@@ -6,8 +6,9 @@
  * request runs at a time and its progress is visible regardless of which entry point started it.
  *
  * A single layer or reference-image generation only registers the result (like media.upload) — it
- * does not set it as the layer's image or add it to a story-bible entry's imageIds. The caller
- * previews it and commits with layers.update(..., { mediaId }) or characters.update(..., { imageIds }).
+ * does not add it to a story-bible entry's imageIds, and it sets it as a layer's image only when the
+ * layer has none yet (see the generate.layer action). The caller previews it and commits with
+ * layers.update(..., { mediaId }) or characters.update(..., { imageIds }).
  * The dirty-batch path is the exception: it has no one to show a preview to, so it commits each result
  * itself as it goes.
  */
@@ -377,7 +378,7 @@ async function generateReferenceOne(
 }
 
 /** Generates and registers a new image for a layer (or background); does not set it as the layer's
- * image (see the module doc) — commit it yourself with layers.update(..., { mediaId, aspectRatio }). */
+ * image (see the module doc) — the generate.layer action does that only when the layer has none yet. */
 export function generateLayerImage(
   deps: ComicBuilderDeps,
   panelId: string,
@@ -528,9 +529,11 @@ function referenceIdsFor(entry: StoryEntry, variation: Variation | undefined): s
   return variation.imageIds.length ? variation.imageIds : entry.imageIds;
 }
 
-/** The images a layer's generation sends by default: its subject's/scene's chosen variation (see
- * layer.variationId) if it has one and that variation has images yet; otherwise every image the
- * character/object (foreground) or scene (background) it shows has — see referenceIdsFor. */
+/** The images a layer's generation sends by default: the layer's own images first (its current image,
+ * then its history, most recent first — so regenerating keeps the look it already has), then its
+ * subject's/scene's chosen variation (see layer.variationId) if it has one and that variation has
+ * images yet; otherwise every image the character/object (foreground) or scene (background) it shows
+ * has — see referenceIdsFor. An image in both lists is sent once. */
 export function defaultLayerReferences(
   deps: ComicBuilderDeps,
   panelId: string,
@@ -540,12 +543,16 @@ export function defaultLayerReferences(
   const layer = findPanel(project, panelId)?.layers.find((l) => l.id === layerId);
   if (!layer) throw new Error(`Layer "${layerId}" not found.`);
   const subject = layerSubject(project, layer);
-  if (!subject) return [];
-  const variation = layer.variationId
-    ? subject.variations.find((v) => v.id === layer.variationId)
-    : undefined;
-  const ids = referenceIdsFor(subject, variation);
-  return ids.map((mediaId) => referenceTo(project, mediaId, subject.id));
+  const variation =
+    subject && layer.variationId
+      ? subject.variations.find((v) => v.id === layer.variationId)
+      : undefined;
+  const ownIds = [layer.mediaId, ...(layer.mediaHistory ?? [])].filter(
+    (id): id is string => Boolean(id) && project.metadata.media.some((m) => m.id === id)
+  );
+  const subjectIds = subject ? referenceIdsFor(subject, variation) : [];
+  const ids = [...new Set([...ownIds, ...subjectIds])];
+  return ids.map((mediaId) => referenceTo(project, mediaId, subject?.id));
 }
 
 /** The images a story-bible entry's reference generation sends by default: with `variationId`, that

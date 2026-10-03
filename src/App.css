@@ -707,16 +707,11 @@ kept the same size regardless of that content so a row of them lines up evenly. 
   filter: drop-shadow(0 2px 8px rgba(0, 0, 0, 0.4));
 }
 
-.layer-image-strip-current {
-  position: absolute;
-  bottom: 2px;
-  left: 2px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: #0d6efd;
-  border: 1px solid #fff;
-  pointer-events: none;
+/* The layer's current image sits on a yellow background; the others have none. */
+.layer-image-strip-slot.is-current {
+  padding: 3px;
+  border-radius: 6px;
+  background: #ffd43b;
 }
 
 .layer-image-strip-add {
