@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
 import { addToHistoryPatch } from '../ai/builders';
+import { ALWAYS_INCLUDED_LAYER_PARTS } from '../ai/prompt';
 import type { LayerUpdate } from '../ai/deps';
 import type { Layer, MediaItem } from '../types/comic';
 import { uploadImage, setLayerMedia } from './panelActions';
@@ -162,6 +163,7 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           currentEntryId={linkedId}
           getDefaultPromptParts={() => cb().generate.layerPromptParts(panelId, layer.id)}
           getDefaultReferences={() => cb().generate.layerReferences(panelId, layer.id)}
+          promptButtons={{ alwaysIncluded: ALWAYS_INCLUDED_LAYER_PARTS }}
           media={media}
           onGenerate={(prompt, references) =>
             cb().generate.layer(panelId, layer.id, prompt, references)
@@ -210,7 +212,6 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           blockedReason={layer.prompt?.trim() ? undefined : 'Write a prompt first'}
           title="Generate a new image from this prompt"
           onClick={() => setGeneratingModal(true)}
-          onCancel={() => cb().generate.cancelLayer(panelId, layer.id)}
         />
         <div className="flex-grow-1">
           <SliderRow

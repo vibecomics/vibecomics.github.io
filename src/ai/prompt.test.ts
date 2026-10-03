@@ -9,6 +9,9 @@ import {
   buildLayerPromptParts,
   buildReferencePromptParts,
   defaultReferenceNote,
+  initialPromptText,
+  insertPartText,
+  removePartText,
 } from './prompt';
 
 function projectWithScene(): ComicProject {
@@ -313,4 +316,59 @@ test('buildReferencePromptParts throws for a variationId not on the entry', () =
     () => buildReferencePromptParts(project, 'characters', 'char1', 'nope'),
     /not found/
   );
+});
+
+const STITCHED = [
+  { label: 'Style', text: 'Watercolor.' },
+  { label: 'Character style', text: 'Big eyes.' },
+  { label: 'Character', text: 'Mara, a girl.' },
+  { label: 'Layer prompt', text: 'Running.' },
+  { label: 'Technical requirements', text: 'One pose.' },
+];
+
+test('initialPromptText has every part when there are no reference images', () => {
+  assert.equal(
+    initialPromptText(STITCHED, ['Layer prompt', 'Technical requirements'], false),
+    'Watercolor.\n\nBig eyes.\n\nMara, a girl.\n\nRunning.\n\nOne pose.'
+  );
+});
+
+test('initialPromptText keeps only the always-included parts when there are reference images', () => {
+  assert.equal(
+    initialPromptText(STITCHED, ['Layer prompt', 'Technical requirements'], true),
+    'Running.\n\nOne pose.'
+  );
+});
+
+test('insertPartText puts a part after the nearest earlier part already in the prompt', () => {
+  assert.equal(
+    insertPartText('Watercolor.\n\nOne pose.', STITCHED, STITCHED[2]),
+    'Watercolor.\n\nMara, a girl.\n\nOne pose.'
+  );
+});
+
+test('insertPartText puts a part before the nearest later part when no earlier one is present', () => {
+  assert.equal(
+    insertPartText('Running.\n\nOne pose.', STITCHED, STITCHED[2]),
+    'Mara, a girl.\n\nRunning.\n\nOne pose.'
+  );
+});
+
+test('insertPartText puts the Style part in front of a prompt with later parts', () => {
+  assert.equal(insertPartText('One pose.', STITCHED, STITCHED[0]), 'Watercolor.\n\nOne pose.');
+});
+
+test('insertPartText on an empty prompt is just the part', () => {
+  assert.equal(insertPartText('', STITCHED, STITCHED[3]), 'Running.');
+});
+
+test('removePartText takes a part out with the separator that joined it in', () => {
+  assert.equal(removePartText('A.\n\nB.\n\nC.', 'B.'), 'A.\n\nC.');
+  assert.equal(removePartText('A.\n\nB.', 'B.'), 'A.');
+  assert.equal(removePartText('A.\n\nB.', 'A.'), 'B.');
+  assert.equal(removePartText('A.', 'A.'), '');
+});
+
+test('removePartText leaves the prompt alone when the part is no longer in it', () => {
+  assert.equal(removePartText('A.\n\nC.', 'B.'), 'A.\n\nC.');
 });

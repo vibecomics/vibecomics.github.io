@@ -10,11 +10,64 @@ export interface PromptPart {
   text: string;
 }
 
+/** The layer (or background) prompt parts that are always in the prompt, and can't be toggled off in
+ * the generate dialog. */
+export const ALWAYS_INCLUDED_LAYER_PARTS = ['Layer prompt', 'Technical requirements'] as const;
+
 /** Trims every part's text and drops any that end up empty — what a raw list of (label, maybe-empty
  * text) pairs becomes before it's shown (buildLayerPromptParts/buildReferencePromptParts) or sent to
  * a generator (joinPromptParts). */
 function keepNonEmpty(parts: { label: string; text: string | undefined }[]): PromptPart[] {
   return parts.flatMap(({ label, text }) => (text?.trim() ? [{ label, text: text.trim() }] : []));
+}
+
+const PART_SEPARATOR = '\n\n';
+
+/** The text for a prompt-button layout's starting prompt: the always-included parts, plus every other
+ * part when there are no reference images to carry the look instead. */
+export function initialPromptText(
+  parts: PromptPart[],
+  alwaysIncluded: readonly string[],
+  hasReferences: boolean
+): string {
+  return joinPromptParts(
+    parts.filter((part) => alwaysIncluded.includes(part.label) || !hasReferences)
+  );
+}
+
+/** Adds one part's text to the prompt, placed after the nearest earlier part already in it (or before
+ * the nearest later one), so the prompt keeps its parts in their stitching order. */
+export function insertPartText(text: string, parts: PromptPart[], part: PromptPart): string {
+  const piece = part.text.trim();
+  const index = parts.findIndex((p) => p.label === part.label);
+  const inPrompt = (p: PromptPart) => {
+    const t = p.text.trim();
+    return t && text.includes(t) ? t : undefined;
+  };
+  for (let j = index - 1; j >= 0; j--) {
+    const t = inPrompt(parts[j]);
+    if (t) {
+      const end = text.indexOf(t) + t.length;
+      return text.slice(0, end) + PART_SEPARATOR + piece + text.slice(end);
+    }
+  }
+  for (let j = index + 1; j < parts.length; j++) {
+    const t = inPrompt(parts[j]);
+    if (t) {
+      const start = text.indexOf(t);
+      return text.slice(0, start) + piece + PART_SEPARATOR + text.slice(start);
+    }
+  }
+  return text.trim() ? piece + PART_SEPARATOR + text : piece;
+}
+
+/** Removes one part's text from the prompt along with the separator that joined it in. */
+export function removePartText(text: string, piece: string): string {
+  for (const candidate of [PART_SEPARATOR + piece, piece + PART_SEPARATOR, piece]) {
+    const at = text.indexOf(candidate);
+    if (at !== -1) return text.slice(0, at) + text.slice(at + candidate.length);
+  }
+  return text;
 }
 
 /** Joins prompt parts into the single string a generator takes, in order, dropping any with no text.

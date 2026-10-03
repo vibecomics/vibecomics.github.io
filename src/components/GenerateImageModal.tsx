@@ -1,7 +1,13 @@
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { cb } from '../ai/actions';
-import { defaultReferenceNote, joinPromptParts } from '../ai/prompt';
+import {
+  defaultReferenceNote,
+  initialPromptText,
+  insertPartText,
+  joinPromptParts,
+  removePartText,
+} from '../ai/prompt';
 import type { GenerationReference, PromptPart } from '../ai/prompt';
 import type { ComicProject, MediaItem } from '../types/comic';
 import { uploadImage } from './panelActions';
@@ -38,6 +44,12 @@ interface CommonProps {
   getDefaultPromptParts: () => PromptPart[];
   /** The reference images sent by default; the user can remove some, add others and annotate each. */
   getDefaultReferences: () => GenerationReference[];
+  /** Shows the prompt as one editable text box with a button per part (Style, Character, ...) that
+   * inserts or removes that part's text. Parts named in `alwaysIncluded` are always in the prompt and
+   * their buttons are locked on. Without this, the parts are shown as an expandable list. By default
+   * only the always-included parts start in the prompt when there are reference images; otherwise
+   * every part does. */
+  promptButtons?: { alwaysIncluded: readonly string[] };
   /** Every image in the project: what the user can pick references from. */
   media: MediaItem[];
   onClose: () => void;
@@ -98,6 +110,7 @@ export default function GenerateImageModal(props: Props) {
     currentEntryId,
     getDefaultPromptParts,
     getDefaultReferences,
+    promptButtons,
     media,
     bulk,
     onClose,
@@ -107,13 +120,28 @@ export default function GenerateImageModal(props: Props) {
   // than index so it survives a part being deleted.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
   const [references, setReferences] = useState(getDefaultReferences);
+  // The whole prompt, for the prompt-button layout (the list layout derives it from `parts`).
+  const [text, setText] = useState(() =>
+    promptButtons
+      ? initialPromptText(parts, promptButtons.alwaysIncluded, references.length > 0)
+      : ''
+  );
   const [picking, setPicking] = useState(false);
   const max = cb().generate.maxReferenceImages();
   const [result, setResult] = useState<Generated | null>(null);
   const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
   const task = useTask();
 
-  const prompt = joinPromptParts(parts);
+  const prompt = promptButtons ? text : joinPromptParts(parts);
+
+  function togglePromptPart(part: PromptPart) {
+    setText((current) => {
+      const piece = part.text.trim();
+      return current.includes(piece)
+        ? removePartText(current, piece)
+        : insertPartText(current, parts, part);
+    });
+  }
 
   function togglePart(label: string) {
     setExpanded((current) => {
@@ -182,65 +210,106 @@ export default function GenerateImageModal(props: Props) {
               <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
             </div>
             <div className="modal-body">
-              <label className="form-label small">
-                Prompt <span className="text-muted">({parts.length} parts stitched together)</span>
-              </label>
-              <div className="mb-3">
-                {parts.length === 0 && (
-                  <div className="text-muted small mb-2">
-                    Every part of the prompt was removed — there's nothing to generate from.
-                  </div>
-                )}
-                {parts.map((part, i) => {
-                  const isOpen = expanded.has(part.label);
-                  return (
-                    <div key={part.label} className="mb-1">
-                      <div className="d-flex align-items-center">
+              {promptButtons ? (
+                <div className="mb-3">
+                  <label className="form-label small">Prompt</label>
+                  <div className="d-flex flex-wrap gap-2 mb-2">
+                    {parts.map((part) => {
+                      const piece = part.text.trim();
+                      const selected = text.includes(piece);
+                      const locked = promptButtons.alwaysIncluded.includes(part.label);
+                      return (
                         <button
+                          key={part.label}
                           type="button"
-                          className="btn btn-link btn-sm flex-grow-1 text-start text-decoration-none d-flex align-items-center gap-2 px-2 py-1"
-                          style={{ minWidth: 0 }}
-                          onClick={() => togglePart(part.label)}
-                          aria-expanded={isOpen}
+                          className={`btn btn-sm ${selected ? 'btn-primary' : 'btn-outline-secondary'}`}
+                          aria-pressed={selected}
+                          disabled={locked}
+                          title={
+                            locked
+                              ? `${part.label} is always in the prompt`
+                              : `${selected ? 'Remove' : 'Insert'} the ${part.label} text`
+                          }
+                          onClick={() => togglePromptPart(part)}
                         >
-                          <span aria-hidden="true">{isOpen ? '▾' : '▸'}</span>
-                          <strong className="small text-nowrap">{part.label}</strong>
-                          {!isOpen && (
-                            <span
-                              className="text-muted small text-truncate"
-                              style={{ minWidth: 0 }}
-                            >
-                              {part.text}
-                            </span>
-                          )}
+                          {selected && '✓ '}
+                          {part.label}
                         </button>
-                        {isOpen && (
-                          <button
-                            type="button"
-                            className="btn btn-link btn-sm p-0 me-2 text-secondary d-flex align-items-center"
-                            title={`Remove "${part.label}" from the prompt`}
-                            aria-label={`Remove "${part.label}" from the prompt`}
-                            onClick={() => removePart(i)}
-                          >
-                            <TrashIcon />
-                          </button>
-                        )}
+                      );
+                    })}
+                  </div>
+                  <textarea
+                    className="form-control form-control-sm w-100"
+                    rows={8}
+                    value={text}
+                    aria-label="Prompt"
+                    onChange={(e) => setText(e.target.value)}
+                  />
+                </div>
+              ) : (
+                <>
+                  <label className="form-label small">
+                    Prompt{' '}
+                    <span className="text-muted">({parts.length} parts stitched together)</span>
+                  </label>
+                  <div className="mb-3">
+                    {parts.length === 0 && (
+                      <div className="text-muted small mb-2">
+                        Every part of the prompt was removed — there's nothing to generate from.
                       </div>
-                      {isOpen && (
-                        <div className="px-2 pb-2">
-                          <textarea
-                            className="form-control form-control-sm w-100"
-                            rows={4}
-                            value={part.text}
-                            aria-label={`${part.label} text`}
-                            onChange={(e) => updatePartText(i, e.target.value)}
-                          />
+                    )}
+                    {parts.map((part, i) => {
+                      const isOpen = expanded.has(part.label);
+                      return (
+                        <div key={part.label} className="mb-1">
+                          <div className="d-flex align-items-center">
+                            <button
+                              type="button"
+                              className="btn btn-link btn-sm flex-grow-1 text-start text-decoration-none d-flex align-items-center gap-2 px-2 py-1"
+                              style={{ minWidth: 0 }}
+                              onClick={() => togglePart(part.label)}
+                              aria-expanded={isOpen}
+                            >
+                              <span aria-hidden="true">{isOpen ? '▾' : '▸'}</span>
+                              <strong className="small text-nowrap">{part.label}</strong>
+                              {!isOpen && (
+                                <span
+                                  className="text-muted small text-truncate"
+                                  style={{ minWidth: 0 }}
+                                >
+                                  {part.text}
+                                </span>
+                              )}
+                            </button>
+                            {isOpen && (
+                              <button
+                                type="button"
+                                className="btn btn-link btn-sm p-0 me-2 text-secondary d-flex align-items-center"
+                                title={`Remove "${part.label}" from the prompt`}
+                                aria-label={`Remove "${part.label}" from the prompt`}
+                                onClick={() => removePart(i)}
+                              >
+                                <TrashIcon />
+                              </button>
+                            )}
+                          </div>
+                          {isOpen && (
+                            <div className="px-2 pb-2">
+                              <textarea
+                                className="form-control form-control-sm w-100"
+                                rows={4}
+                                value={part.text}
+                                aria-label={`${part.label} text`}
+                                onChange={(e) => updatePartText(i, e.target.value)}
+                              />
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
               <label className="form-label small">
                 Reference images{' '}
                 <span className="text-muted">
