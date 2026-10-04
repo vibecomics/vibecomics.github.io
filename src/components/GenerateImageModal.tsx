@@ -45,11 +45,10 @@ interface CommonProps {
   /** The reference images sent by default; the user can remove some, add others and annotate each. */
   getDefaultReferences: () => GenerationReference[];
   /** Shows the prompt as one editable text box with a button per part (Style, Character, ...) that
-   * inserts or removes that part's text. Parts named in `alwaysIncluded` are always in the prompt and
-   * their buttons are locked on. Without this, the parts are shown as an expandable list. By default
-   * only the always-included parts start in the prompt when there are reference images; otherwise
-   * every part does. */
-  promptButtons?: { alwaysIncluded: readonly string[] };
+   * inserts or removes that part's text; any part can be toggled off. Without this, the parts are
+   * shown as an expandable list. The parts named in `coreLabels` start in the prompt even when there
+   * are reference images; otherwise every part does. */
+  promptButtons?: { coreLabels: readonly string[] };
   /** Every image in the project: what the user can pick references from. */
   media: MediaItem[];
   onClose: () => void;
@@ -122,9 +121,7 @@ export default function GenerateImageModal(props: Props) {
   const [references, setReferences] = useState(getDefaultReferences);
   // The whole prompt, for the prompt-button layout (the list layout derives it from `parts`).
   const [text, setText] = useState(() =>
-    promptButtons
-      ? initialPromptText(parts, promptButtons.alwaysIncluded, references.length > 0)
-      : ''
+    promptButtons ? initialPromptText(parts, promptButtons.coreLabels, references.length > 0) : ''
   );
   const [picking, setPicking] = useState(false);
   const max = cb().generate.maxReferenceImages();
@@ -217,19 +214,13 @@ export default function GenerateImageModal(props: Props) {
                     {parts.map((part) => {
                       const piece = part.text.trim();
                       const selected = text.includes(piece);
-                      const locked = promptButtons.alwaysIncluded.includes(part.label);
                       return (
                         <button
                           key={part.label}
                           type="button"
                           className={`btn btn-sm ${selected ? 'btn-primary' : 'btn-outline-secondary'}`}
                           aria-pressed={selected}
-                          disabled={locked}
-                          title={
-                            locked
-                              ? `${part.label} is always in the prompt`
-                              : `${selected ? 'Remove' : 'Insert'} the ${part.label} text`
-                          }
+                          title={`${selected ? 'Remove' : 'Insert'} the ${part.label} text`}
                           onClick={() => togglePromptPart(part)}
                         >
                           {selected && '✓ '}

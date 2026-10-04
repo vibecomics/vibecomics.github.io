@@ -10,9 +10,9 @@ export interface PromptPart {
   text: string;
 }
 
-/** The layer (or background) prompt parts that are always in the prompt, and can't be toggled off in
- * the generate dialog. */
-export const ALWAYS_INCLUDED_LAYER_PARTS = ['Layer prompt', 'Technical requirements'] as const;
+/** The layer (or background) prompt parts the generate dialog starts with even when there are reference
+ * images; every part can still be toggled off there. */
+export const CORE_LAYER_PARTS = ['Layer prompt', 'Technical requirements'] as const;
 
 /** Trims every part's text and drops any that end up empty — what a raw list of (label, maybe-empty
  * text) pairs becomes before it's shown (buildLayerPromptParts/buildReferencePromptParts) or sent to
@@ -23,16 +23,14 @@ function keepNonEmpty(parts: { label: string; text: string | undefined }[]): Pro
 
 const PART_SEPARATOR = '\n\n';
 
-/** The text for a prompt-button layout's starting prompt: the always-included parts, plus every other
- * part when there are no reference images to carry the look instead. */
+/** The starting text for the generate dialog's prompt buttons: the core parts, plus every other part
+ * when there are no reference images to carry the look instead. */
 export function initialPromptText(
   parts: PromptPart[],
-  alwaysIncluded: readonly string[],
+  coreLabels: readonly string[],
   hasReferences: boolean
 ): string {
-  return joinPromptParts(
-    parts.filter((part) => alwaysIncluded.includes(part.label) || !hasReferences)
-  );
+  return joinPromptParts(parts.filter((part) => coreLabels.includes(part.label) || !hasReferences));
 }
 
 /** Adds one part's text to the prompt, placed after the nearest earlier part already in it (or before
