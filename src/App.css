@@ -198,7 +198,7 @@
 }
 
 /* ---- Layers and bubbles -------------------------------------------------
-   Only the highlighted panel uses z-index (selected layer 4, bubbles 5, pointers 6, handles 12),
+   Only the highlighted panel uses z-index (selected layer 4, pointers 4 so they sit behind their bubble, bubbles 5, handles 12),
    and it is painted last, so its content always sits above every other panel's canvas, number
    and bubbles. Elsewhere, DOM order stacks number, layers, then bubbles. */
 
@@ -373,6 +373,11 @@
   white-space: pre-wrap;
 }
 
+/* A speech or shout bubble's outline is drawn with its pointer (see BodyOutline in BubbleView.tsx). */
+.bubble.speech {
+  border: 0;
+}
+
 .bubble.thought {
   border-style: dashed;
   border-radius: 50%;
@@ -384,15 +389,6 @@
   background: transparent;
   font-weight: 800;
   text-transform: uppercase;
-}
-
-/* The burst is the bubble's outline, so the text sits above it. */
-.bubble-burst {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  overflow: visible;
 }
 
 .bubble.shout .bubble-text {
@@ -427,7 +423,7 @@
 }
 
 .page-panel.selected .bubble-pointer {
-  z-index: 6;
+  z-index: 4;
 }
 
 .tail-handle {

@@ -54,8 +54,18 @@ function fitText(box: HTMLElement, text: HTMLElement, kind: Bubble['kind']) {
   box.style.fontSize = `${low}px`;
 }
 
-/** Draws the wedge (speech, shout) or trail of circles (thought) from a bubble to its pointer tip. */
-function Pointer({ bubble, canvasSize }: { bubble: Bubble; canvasSize: Props['canvasSize'] }) {
+/** The bubble's box in canvas pixels. */
+function boxOf(bubble: Bubble, canvasSize: Props['canvasSize']) {
+  return {
+    x: (bubble.x / 100) * canvasSize.width,
+    y: (bubble.y / 100) * canvasSize.height,
+    width: (bubble.width / 100) * canvasSize.width,
+    height: (bubble.height / 100) * canvasSize.height,
+  };
+}
+
+/** The pointer's tip and wedge for a bubble, or null when it has none. */
+function pointerOf(bubble: Bubble, canvasSize: Props['canvasSize']) {
   if (bubble.kind === 'caption' || bubble.tailX === undefined || bubble.tailY === undefined) {
     return null;
   }
@@ -63,19 +73,18 @@ function Pointer({ bubble, canvasSize }: { bubble: Bubble; canvasSize: Props['ca
     x: (bubble.tailX / 100) * canvasSize.width,
     y: (bubble.tailY / 100) * canvasSize.height,
   };
-  const shape = pointerShape(
-    {
-      x: (bubble.x / 100) * canvasSize.width,
-      y: (bubble.y / 100) * canvasSize.height,
-      width: (bubble.width / 100) * canvasSize.width,
-      height: (bubble.height / 100) * canvasSize.height,
-    },
-    tip,
-    bubble.kind === 'shout'
-  );
-  if (!shape) return null;
+  const shape = pointerShape(boxOf(bubble, canvasSize), tip, bubble.kind === 'shout');
+  return shape && { tip, shape };
+}
 
-  const path = (points: Point[]) => points.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ');
+const path = (points: Point[]) => points.map((p, i) => `${i ? 'L' : 'M'}${p.x} ${p.y}`).join(' ');
+
+/** Draws a thought's trail of circles from the bubble to its pointer tip. Painted behind the bubble. */
+function Pointer({ bubble, canvasSize }: { bubble: Bubble; canvasSize: Props['canvasSize'] }) {
+  const pointer = pointerOf(bubble, canvasSize);
+  if (!pointer) return null;
+  const { tip, shape } = pointer;
+
   return (
     <svg
       className="bubble-pointer"
@@ -83,57 +92,63 @@ function Pointer({ bubble, canvasSize }: { bubble: Bubble; canvasSize: Props['ca
       height={canvasSize.height}
       aria-hidden="true"
     >
-      {bubble.kind !== 'thought' ? (
-        <>
-          <path
-            d={`${path([shape.inner[0], shape.base[0], tip, shape.base[1], shape.inner[1]])} Z`}
-            fill="#fff"
-          />
-          <path
-            d={path([shape.base[0], tip, shape.base[1]])}
-            fill="none"
-            stroke={INK}
-            strokeWidth={2}
-            strokeLinejoin="round"
-          />
-        </>
-      ) : (
-        [0.3, 0.62, 0.9].map((t, i) => (
-          <circle
-            key={t}
-            cx={shape.edge.x + (tip.x - shape.edge.x) * t}
-            cy={shape.edge.y + (tip.y - shape.edge.y) * t}
-            r={[7, 5, 3.5][i]}
-            fill="#fff"
-            stroke={INK}
-            strokeWidth={2}
-          />
-        ))
-      )}
+      {[0.3, 0.62, 0.9].map((t, i) => (
+        <circle
+          key={t}
+          cx={shape.edge.x + (tip.x - shape.edge.x) * t}
+          cy={shape.edge.y + (tip.y - shape.edge.y) * t}
+          r={[7, 5, 3.5][i]}
+          fill="#fff"
+          stroke={INK}
+          strokeWidth={2}
+        />
+      ))}
     </svg>
   );
 }
 
-/** The spiky outline of a shout, stretched over the bubble's box. */
-function Burst() {
-  const points = burstPoints()
-    .map((p) => `${p.x},${p.y}`)
-    .join(' ');
+/** Corner radius of a speech bubble; matches `.bubble`'s border-radius in App.css. */
+const SPEECH_RADIUS = 14;
+/** Twice the 2px outline's half-width: the ink is stroked this wide, then the white is filled over it. */
+const OUTLINE_WIDTH = 4;
+
+/**
+ * A speech or shout bubble's body and its pointer as one shape: a rounded box, or a shout's burst. The
+ * shape is drawn in ink with a stroke on each side of its edge, then filled white over that, so the
+ * outline runs once around the joined shape: no break where the pointer meets the body. Painted behind
+ * the bubble's text.
+ */
+function BodyOutline({ bubble, canvasSize }: { bubble: Bubble; canvasSize: Props['canvasSize'] }) {
+  const box = boxOf(bubble, canvasSize);
+  const pointer = pointerOf(bubble, canvasSize);
+  const wedge = pointer && path([pointer.shape.joint[0], pointer.tip, pointer.shape.joint[1]]);
+  const body =
+    bubble.kind === 'shout' ? (
+      <polygon
+        points={burstPoints()
+          .map((p) => `${box.x + (p.x / 100) * box.width},${box.y + (p.y / 100) * box.height}`)
+          .join(' ')}
+      />
+    ) : (
+      <rect x={box.x} y={box.y} width={box.width} height={box.height} rx={SPEECH_RADIUS} />
+    );
+  const shapes = (
+    <>
+      {body}
+      {wedge && <path d={`${wedge} Z`} />}
+    </>
+  );
   return (
     <svg
-      className="bubble-burst"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
+      className="bubble-pointer"
+      width={canvasSize.width}
+      height={canvasSize.height}
       aria-hidden="true"
     >
-      <polygon
-        points={points}
-        fill="#fff"
-        stroke={INK}
-        strokeWidth={2.5}
-        strokeLinejoin="round"
-        vectorEffect="non-scaling-stroke"
-      />
+      <g fill={INK} stroke={INK} strokeWidth={OUTLINE_WIDTH} strokeLinejoin="round">
+        {shapes}
+      </g>
+      <g fill="#fff">{shapes}</g>
     </svg>
   );
 }
@@ -189,6 +204,11 @@ export default function BubbleView({ bubble, canvasRef, canvasSize, editing }: P
 
   return (
     <>
+      {bubble.kind === 'speech' || bubble.kind === 'shout' ? (
+        <BodyOutline bubble={bubble} canvasSize={canvasSize} />
+      ) : (
+        <Pointer bubble={bubble} canvasSize={canvasSize} />
+      )}
       <div
         ref={boxRef}
         className={`bubble ${bubble.kind}${editing ? ' editable' : ''}${editing?.selected ? ' selected' : ''}`}
@@ -200,7 +220,6 @@ export default function BubbleView({ bubble, canvasRef, canvasSize, editing }: P
         }}
         {...moveDrag}
       >
-        {bubble.kind === 'shout' && <Burst />}
         <span ref={textRef} className="bubble-text">
           {bubble.text}
         </span>
@@ -228,7 +247,6 @@ export default function BubbleView({ bubble, canvasRef, canvasSize, editing }: P
             />
           ))}
       </div>
-      <Pointer bubble={bubble} canvasSize={canvasSize} />
       {editing?.selected && hasPointer && (
         <div
           className="tail-handle"

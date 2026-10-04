@@ -9,10 +9,8 @@ interface PointerShape {
   /** Where the pointer leaves the bubble. */
   edge: Point;
   tip: Point;
-  /** The two corners of the wedge on the bubble's edge. */
-  base: [Point, Point];
-  /** The same corners pushed inside the bubble, to cover its border under the wedge. */
-  inner: [Point, Point];
+  /** The two corners of the wedge where it meets the bubble: pushed a little inside the edge, so the wedge overlaps the bubble's body. */
+  joint: [Point, Point];
   /** Unit vector from the bubble's centre toward the tip. */
   direction: Point;
   /** Distance from the edge to the tip. */
@@ -66,8 +64,7 @@ export function pointerShape(box: Box, tip: Point, burst = false): PointerShape 
   return {
     edge,
     tip,
-    base: [shifted(edge, 0, half), shifted(edge, 0, -half)],
-    inner: [shifted(edge, -6, half), shifted(edge, -6, -half)],
+    joint: [shifted(edge, -4, half), shifted(edge, -4, -half)],
     direction,
     length: distance - reach,
   };
