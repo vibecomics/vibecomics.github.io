@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cb } from '../ai/actions';
+import type { GenerationTarget } from '../ai/generation';
 import type { ComicPage, MediaItem, PageSize, Panel } from '../types/comic';
 import { formatPageLabel } from '../types/comic';
 import { usePersistentChoice } from '../utils/usePersistentChoice';
@@ -22,6 +23,9 @@ interface Props {
   media: MediaItem[];
   /** Pages (by id) with a conflict: their number gets a dot. */
   conflictPageIds: Set<string>;
+  /** A layer the generation queue asked to show: it gets highlighted, then onFocusApplied clears it. */
+  focus: GenerationTarget | null;
+  onFocusApplied: () => void;
 }
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
@@ -44,8 +48,21 @@ function AddPageButton({ className }: { className: string }) {
 }
 
 /** Page number rail (left on desktop, footer on mobile), the selected page, and the inspector of its highlighted panel. */
-export default function PagesTab({ pages, pageIndex, pageSize, media, conflictPageIds }: Props) {
+export default function PagesTab({
+  pages,
+  pageIndex,
+  pageSize,
+  media,
+  conflictPageIds,
+  focus,
+  onFocusApplied,
+}: Props) {
   const [selection, setSelection] = useState<Selection>({ panelId: null });
+  useEffect(() => {
+    if (focus?.type !== 'layer') return;
+    setSelection({ panelId: focus.panelId, layerId: focus.layerId });
+    onFocusApplied();
+  }, [focus, onFocusApplied]);
   const wide = useMediaQuery('(min-width: 768px)');
   const [snap, setSnap] = usePersistentChoice<Snap>('comic-builder:sheet', SNAPS, 'half');
   const [view, setView] = useState<PageView>(FIT_VIEW);

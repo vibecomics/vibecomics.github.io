@@ -1,9 +1,10 @@
+import { useEffect, useState } from 'react';
 import { cb } from '../ai/actions';
+import type { StoryKind } from '../ai/builders';
+import type { GenerationTarget } from '../ai/generation';
 import type { ComicProject, MediaItem, Variation } from '../types/comic';
 import { TrashIcon } from './Icons';
 import ReferenceImages from './ReferenceImages';
-
-type StoryKind = 'characters' | 'objects' | 'scenes';
 
 const STORY_TABS = {
   characters: {
@@ -36,14 +37,18 @@ interface EntryCardProps {
     variations: Variation[];
   };
   media: MediaItem[];
+  highlighted: boolean;
 }
 
-function EntryCard({ kind, entry, media }: EntryCardProps) {
+function EntryCard({ kind, entry, media, highlighted }: EntryCardProps) {
   const { singular, placeholder, referenceImages } = STORY_TABS[kind];
   const entries = cb()[kind];
 
   return (
-    <div className="card mb-3">
+    <div
+      id={`entry-${entry.id}`}
+      className={`card mb-3${highlighted ? ' border-primary border-2' : ''}`}
+    >
       <div className="card-body">
         <div className="d-flex gap-2 align-items-center mb-2">
           <input
@@ -95,10 +100,35 @@ function EntryCard({ kind, entry, media }: EntryCardProps) {
 
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+interface StoryTabProps {
+  project: ComicProject;
+  kind: StoryKind;
+  /** What the generation queue asked to show; this tab takes it only when it's an entry of this kind. */
+  focus: GenerationTarget | null;
+  onFocusApplied: () => void;
+}
+
 /** The characters, objects or scenes of the story bible: add, rename, describe, delete. */
-export default function StoryTab({ project, kind }: { project: ComicProject; kind: StoryKind }) {
+export default function StoryTab({ project, kind, focus, onFocusApplied }: StoryTabProps) {
   const { title, singular } = STORY_TABS[kind];
   const entries = project.metadata[kind];
+  // The entry just shown by the generation queue, lit up for a moment so it's easy to spot.
+  const [highlighted, setHighlighted] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (focus?.type !== 'reference' || focus.kind !== kind) return;
+    setHighlighted(focus.entryId);
+    document
+      .getElementById(`entry-${focus.entryId}`)
+      ?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    onFocusApplied();
+  }, [focus, kind, onFocusApplied]);
+
+  useEffect(() => {
+    if (!highlighted) return;
+    const timer = window.setTimeout(() => setHighlighted(null), 2000);
+    return () => window.clearTimeout(timer);
+  }, [highlighted]);
 
   function add() {
     cb()[kind].create({ name: `New ${capitalize(singular)}` });
@@ -119,7 +149,13 @@ export default function StoryTab({ project, kind }: { project: ComicProject; kin
         </button>
       </div>
       {entries.map((entry) => (
-        <EntryCard key={entry.id} kind={kind} entry={entry} media={project.metadata.media} />
+        <EntryCard
+          key={entry.id}
+          kind={kind}
+          entry={entry}
+          media={project.metadata.media}
+          highlighted={entry.id === highlighted}
+        />
       ))}
       {entries.length === 0 && <p className="text-muted">No {title.toLowerCase()} yet.</p>}
     </div>

@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { GenerationTarget } from '../ai/generation';
 import type { ComicProject } from '../types/comic';
 import type { SaveState } from '../state/useProjectSaver';
 import ConflictDot from './ConflictDot';
@@ -18,6 +19,10 @@ interface Props {
   pageIndex: number;
   tab: EditorTab;
   onTabChange: (tab: EditorTab) => void;
+  /** What the generation queue asked to show, and the callback that clears it once a tab has shown it. */
+  focus: GenerationTarget | null;
+  onFocusApplied: () => void;
+  onShowGeneration: (target: GenerationTarget) => void;
   saveState: SaveState;
   dirty: boolean;
   /** The tabs, and the pages (by id), that hold a conflict with changes made elsewhere: they get a dot. */
@@ -34,6 +39,9 @@ export default function EditorScreen({
   pageIndex,
   tab,
   onTabChange,
+  focus,
+  onFocusApplied,
+  onShowGeneration,
   saveState,
   dirty,
   conflictTabs,
@@ -78,21 +86,48 @@ export default function EditorScreen({
               pageSize={project.metadata.pageSize}
               media={project.metadata.media}
               conflictPageIds={conflictPageIds}
+              focus={focus}
+              onFocusApplied={onFocusApplied}
             />
           ) : (
             <div className="flex-grow-1 overflow-auto" style={{ minHeight: 0, minWidth: 0 }}>
               {tab === 'outline' && <OutlineTab key={project.id} project={project} />}
               {tab === 'cast' && (
                 <>
-                  <StoryTab key={`${project.id}-characters`} project={project} kind="characters" />
-                  <StoryTab key={`${project.id}-objects`} project={project} kind="objects" />
+                  <StoryTab
+                    key={`${project.id}-characters`}
+                    project={project}
+                    kind="characters"
+                    focus={focus}
+                    onFocusApplied={onFocusApplied}
+                  />
+                  <StoryTab
+                    key={`${project.id}-objects`}
+                    project={project}
+                    kind="objects"
+                    focus={focus}
+                    onFocusApplied={onFocusApplied}
+                  />
                 </>
               )}
-              {tab === 'scenes' && <StoryTab key={project.id} project={project} kind="scenes" />}
+              {tab === 'scenes' && (
+                <StoryTab
+                  key={project.id}
+                  project={project}
+                  kind="scenes"
+                  focus={focus}
+                  onFocusApplied={onFocusApplied}
+                />
+              )}
               {tab === 'media' && <MediaTab media={project.metadata.media} />}
             </div>
           )}
-          {generationPanelOpen && <GenerationPanel onClose={() => setGenerationPanelOpen(false)} />}
+          {generationPanelOpen && (
+            <GenerationPanel
+              onClose={() => setGenerationPanelOpen(false)}
+              onShow={onShowGeneration}
+            />
+          )}
         </div>
 
         {conflictBar}

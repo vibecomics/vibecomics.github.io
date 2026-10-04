@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { installComicBuilder, uninstallComicBuilder } from './ai/actions';
+import { pageIndexOfPanel } from './ai/builders';
 import type { ActionResult, ComicBuilderDeps } from './ai/deps';
+import type { GenerationTarget } from './ai/generation';
 import { createMediaDeps, createOrOpenProject } from './ai/storageDeps';
 import ConflictBar from './components/ConflictBar';
 import EditorScreen from './components/EditorScreen';
@@ -67,6 +69,9 @@ export default function App() {
   const [status, setStatusState] = useState<Status | null>(null);
   const [deviceCode, setDeviceCode] = useState<DeviceCodeInfo | null>(null);
   const [tab, setTab] = useState<EditorTab>('pages');
+  // What the generation queue last asked to show; the tab it lands on applies it, then clears it.
+  const [focus, setFocus] = useState<GenerationTarget | null>(null);
+  const clearFocus = useCallback(() => setFocus(null), []);
 
   // Refs mirror state so the ComicBuilder deps, installed once, always see the latest values.
   const projectRef = useRef<ComicProject | null>(null);
@@ -121,6 +126,28 @@ export default function App() {
     const { pageId } = conflict.where;
     const index = pageId ? (projectRef.current?.pages.findIndex((p) => p.id === pageId) ?? -1) : -1;
     if (index >= 0) selectPage(index);
+  }
+
+  /** Go to what a generation was for: its layer on the Pages tab, or its entry on Cast or Scenes. */
+  function showGeneration(target: GenerationTarget) {
+    const current = projectRef.current;
+    if (!current) return;
+    if (target.type === 'layer') {
+      const index = pageIndexOfPanel(current, target.panelId);
+      if (index < 0) {
+        setStatus('That panel no longer exists.', true);
+        return;
+      }
+      selectPage(index);
+      setTab('pages');
+    } else {
+      if (!current.metadata[target.kind].some((entry) => entry.id === target.entryId)) {
+        setStatus('That entry no longer exists.', true);
+        return;
+      }
+      setTab(target.kind === 'scenes' ? 'scenes' : 'cast');
+    }
+    setFocus(target);
   }
 
   function showProject(opened: ComicProject, folderId: string, version: string | null) {
@@ -386,6 +413,9 @@ export default function App() {
         pageIndex={pageIndex}
         tab={tab}
         onTabChange={setTab}
+        focus={focus}
+        onFocusApplied={clearFocus}
+        onShowGeneration={showGeneration}
         saveState={saver.saveState}
         dirty={saver.dirty}
         onRefresh={refreshProject}

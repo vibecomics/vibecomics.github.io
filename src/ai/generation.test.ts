@@ -176,6 +176,7 @@ test('each layer generation gets its own queue row, and the layer stays queued u
   const second = generateLayerImage(deps, panelId, 'l1').catch((e: unknown) => e);
   assert.equal(layerGenerationStatus(panelId, 'l1'), 'queued');
   assert.equal(getQueue().length, 2);
+  assert.deepEqual(getQueue()[0].target, { type: 'layer', panelId, layerId: 'l1' });
 
   await Promise.all([first, second]);
   assert.equal(layerGenerationStatus(panelId, 'l1'), undefined);

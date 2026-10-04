@@ -625,6 +625,11 @@ export function pendingReferenceGenerations(project: ComicProject): PendingRefer
   );
 }
 
+/** The index of the page that holds this panel, or -1 when no page does. */
+export function pageIndexOfPanel(project: ComicProject, panelId: string): number {
+  return project.pages.findIndex((page) => page.panels.some((panel) => panel.id === panelId));
+}
+
 /** Panel layout operations. The panels of a page always tile it (see state/layout.ts). */
 export function panelsApi(deps: ComicBuilderDeps) {
   const pageAt = (project: ComicProject, pageIndex = deps.getPageIndex()): ComicPage => {
@@ -632,8 +637,10 @@ export function panelsApi(deps: ComicBuilderDeps) {
     if (!page) throw new Error(`Page ${pageIndex} not found.`);
     return page;
   };
-  const pageOfPanel = (project: ComicProject, panelId: string) =>
-    project.pages.find((page) => page.panels.some((panel) => panel.id === panelId));
+  const pageOfPanel = (project: ComicProject, panelId: string) => {
+    const index = pageIndexOfPanel(project, panelId);
+    return index < 0 ? undefined : project.pages[index];
+  };
   const locate = (project: ComicProject, panelId: string) => {
     const page = pageOfPanel(project, panelId);
     if (!page) throw new Error(`Panel "${panelId}" not found.`);

@@ -172,12 +172,19 @@ export function cancelAllGenerations(): number {
   return ids.length;
 }
 
+/** What a generation is for, so the queue can take you back to it: a layer (a background is one too),
+ * or a story-bible entry, or one of its variations. */
+export type GenerationTarget =
+  | { type: 'layer'; panelId: string; layerId: string }
+  | { type: 'reference'; kind: ReferenceKind; entryId: string; variationId?: string };
+
 /** One request in the generation queue: what it's for, and how far it's gotten. Unlike the old
  * queue, a finished item (done or error) stays here, in place, until clearCompletedQueueItems()
  * removes it — so a panel listing the queue can show what was generated, not just what's in flight. */
 export interface QueueItem {
   id: string;
   label: string;
+  target: GenerationTarget;
   status: 'queued' | 'running' | 'done' | 'error';
   error?: string;
 }
@@ -218,17 +225,23 @@ function setQueueItem(id: string, item: QueueItem): void {
 // tracked by its own unique string id (see trackedGeneration), so every generation keeps its own row
 // in the queue, and cancelRequest(id) can cancel straight from a queue() listing.
 let queueTail: Promise<unknown> = Promise.resolve();
-function enqueue<T>(id: string, label: string, task: () => Promise<T>): Promise<T> {
-  setQueueItem(id, { id, label, status: 'queued' });
+function enqueue<T>(
+  id: string,
+  label: string,
+  target: GenerationTarget,
+  task: () => Promise<T>
+): Promise<T> {
+  const row = { id, label, target };
+  setQueueItem(id, { ...row, status: 'queued' });
 
   const runTask = async (): Promise<T> => {
-    setQueueItem(id, { id, label, status: 'running' });
+    setQueueItem(id, { ...row, status: 'running' });
     try {
       const result = await task();
-      setQueueItem(id, { id, label, status: 'done' });
+      setQueueItem(id, { ...row, status: 'done' });
       return result;
     } catch (e) {
-      setQueueItem(id, { id, label, status: 'error', error: errorMessage(e) });
+      setQueueItem(id, { ...row, status: 'error', error: errorMessage(e) });
       throw e;
     }
   };
@@ -260,6 +273,7 @@ async function downloadReferences(
 function trackedGeneration<T>(
   key: string,
   label: string,
+  target: GenerationTarget,
   task: (signal: AbortSignal) => Promise<T>
 ): Promise<T> {
   requestCount++;
@@ -267,7 +281,7 @@ function trackedGeneration<T>(
   const controller = new AbortController();
   abortControllers.set(id, controller);
   setRequestState(key, id, 'queued');
-  return enqueue(id, label, async () => {
+  return enqueue(id, label, target, async () => {
     try {
       if (controller.signal.aborted) throw new GenerationCancelledError();
       setRequestState(key, id, 'running');
@@ -410,6 +424,7 @@ export function generateLayerImage(
   return trackedGeneration(
     layerKey(panelId, layerId),
     describeLayer(deps, panelId, layerId),
+    { type: 'layer', panelId, layerId },
     (signal) => runLayerGeneration(deps, panelId, layerId, prompt, references, signal)
   );
 }
@@ -421,8 +436,11 @@ export function generateReferenceImage(
   prompt?: string,
   references?: GenerationReference[]
 ): Promise<MediaItem> {
-  return trackedGeneration(referenceKey(kind, id), describeReference(deps, kind, id), (signal) =>
-    generateReferenceOne(deps, kind, id, undefined, prompt, references, signal)
+  return trackedGeneration(
+    referenceKey(kind, id),
+    describeReference(deps, kind, id),
+    { type: 'reference', kind, entryId: id },
+    (signal) => generateReferenceOne(deps, kind, id, undefined, prompt, references, signal)
   );
 }
 
@@ -440,6 +458,7 @@ export function generateVariationImage(
   return trackedGeneration(
     variationKey(kind, id, variationId),
     describeVariation(deps, kind, id, variationId),
+    { type: 'reference', kind, entryId: id, variationId },
     (signal) => generateReferenceOne(deps, kind, id, variationId, prompt, references, signal)
   );
 }
@@ -497,7 +516,13 @@ export async function generateAllVariations(
     const prompt = variation.prompt.trim()
       ? `${basePrompt}\n\nVariation: ${variation.prompt.trim()}`
       : basePrompt;
-    const run = trackedGeneration(key, label, async (signal) => {
+    const target: GenerationTarget = {
+      type: 'reference',
+      kind,
+      entryId: id,
+      variationId: variation.id,
+    };
+    const run = trackedGeneration(key, label, target, async (signal) => {
       const media = await runReferenceGeneration(
         deps,
         kind,
@@ -646,7 +671,8 @@ export async function generateAllDirty(
   const runs = refs.map((ref) => {
     const key = layerKey(ref.panelId, ref.layerId);
     const label = describeLayer(deps, ref.panelId, ref.layerId);
-    const run = trackedGeneration(key, label, async (signal) => {
+    const target: GenerationTarget = { type: 'layer', panelId: ref.panelId, layerId: ref.layerId };
+    const run = trackedGeneration(key, label, target, async (signal) => {
       const image = await runLayerGeneration(
         deps,
         ref.panelId,
@@ -701,7 +727,13 @@ export async function generateAllDirtyVariations(
   const runs = refs.map((ref) => {
     const key = variationKey(ref.kind, ref.entryId, ref.variationId);
     const label = describeVariation(deps, ref.kind, ref.entryId, ref.variationId);
-    const run = trackedGeneration(key, label, async (signal) => {
+    const target: GenerationTarget = {
+      type: 'reference',
+      kind: ref.kind,
+      entryId: ref.entryId,
+      variationId: ref.variationId,
+    };
+    const run = trackedGeneration(key, label, target, async (signal) => {
       const media = await generateReferenceOne(
         deps,
         ref.kind,
