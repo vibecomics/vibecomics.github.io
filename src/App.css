@@ -496,14 +496,11 @@
 
 .lightbox-status,
 .lightbox-caption {
-  color: #fff;
-}
-
-.lightbox-caption {
   position: absolute;
   bottom: 1rem;
   left: 1rem;
   right: 1rem;
+  color: #fff;
   text-align: center;
   font-size: 0.875rem;
 }
@@ -551,15 +548,12 @@
 .lightbox-prev,
 .lightbox-next {
   top: 50%;
+  right: 0.75rem;
   transform: translateY(-50%);
 }
 
 .lightbox-prev {
   left: 0.75rem;
-}
-
-.lightbox-next {
-  right: 0.75rem;
 }
 
 @media (max-width: 575.98px) {
