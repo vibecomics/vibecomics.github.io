@@ -1,2 +1,5 @@
+# Format the whole repo, then re-stage only the files this commit already had staged, so formatting
+# never pulls unrelated changes into the commit. Staged list is taken before formatting runs.
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
 npx prettier --write .
-git add -u
+[ -n "$staged" ] && printf '%s\n' "$staged" | while IFS= read -r file; do git add -- "$file"; done
