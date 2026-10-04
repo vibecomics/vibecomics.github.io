@@ -4,7 +4,14 @@ import { test } from 'node:test';
 import { createBlankProject } from '../state/project';
 import type { ComicProject } from '../types/comic';
 import type { ComicBuilderDeps } from './deps';
-import { defaultEntryReferences, defaultLayerReferences } from './generation';
+import {
+  clearCompletedQueueItems,
+  defaultEntryReferences,
+  defaultLayerReferences,
+  generateLayerImage,
+  getQueue,
+  layerGenerationStatus,
+} from './generation';
 
 /** A minimal ComicBuilderDeps backed by one in-memory project: enough for the pure read-only
  * reference-picking functions under test, which only call getProject. */
@@ -141,4 +148,39 @@ test("defaultLayerReferences sends the layer's own images first, then the subjec
     { mediaId: 'm-old' },
     { mediaId: 'm-sheet', note },
   ]);
+});
+
+test('each layer generation gets its own queue row, and the layer stays queued until its last one ends', async () => {
+  clearCompletedQueueItems();
+  const project = withCharacter((p) => {
+    p.pages[0].panels[0].layers.push({
+      id: 'l1',
+      name: 'Mara',
+      kind: 'foreground',
+      visible: true,
+      x: 0,
+      y: 0,
+      width: 100,
+      rotation: 0,
+      opacity: 1,
+    });
+  });
+  // No generator configured, so each run fails straight away; the queue and status are what's tested.
+  const deps = {
+    getProject: () => project,
+    getGeneratorConfig: () => null,
+  } as unknown as ComicBuilderDeps;
+  const panelId = project.pages[0].panels[0].id;
+
+  const first = generateLayerImage(deps, panelId, 'l1').catch((e: unknown) => e);
+  const second = generateLayerImage(deps, panelId, 'l1').catch((e: unknown) => e);
+  assert.equal(layerGenerationStatus(panelId, 'l1'), 'queued');
+  assert.equal(getQueue().length, 2);
+
+  await Promise.all([first, second]);
+  assert.equal(layerGenerationStatus(panelId, 'l1'), undefined);
+  assert.deepEqual(
+    getQueue().map((i) => i.status),
+    ['error', 'error']
+  );
 });

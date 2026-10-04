@@ -60,23 +60,30 @@ type CommitLayerImage = (
  * actively running right now. Undefined means neither: nothing outstanding for it. */
 export type GenerationStatus = 'queued' | 'running' | undefined;
 
-// Which layer or story-bible entry has a generation queued or running, so any component showing it
-// can reflect that, even one that mounted after the request started (see useGenerationStatus). A key
-// is set the instant its request is made (queued, before the shared queue reaches its turn — see
-// trackedGeneration) and cleared only once that request finishes, whether it errored or not.
-const statusByKey = new Map<string, 'queued' | 'running'>();
+// Which layer, story-bible entry or variation has a generation queued or running, so any component
+// showing it can reflect that, even one that mounted after the request started (see
+// useGenerationStatus). Every request gets its own id (`key#n`), so each one is its own queue row and
+// its own abort controller; a key's status follows all of its outstanding requests together: running
+// if any is, otherwise queued while any waits, and nothing once they've all finished.
+const requestsByKey = new Map<string, Map<string, 'queued' | 'running'>>();
 const generatingListeners = new Set<() => void>();
 const layerKey = (panelId: string, layerId: string) => `layer:${panelId}:${layerId}`;
 const referenceKey = (kind: ReferenceKind, id: string) => `ref:${kind}:${id}`;
 const variationKey = (kind: ReferenceKind, id: string, variationId: string) =>
   `ref:${kind}:${id}:${variationId}`;
 
+function statusOf(key: string): GenerationStatus {
+  const requests = requestsByKey.get(key);
+  if (!requests) return undefined;
+  return [...requests.values()].includes('running') ? 'running' : 'queued';
+}
+
 export function layerGenerationStatus(panelId: string, layerId: string): GenerationStatus {
-  return statusByKey.get(layerKey(panelId, layerId));
+  return statusOf(layerKey(panelId, layerId));
 }
 
 export function referenceGenerationStatus(kind: ReferenceKind, id: string): GenerationStatus {
-  return statusByKey.get(referenceKey(kind, id));
+  return statusOf(referenceKey(kind, id));
 }
 
 export function variationGenerationStatus(
@@ -84,7 +91,7 @@ export function variationGenerationStatus(
   id: string,
   variationId: string
 ): GenerationStatus {
-  return statusByKey.get(variationKey(kind, id, variationId));
+  return statusOf(variationKey(kind, id, variationId));
 }
 
 export function subscribeGenerating(listener: () => void): () => void {
@@ -92,49 +99,63 @@ export function subscribeGenerating(listener: () => void): () => void {
   return () => generatingListeners.delete(listener);
 }
 
-function setGenerationStatus(key: string, status: 'queued' | 'running' | undefined): void {
-  if (status) statusByKey.set(key, status);
-  else statusByKey.delete(key);
+function setRequestState(key: string, id: string, state: 'queued' | 'running' | undefined): void {
+  const requests = requestsByKey.get(key) ?? new Map<string, 'queued' | 'running'>();
+  if (state) {
+    requests.set(id, state);
+    requestsByKey.set(key, requests);
+  } else {
+    requests.delete(id);
+    if (requests.size === 0) requestsByKey.delete(key);
+  }
   generatingListeners.forEach((listener) => listener());
 }
 
-// One AbortController per outstanding request, from the moment it's queued (so cancelling a queued
-// item skips it entirely once its turn comes) until it finishes, succeeds, fails or is cancelled.
+// One AbortController per outstanding request, keyed by request id, from the moment it's queued (so
+// cancelling a queued item skips it entirely once its turn comes) until it finishes, succeeds, fails
+// or is cancelled.
 const abortControllers = new Map<string, AbortController>();
+let requestCount = 0;
 
-/** Cancels the layer's/entry's/queue item's outstanding generation request, if any: a queued one is
- * skipped when its turn comes, a running one has its network request aborted (see comfy.ts). Returns
- * false when there was nothing outstanding for `key` to cancel. */
-function cancelGeneration(key: string): boolean {
-  const controller = abortControllers.get(key);
+/** Cancels one request (a queue item's id), if it's still outstanding. A queued one is skipped when
+ * its turn comes; a running one has its network request aborted (see comfy.ts). */
+function cancelRequest(id: string): boolean {
+  const controller = abortControllers.get(id);
   if (!controller) return false;
   controller.abort();
   return true;
 }
 
-/** Cancels a layer's (or background's) outstanding generation request, if any. */
+/** Cancels every outstanding request for `key` (a layer, entry or variation). Returns false when there
+ * was nothing outstanding to cancel. */
+function cancelKey(key: string): boolean {
+  const ids = [...(requestsByKey.get(key)?.keys() ?? [])];
+  return ids.map(cancelRequest).some(Boolean);
+}
+
+/** Cancels a layer's (or background's) outstanding generation requests, if any. */
 export function cancelLayerGeneration(panelId: string, layerId: string): boolean {
-  return cancelGeneration(layerKey(panelId, layerId));
+  return cancelKey(layerKey(panelId, layerId));
 }
 
-/** Cancels a story-bible entry's outstanding reference-image generation request, if any. */
+/** Cancels a story-bible entry's outstanding reference-image generation requests, if any. */
 export function cancelReferenceGeneration(kind: ReferenceKind, id: string): boolean {
-  return cancelGeneration(referenceKey(kind, id));
+  return cancelKey(referenceKey(kind, id));
 }
 
-/** Cancels a variation's outstanding generation request, if any. */
+/** Cancels a variation's outstanding generation requests, if any. */
 export function cancelVariationGeneration(
   kind: ReferenceKind,
   id: string,
   variationId: string
 ): boolean {
-  return cancelGeneration(variationKey(kind, id, variationId));
+  return cancelKey(variationKey(kind, id, variationId));
 }
 
-/** Cancels an item straight from generate.queue()'s list, by its `id` (the same key layerKey/
- * referenceKey builds — opaque to callers, just round-trip whatever queue() gave you). */
+/** Cancels one queue item straight from generate.queue()'s list, by its `id` (round-trip whatever
+ * queue() gave you). */
 export function cancelQueueItem(id: string): boolean {
-  return cancelGeneration(id);
+  return cancelRequest(id);
 }
 
 /**
@@ -146,9 +167,9 @@ export function cancelQueueItem(id: string): boolean {
  * it. Returns how many were cancelled.
  */
 export function cancelAllGenerations(): number {
-  const keys = [...abortControllers.keys()];
-  for (const key of keys) cancelGeneration(key);
-  return keys.length;
+  const ids = [...abortControllers.keys()];
+  for (const id of ids) cancelRequest(id);
+  return ids.length;
 }
 
 /** One request in the generation queue: what it's for, and how far it's gotten. Unlike the old
@@ -193,11 +214,9 @@ function setQueueItem(id: string, item: QueueItem): void {
   notifyQueue();
 }
 
-// One request at a time, even across overlapping layer()/dirty()/reference-image calls. Items are
-// tracked by their stable string id (the same layerKey/referenceKey trackedGeneration tracks status
-// and the abort controller under, not object identity) so re-generating the same layer/entry updates
-// its existing row in place instead of adding a duplicate, and cancelGeneration(id) can cancel
-// straight from a queue() listing.
+// One request at a time, even across overlapping layer()/dirty()/reference-image calls. Each item is
+// tracked by its own unique string id (see trackedGeneration), so every generation keeps its own row
+// in the queue, and cancelRequest(id) can cancel straight from a queue() listing.
 let queueTail: Promise<unknown> = Promise.resolve();
 function enqueue<T>(id: string, label: string, task: () => Promise<T>): Promise<T> {
   setQueueItem(id, { id, label, status: 'queued' });
@@ -233,27 +252,29 @@ async function downloadReferences(
   );
 }
 
-/** Runs a generation in the queue, marking `key` as queued the instant it's requested and running
- * once its turn comes, so a button for it can tell "waiting" from "actively generating". Also tracks
- * an AbortController for `key` for the same span, so cancelGeneration(key) can either skip it (still
- * queued) or abort its request (already running) — `task` gets the controller's signal to pass on to
- * whatever it awaits. */
+/** Runs a generation in the queue as its own request, marking `key` as queued the instant it's
+ * requested and running once its turn comes, so a button for it can tell "waiting" from "actively
+ * generating". Each request also gets its own AbortController, so cancelRequest can either skip it
+ * (still queued) or abort it (already running) — `task` gets the signal to pass on to whatever it
+ * awaits. */
 function trackedGeneration<T>(
   key: string,
   label: string,
   task: (signal: AbortSignal) => Promise<T>
 ): Promise<T> {
+  requestCount++;
+  const id = `${key}#${requestCount}`;
   const controller = new AbortController();
-  abortControllers.set(key, controller);
-  setGenerationStatus(key, 'queued');
-  return enqueue(key, label, async () => {
+  abortControllers.set(id, controller);
+  setRequestState(key, id, 'queued');
+  return enqueue(id, label, async () => {
     try {
       if (controller.signal.aborted) throw new GenerationCancelledError();
-      setGenerationStatus(key, 'running');
+      setRequestState(key, id, 'running');
       return await task(controller.signal);
     } finally {
-      setGenerationStatus(key, undefined);
-      abortControllers.delete(key);
+      setRequestState(key, id, undefined);
+      abortControllers.delete(id);
     }
   });
 }
