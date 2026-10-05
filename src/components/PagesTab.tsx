@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { cb } from '../ai/actions';
-import type { GenerationTarget } from '../ai/generation';
 import type { ComicPage, MediaItem, PageSize, Panel } from '../types/comic';
 import { formatPageLabel } from '../types/comic';
 import { usePersistentChoice } from '../utils/usePersistentChoice';
@@ -14,6 +13,7 @@ import type { PageView } from './pageView';
 import { SNAPS } from './sheetSnaps';
 import type { Snap } from './sheetSnaps';
 import PanelInspector from './PanelInspector';
+import { resolveSelection } from './selection';
 import type { Selection } from './selection';
 
 interface Props {
@@ -23,9 +23,8 @@ interface Props {
   media: MediaItem[];
   /** Pages (by id) with a conflict: their number gets a dot. */
   conflictPageIds: Set<string>;
-  /** A layer the generation queue asked to show: it gets highlighted, then onFocusApplied clears it. */
-  focus: GenerationTarget | null;
-  onFocusApplied: () => void;
+  selection: Selection;
+  onSelect: (selection: Selection) => void;
 }
 
 const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
@@ -54,15 +53,9 @@ export default function PagesTab({
   pageSize,
   media,
   conflictPageIds,
-  focus,
-  onFocusApplied,
+  selection,
+  onSelect,
 }: Props) {
-  const [selection, setSelection] = useState<Selection>({ panelId: null });
-  useEffect(() => {
-    if (focus?.type !== 'layer') return;
-    setSelection({ panelId: focus.panelId, layerId: focus.layerId });
-    onFocusApplied();
-  }, [focus, onFocusApplied]);
   const wide = useMediaQuery('(min-width: 768px)');
   const [snap, setSnap] = usePersistentChoice<Snap>('comic-builder:sheet', SNAPS, 'half');
   const [view, setView] = useState<PageView>(FIT_VIEW);
@@ -71,16 +64,7 @@ export default function PagesTab({
 
   const page = pages[pageIndex];
   const panels = page?.panels ?? [];
-  // A page with a single panel always has it highlighted.
-  const panel =
-    panels.find((p) => p.id === selection.panelId) ?? (panels.length === 1 ? panels[0] : undefined);
-  const current: Selection = {
-    panelId: panel?.id ?? null,
-    layerId: panel?.layers.some((l) => l.id === selection.layerId) ? selection.layerId : undefined,
-    bubbleId: panel?.bubbles.some((b) => b.id === selection.bubbleId)
-      ? selection.bubbleId
-      : undefined,
-  };
+  const { panel, current } = resolveSelection(page, selection);
 
   // Delete or Backspace removes the selected layer or bubble (unless typing in a field or in a popup).
   const panelId = panel?.id;
@@ -196,7 +180,7 @@ export default function PagesTab({
                   onViewChange={setView}
                   editing={{
                     selection: current,
-                    onSelect: setSelection,
+                    onSelect,
                     // On a narrow screen a tap on the page dismisses the sheet, to show the art.
                     onTap: () => {
                       if (!wide) setSnap('closed');
@@ -218,7 +202,7 @@ export default function PagesTab({
                     panel={panel}
                     media={media}
                     selection={current}
-                    onSelect={setSelection}
+                    onSelect={onSelect}
                   />
                 ) : (
                   <p className="text-muted p-3 mb-0 d-none d-md-block">No panel selected</p>

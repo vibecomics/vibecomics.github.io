@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { GenerationTarget } from '../ai/generation';
 import type { ComicProject } from '../types/comic';
 import type { SaveState } from '../state/useProjectSaver';
+import type { Selection } from './selection';
 import ConflictDot from './ConflictDot';
 import EditorNavbar from './EditorNavbar';
 import { EDITOR_TABS } from './editorTabs';
@@ -19,6 +20,8 @@ interface Props {
   pageIndex: number;
   tab: EditorTab;
   onTabChange: (tab: EditorTab) => void;
+  selection: Selection;
+  onSelectionChange: (selection: Selection) => void;
   /** What the generation queue asked to show, and the callback that clears it once a tab has shown it. */
   focus: GenerationTarget | null;
   onFocusApplied: () => void;
@@ -39,6 +42,8 @@ export default function EditorScreen({
   pageIndex,
   tab,
   onTabChange,
+  selection,
+  onSelectionChange,
   focus,
   onFocusApplied,
   onShowGeneration,
@@ -86,8 +91,8 @@ export default function EditorScreen({
               pageSize={project.metadata.pageSize}
               media={project.metadata.media}
               conflictPageIds={conflictPageIds}
-              focus={focus}
-              onFocusApplied={onFocusApplied}
+              selection={selection}
+              onSelect={onSelectionChange}
             />
           ) : (
             <div className="flex-grow-1 overflow-auto" style={{ minHeight: 0, minWidth: 0 }}>

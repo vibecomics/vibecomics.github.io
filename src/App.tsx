@@ -6,8 +6,8 @@ import type { GenerationTarget } from './ai/generation';
 import { createMediaDeps, createOrOpenProject } from './ai/storageDeps';
 import ConflictBar from './components/ConflictBar';
 import EditorScreen from './components/EditorScreen';
-import { initialTab } from './components/editorTabs';
 import type { EditorTab } from './components/editorTabs';
+import type { Selection } from './components/selection';
 import { clearMediaCache } from './components/mediaImages';
 import PreviewScreen from './components/PreviewScreen';
 import ProjectTiles from './components/ProjectTiles';
@@ -40,6 +40,16 @@ import {
   uploadImage,
 } from './storage/activeBackend';
 import { loadProject } from './storage/projectStore';
+import {
+  formatHash,
+  parseHash,
+  placeHash,
+  routeOf,
+  startView,
+  viewFromRoute,
+  WELCOME_HASH,
+} from './navigation/hashRoute';
+import type { ComicRoute, Route, View } from './navigation/hashRoute';
 import type { ProjectFolder } from './storage/types';
 import type { Conflict } from './state/merge';
 import { useProjectSaver } from './state/useProjectSaver';
@@ -65,6 +75,10 @@ export default function App() {
   const [preview, setPreview] = useState(false);
   const [project, setProject] = useState<ComicProject | null>(null);
   const [pageIndex, setPageIndex] = useState(0);
+  const [selection, setSelection] = useState<Selection>({ panelId: null });
+  const [comic, setComic] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [ready, setReady] = useState(false);
   const [projects, setProjects] = useState<ProjectFolder[]>([]);
   const [status, setStatusState] = useState<Status | null>(null);
   const [deviceCode, setDeviceCode] = useState<DeviceCodeInfo | null>(null);
@@ -77,6 +91,11 @@ export default function App() {
   const projectRef = useRef<ComicProject | null>(null);
   const pageIndexRef = useRef(0);
   const folderIdRef = useRef<string | null>(null);
+  const comicRef = useRef<string | null>(null);
+  const navigationRef = useRef(0);
+  const lastRouteRef = useRef<Route | null>(null);
+  const startHashRef = useRef(window.location.hash);
+  const startedRef = useRef(false);
 
   const clearStatus = useCallback(() => setStatusState(null), []);
   const setStatus = (text: string, error = false) => setStatusState({ text, error });
@@ -140,33 +159,49 @@ export default function App() {
       }
       selectPage(index);
       setTab('pages');
-    } else {
-      if (!current.metadata[target.kind].some((entry) => entry.id === target.entryId)) {
-        setStatus('That entry no longer exists.', true);
-        return;
-      }
-      setTab(target.kind === 'scenes' ? 'scenes' : 'cast');
+      setSelection({ panelId: target.panelId, layerId: target.layerId });
+      return;
     }
+    if (!current.metadata[target.kind].some((entry) => entry.id === target.entryId)) {
+      setStatus('That entry no longer exists.', true);
+      return;
+    }
+    setTab(target.kind === 'scenes' ? 'scenes' : 'cast');
     setFocus(target);
   }
 
-  function showProject(opened: ComicProject, folderId: string, version: string | null) {
-    folderIdRef.current = folderId;
-    setCurrentFolderId(folderId);
-    setCurrentProject(opened);
-    selectPage(0);
+  function applyView(view: View) {
+    selectPage(view.pageIndex);
+    setTab(view.tab);
+    setSelection(view.selection);
     setPreview(false);
-    setTab(initialTab(opened));
+  }
+
+  function showProject(
+    opened: ComicProject,
+    folder: ProjectFolder,
+    version: string | null,
+    view: View
+  ) {
+    folderIdRef.current = folder.id;
+    comicRef.current = folder.name;
+    setComic(folder.name);
+    setCurrentFolderId(folder.id);
+    setCurrentProject(opened);
+    applyView(view);
     saver.reset({ project: opened, version });
     setScreen('editor');
   }
 
   function dropProject() {
     folderIdRef.current = null;
+    comicRef.current = null;
+    setComic(null);
     setCurrentFolderId(null);
     setActiveBackend(null);
     setCurrentProject(null);
     selectPage(0);
+    setSelection({ panelId: null });
     setPreview(false);
     setTab('pages');
     saver.reset();
@@ -195,7 +230,12 @@ export default function App() {
     return live.length === 1 ? live[0].id : null;
   }
 
-  async function openFolder(folder: ProjectFolder): Promise<ActionResult> {
+  /** Open a folder on the view a URL names (or the starting view). Nothing is shown if `isCurrent` says it was overtaken. */
+  async function openFolder(
+    folder: ProjectFolder,
+    route?: ComicRoute,
+    isCurrent: () => boolean = () => true
+  ): Promise<ActionResult> {
     const connectionId = folder.connectionId ?? getActiveBackend() ?? listConnections()[0]?.id;
     if (!connectionId) {
       const error = 'No storage connection is available.';
@@ -206,7 +246,14 @@ export default function App() {
     setStatus('Loading project…');
     try {
       const { project: opened, version } = await loadProject(folder.id);
-      showProject(opened, folder.id, version);
+      if (!isCurrent()) return { ok: false, error: 'Superseded by another navigation.' };
+      const view = route ? viewFromRoute(opened, route) : startView(opened);
+      if (!view) {
+        const error = `"${folder.name}" has no such page, panel or layer.`;
+        setStatus(error, true);
+        return { ok: false, error };
+      }
+      showProject(opened, folder, version, view);
       setStatus(`Opened "${opened.title}".`);
       return { ok: true };
     } catch (e) {
@@ -240,14 +287,99 @@ export default function App() {
     }
   }
 
+  async function goWelcome() {
+    window.history.replaceState(null, '', WELCOME_HASH);
+    await showTiles();
+  }
+
+  /** Show the place a URL names, opening its project first when it is not the one open. */
+  async function applyHash(hash: string) {
+    const token = ++navigationRef.current;
+    const isCurrent = () => token === navigationRef.current;
+    const target = parseHash(hash);
+    if (target.screen === 'welcome') {
+      await goWelcome();
+      return;
+    }
+
+    const open = projectRef.current;
+    if (comicRef.current === target.comic && open) {
+      const view = viewFromRoute(open, target);
+      if (!view) {
+        setStatus(`"${target.comic}" has no such page, panel or layer.`, true);
+        await goWelcome();
+        return;
+      }
+      applyView(view);
+      setScreen('editor');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      if (open && !(await saver.save())) {
+        setStatus('The open project could not be saved, so it stays open.', true);
+        if (lastRouteRef.current) {
+          window.history.replaceState(null, '', formatHash(lastRouteRef.current));
+        }
+        return;
+      }
+      const folder = (await listAllProjects()).find((f) => f.name === target.comic);
+      if (!isCurrent()) return;
+      if (!folder) {
+        setStatus(`No project named "${target.comic}" in the connected storage.`, true);
+        await goWelcome();
+        return;
+      }
+      const result = await openFolder(folder, target, isCurrent);
+      if (!isCurrent()) return;
+      if (!result.ok) await goWelcome();
+    } finally {
+      if (isCurrent()) setLoading(false);
+    }
+  }
+
   // On load: reconnect any remembered HTTP storage servers (no secret, just a health check), then
-  // show whatever projects that and any already-live connection turn up. Drive's token is never
-  // persisted, so it always needs a fresh device-flow connect from Settings.
+  // show whatever projects that and any already-live connection turn up, and land on the place the
+  // URL names. Drive's token is never persisted, so it always needs a fresh device-flow connect from
+  // Settings.
   useEffect(() => {
-    void reconnectRememberedServers().then(() => refreshTiles());
-    // Runs once on mount; refreshTiles/setStatus close over state setters that never go stale.
+    if (startedRef.current) return;
+    startedRef.current = true;
+    void reconnectRememberedServers()
+      .then(() => refreshTiles())
+      .then(() => applyHash(startHashRef.current))
+      .finally(() => setReady(true));
+    // Runs once on mount; these close over state setters and refs that never go stale.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    const onHashChange = () => void applyHash(window.location.hash);
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+    // Same reasoning as the load effect above: applyHash only uses refs and state setters.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const route: Route =
+    screen === 'editor' && project && comic
+      ? { screen: 'comic', ...routeOf(comic, project, { tab, pageIndex, selection }) }
+      : { screen: 'welcome' };
+  const expectedHash = formatHash(route);
+  useEffect(() => {
+    if (!ready || loading) return;
+    const previous = lastRouteRef.current;
+    lastRouteRef.current = route;
+    if (window.location.hash === expectedHash) return;
+    if (previous && placeHash(previous) !== placeHash(route)) {
+      window.history.pushState(null, '', expectedHash);
+    } else {
+      window.history.replaceState(null, '', expectedHash);
+    }
+    // route is fully determined by expectedHash, which is what the effect keys on.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expectedHash, ready, loading]);
 
   // The ComicBuilder API is installed once; every helper it uses goes through refs and setState.
   // A layout effect, not a plain effect: React runs a child's effects before its parent's, and
@@ -354,7 +486,7 @@ export default function App() {
           existed,
           title,
         } = await createOrOpenProject(storage, name, pageSize);
-        showProject(created, folder.id, version);
+        showProject(created, folder, version, startView(created));
         setStatus(`${existed ? 'Opened' : 'Created'} "${title}".`);
         return folder;
       },
@@ -413,6 +545,8 @@ export default function App() {
         pageIndex={pageIndex}
         tab={tab}
         onTabChange={setTab}
+        selection={selection}
+        onSelectionChange={setSelection}
         focus={focus}
         onFocusApplied={clearFocus}
         onShowGeneration={showGeneration}
