@@ -25,10 +25,7 @@ function projectWithScene(): ComicProject {
     imageIds: [],
     variations: [],
   });
-  const page = project.pages[0];
-  page.prompt = 'The chase ends here.';
-  const panel = page.panels[0];
-  panel.prompt = 'Wide shot, low angle.';
+  const panel = project.pages[0].panels[0];
   panel.layers.push({
     id: 'bg1',
     name: 'Background',
@@ -45,7 +42,7 @@ function projectWithScene(): ComicProject {
   return project;
 }
 
-test('buildLayerPrompt stitches STYLE, scene and layer prompts in order, without page or panel prompts', () => {
+test('buildLayerPrompt stitches STYLE, scene and layer prompts in order', () => {
   const project = projectWithScene();
   const panelId = project.pages[0].panels[0].id;
   const prompt = buildLayerPrompt(project, panelId, 'bg1');
@@ -56,7 +53,7 @@ test('buildLayerPrompt stitches STYLE, scene and layer prompts in order, without
     'Rain-slicked tiles in the foreground.',
   ]);
   assert.match(parts[3], /full-bleed/i);
-  assert.doesNotMatch(prompt, /chase ends here|Wide shot, low angle/);
+  assert.doesNotMatch(prompt, /Wide shot, low angle/);
 });
 
 test('buildLayerPrompt skips empty parts', () => {
@@ -80,7 +77,7 @@ test('buildLayerPrompt skips empty parts', () => {
   assert.match(prompt, /not a multi-view turnaround sheet/i);
 });
 
-test("buildLayerPrompt leaves the page prompt, panel prompt and background scene out of a foreground layer's prompt", () => {
+test("buildLayerPrompt leaves the background scene out of a foreground layer's prompt", () => {
   const project = projectWithScene();
   const panelId = project.pages[0].panels[0].id;
   project.pages[0].panels[0].layers.push({
@@ -98,8 +95,7 @@ test("buildLayerPrompt leaves the page prompt, panel prompt and background scene
   const prompt = buildLayerPrompt(project, panelId, 'fg1');
   // Stray setting language anywhere in the prompt makes some generators draw a full scene instead of
   // an isolated cutout (confirmed by testing), even a scene description added "for context only, do
-  // not draw it" — so none of the page prompt, panel prompt or scene description belong here.
-  assert.doesNotMatch(prompt, /The chase ends here/);
+  // not draw it" — so the scene description does not belong here.
   assert.doesNotMatch(prompt, /Wide shot, low angle/);
   assert.doesNotMatch(prompt, /rooftop/i);
 });

@@ -164,12 +164,7 @@ Google Drive API (OAuth token, page memory)   — or —   http-storage server (
      type what it should show), **Background** ("Set background", which becomes a
      "Background" row with the same chevron and trash icon). Expanded, a layer shows its name, prompt, its image as a thumbnail
      (or an "Add image" tile when it has none; no file name or pixel size) and opacity; a bubble shows its text and kind. Position, size and rotation are
-     only on the page. Expanding a row and selecting it are independent. The
-     last section of the inspector is the **Page prompt** (`PageDetails`,
-     `page.update`), the intent of the whole page: it is **collapsed by
-     default** (a chevron toggle; while collapsed it previews the text in one
-     line), shown whether or not a panel is highlighted, and it keeps its open or
-     closed state while you switch panels and pages.
+     only on the page. Expanding a row and selecting it are independent.
    - **Media picker** (`MediaPicker`, one component for every place an image is chosen): clicking
      the thumbnail, or "Set background", opens a popup with a thumbnail of every image in the
      project (transparent images on a checkerboard), the current one outlined, and an "Upload
@@ -216,11 +211,9 @@ project folder holds exactly one `project.json`.
 - `ComicProject` — `{ id, title, pages[], updatedAt, savedAt, metadata }`.
   `savedAt` is stamped on every successful Drive write and drives the
   Saving/Saved indicator.
-- `ComicPage` — `{ id, number, title, prompt?, panels[] }`. `number` is 0-based and
-  displayed as is (`0` = cover, `1` = page one). `prompt` is the intent of the
-  whole page (what happens, mood, pacing); see "Prompts" below.
-- `Panel` — `{ id, title?, prompt?, x, y, width, height, layers[], bubbles[] }`.
-  `prompt` is the intent of the panel (its moment, camera, mood).
+- `ComicPage` — `{ id, number, title, panels[] }`. `number` is 0-based and
+  displayed as is (`0` = cover, `1` = page one).
+- `Panel` — `{ id, title?, x, y, width, height, layers[], bubbles[] }`.
   `x`/`y`/`width`/`height` are percentages of the **page**. The panels of a
   page tile it (no gaps or overlaps), and each is at least 5% of the page
   wide and tall. A panel's aspect ratio follows from its rectangle and
@@ -275,18 +268,14 @@ host app through `ComicBuilderDeps` (getProject, updateProject,
 replaceProject, page index, preview, status, storage, media). The API is
 also the app's **LLM skill**: see §5.
 
-**Prompts.** Three levels of the project carry a `prompt`, each saying only
-what belongs to it: the page (its intent: what happens, mood, pacing), the panel
-(its moment, camera, mood) and the layer (what that one image shows). The prompt
+**Prompts.** Only layers carry a `prompt`: what that one image shows. The prompt
 for the image of a layer, a background included, is not stored: an LLM stitches
-it from the stored parts at generation time, in this order: the STYLE paragraph
-(in `metadata.outline`), the page prompt, the panel prompt, the scene
-description, the description of each character and object in the image, and the
-layer prompt (then the technical requirements). Keeping the levels separate
-means a fix to a page prompt or a character description flows into every image
-stitched from it afterwards. All three are optional strings (validated on load
-and by the API; `""` clears one), editable in the UI and through the API
-(`page.update`, `panels.update`, `layers.update`) and so through the CLI.
+it from the stored parts at generation time, in this order: the comic style (the
+STYLE paragraph, `metadata.style`), the description of the character, prop or
+scene in the image, and the layer prompt (then the technical requirements). A fix
+to a character description flows into every image stitched from it afterwards.
+The layer prompt is optional (`""` clears it), editable in the UI and through the
+API (`layers.update`) and so through the CLI.
 
 Namespaces:
 

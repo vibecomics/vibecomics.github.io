@@ -194,11 +194,9 @@ function layerStyleAddendum(project: ComicProject, label: string): string | unde
  * The labeled parts of a layer's (or background's) image prompt: Style, the kind's style addendum
  * (see layerStyleAddendum — omitted for an object), the linked entry's description (a background's
  * scene, or a foreground layer's character/object), the layer prompt, then a technical requirements
- * line. The page and panel prompts are deliberately left out of both: they narrate the whole panel
- * (people, action), so on a background they got drawn into the scene, and on a foreground any setting
- * language makes this model draw a full scene instead of an isolated cutout (an earlier test of a
- * "for context only, do not draw it" scene description didn't prevent that for foregrounds; a
- * disclaimer on page/panel prompts for backgrounds hasn't been tried).
+ * line. The story bible's Style and the layer's own prompt are the only free text in it, so nothing
+ * narrates the whole panel (people, action) into a background, and a foreground never picks up setting
+ * language that makes this model draw a full scene instead of an isolated cutout.
  *
  * Keeping an object's or scene's prompt free of figure-only language (never putting characterStyle
  * into either, and never putting a character description into a background) is the main defense

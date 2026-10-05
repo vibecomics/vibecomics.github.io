@@ -425,12 +425,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     },
 
     /**
-     * Pages: navigation, preview, creating, reordering and their prompts.
-     *
-     * A page has a prompt: the intent of the whole page (what happens on it, its
-     * mood and pacing), set with add or update. It is the first part of the
-     * prompt for the image of every layer on the page (see the layers namespace
-     * for how the parts are stitched together).
+     * Pages: navigation, preview, creating, reordering and their titles.
      *
      * HOW A PAGE IS BUILT. A page always starts with ONE panel that covers the
      * whole page (page.add() makes one, and a new project's cover has one).
@@ -493,17 +488,15 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * panels.splitEvenly(panelId, "horizontal", 3) for three rows, or
        * panels.split(panelId, "vertical", 60) for a wide and a narrow panel
        * (see the panels namespace).
-       * @param input - Optional { title, prompt } for the page. title defaults to empty; prompt is the page's intent (see update) and is unset by default.
+       * @param input - Optional { title } for the page. title defaults to empty.
        * @returns A deep-cloned snapshot of the new ComicPage (with its single panel).
        */
-      add: (input?: { title?: string; prompt?: string }): ComicPage => {
+      add: (input?: { title?: string }): ComicPage => {
         assertOptionalText(input?.title, 'title');
-        assertOptionalText(input?.prompt, 'prompt');
         const page: ComicPage = {
           id: newId('page'),
           number: 0,
           title: input?.title ?? '',
-          ...(input?.prompt !== undefined && { prompt: input.prompt }),
           panels: [createPanel()],
         };
         deps.updateProject((p) => {
@@ -515,33 +508,21 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       },
 
       /**
-       * Update a page's title or prompt. The prompt is the intent of the whole
-       * page: what happens on it, its mood and pacing, and how the panels flow.
-       * It is the first part stitched into the prompt for the image of every
-       * layer on the page, ahead of the panel prompt and the layer prompt (see
-       * the layers namespace). Only the given fields change; pass "" to clear a
-       * prompt.
-       * @param patch - { title?, prompt? }.
+       * Update a page's title. Only the given fields change.
+       * @param patch - { title? }.
        * @param pageIndex - 0-based page index. Defaults to the current page.
        * @returns A deep-cloned snapshot of the updated ComicPage. Throws when the page is not found.
        */
-      update: (patch: { title?: string; prompt?: string }, pageIndex?: number): ComicPage => {
-        if (!patch || typeof patch !== 'object')
-          throw new Error('patch must be { title?, prompt? }.');
+      update: (patch: { title?: string }, pageIndex?: number): ComicPage => {
+        if (!patch || typeof patch !== 'object') throw new Error('patch must be { title? }.');
         assertOptionalText(patch.title, 'title');
-        assertOptionalText(patch.prompt, 'prompt');
         const project = requireProject(deps);
         const index = pageIndex ?? deps.getPageIndex();
         if (!Number.isInteger(index) || index < 0 || index >= project.pages.length) {
           throw new Error(`Page ${index} not found.`);
         }
         return snapshot(
-          mutate(deps, (p) =>
-            Object.assign(
-              p.pages[index],
-              definedFields({ title: patch.title, prompt: patch.prompt })
-            )
-          )
+          mutate(deps, (p) => Object.assign(p.pages[index], definedFields({ title: patch.title })))
         );
       },
 
@@ -702,13 +683,9 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       resize: panels.resize,
 
       /**
-       * Update a panel's title or prompt. The prompt is the intent of the panel:
-       * the moment it shows, the camera, the mood, what it must get across. It
-       * is stitched into the prompt for the image of every layer in the panel,
-       * after the page prompt and before the layer prompt (see the layers
-       * namespace). Only the given fields change; pass "" to clear a prompt.
+       * Update a panel's title. Only the given fields change.
        * @param panelId - The panel id.
-       * @param patch - { title?, prompt? }.
+       * @param patch - { title? }.
        * @returns A deep-cloned snapshot of the updated Panel. Throws when not found.
        */
       update: panels.update,
@@ -749,8 +726,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      *   object gets no addendum), the character's or object's description, and
      *   the LAYER prompt.
      *
-     * Neither includes the page prompt (page.update), the panel prompt
-     * (panels.update), or — on a foreground — the panel's background scene,
+     * Neither includes the panel's title, or — on a foreground — the panel's background scene,
      * even as "context only, do not draw it": most image generators draw the
      * literal setting the moment any place or scene language appears anywhere
      * in the prompt, caveat or not, which ruins an isolated cutout (worse on a
@@ -759,8 +735,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * where.
      *
      * Each level says only what belongs to it, so the parts add up without
-     * repeating or contradicting each other. Read them back with page.select
-     * (page prompt), panels.get (panel prompt) and layers.get (layer prompt).
+     * repeating or contradicting each other. Read them back with layers.get.
      *
      * A layer can pin itself to one of its subject's/scene's variations (see
      * the Variation type and the variations namespace) with variationId: that
@@ -801,9 +776,9 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * only a prompt and get its image later with update(). Put what this
        * layer's art shows in `prompt` (write it before you generate the image,
        * so the plan is on record). It is the last part of the prompt for the
-       * image: that prompt is stitched from the STYLE paragraph, the page
-       * prompt, the panel prompt, the scene and character descriptions and this
-       * layer prompt (see the layers namespace). Foreground images
+       * image: that prompt is stitched from the comic style, the scene and
+       * character descriptions and this layer prompt (see the layers namespace).
+       * Foreground images
        * should usually be PNGs with a transparent background.
        * @param panelId - The panel id.
        * @param input - { name?, prompt?, subjectId?, sceneId?, variationId?, mediaId?, aspectRatio?, kind?, visible?, x?, y?, width?, rotation?, opacity?, flipX? }. mediaId must already be registered (from media.upload or media.list); omit it for a layer that is only a prompt so far. subjectId is the id of the character or object the layer shows (it must exist); the media picker lists that subject's art first. sceneId is the id of the scene a background layer is the setting of (it must exist); the picker lists that scene's art first. variationId is the id of one of subjectId's (or sceneId's) variations (it must belong to that entry): its own images become the default reference sent when generating this layer. name defaults to the media's name, else "Layer" or "Background". x/y/width are % of panel size and rotation is in degrees; kind defaults to "foreground"; geometry defaults to x:0, y:0, width:100, rotation:0, opacity:1 (0-1), visible:true, flipX:false (true mirrors the image left to right). aspectRatio (width / height) shapes a layer that has no image yet; use layers.size to see what to generate. dirty is set automatically (true when there's a prompt and no image yet) unless you pass it explicitly.

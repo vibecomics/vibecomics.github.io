@@ -121,21 +121,24 @@ test('an optional field set on one side and cleared on the other is a conflict, 
   const b = base();
   const mine = clone(b);
   const theirs = clone(b);
-  mine.pages[1].prompt = 'Ours';
+  mine.pages[1].panels[0].title = 'Ours';
   const { conflicts, merged } = mergeProjects(b, mine, theirs);
   assert.deepEqual(conflicts, []); // only ours changed it
-  assert.equal(merged.pages[1].prompt, 'Ours');
+  assert.equal(merged.pages[1].panels[0].title, 'Ours');
 
-  const withPrompt = clone(b);
-  withPrompt.pages[1].prompt = 'Base';
-  const ours = clone(withPrompt);
-  const other = clone(withPrompt);
-  ours.pages[1].prompt = 'Ours';
-  delete other.pages[1].prompt;
-  const result = mergeProjects(withPrompt, ours, other);
+  const withTitle = clone(b);
+  withTitle.pages[1].panels[0].title = 'Base';
+  const ours = clone(withTitle);
+  const other = clone(withTitle);
+  ours.pages[1].panels[0].title = 'Ours';
+  delete other.pages[1].panels[0].title;
+  const result = mergeProjects(withTitle, ours, other);
   assert.equal(result.conflicts.length, 1);
   assert.equal(result.conflicts[0].text.theirs, '(not set)');
-  assert.equal(settled(result.merged, result.conflicts[0], 'theirs').pages[1].prompt, undefined);
+  assert.equal(
+    settled(result.merged, result.conflicts[0], 'theirs').pages[1].panels[0].title,
+    undefined
+  );
 });
 
 test('pages added on both sides are all kept, in a sensible order, and renumbered', () => {
@@ -226,7 +229,7 @@ test('deleted on one side and changed on the other is a conflict, either way rou
   mine = clone(b);
   theirs = clone(b);
   mine.pages.splice(2, 1);
-  theirs.pages[2].panels[0].prompt = 'They wrote a prompt';
+  theirs.pages[2].panels[0].title = 'They titled it';
   result = mergeProjects(b, mine, theirs);
   assert.equal(result.conflicts.length, 1);
   assert.equal(result.conflicts[0].label, 'Page 2 "Roof"');
@@ -234,10 +237,10 @@ test('deleted on one side and changed on the other is a conflict, either way rou
   assert.equal(titles(result.merged), 'Cover,Chase');
   const back = settled(result.merged, result.conflicts[0], 'theirs');
   assert.equal(titles(back), 'Cover,Chase,Roof');
-  assert.equal(back.pages[2].panels[0].prompt, 'They wrote a prompt');
+  assert.equal(back.pages[2].panels[0].title, 'They titled it');
   assert.equal(back.pages[2].number, 2);
   assert.equal(
-    settled(result.merged, result.conflicts[0], 'base').pages[2].panels[0].prompt,
+    settled(result.merged, result.conflicts[0], 'base').pages[2].panels[0].title,
     undefined
   );
 });

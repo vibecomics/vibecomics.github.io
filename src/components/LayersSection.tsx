@@ -4,6 +4,7 @@ import { useDragGhost } from '../utils/dragGhost';
 import type { Point } from '../utils/dragGhost';
 import { moved, slotAt } from '../utils/reorder';
 import type { MediaItem, Panel } from '../types/comic';
+import HelpSection from './HelpSection';
 import LayerRow from './LayerRow';
 import type { Selection } from './selection';
 import type { Expansion } from './useExpansion';
@@ -97,6 +98,14 @@ export default function LayersSection({ panel, media, selection, onSelect, expan
           </button>
         )}
       </div>
+      {foreground.length === 0 && (
+        <HelpSection title="What are layers?" open>
+          <p className="mb-0">
+            The characters, props and effects placed on this panel. Stacked from the bottom up, each
+            one can be moved, resized and reused.
+          </p>
+        </HelpSection>
+      )}
       <button className="btn btn-outline-secondary btn-sm my-2" onClick={addLayer}>
         Add layer
       </button>

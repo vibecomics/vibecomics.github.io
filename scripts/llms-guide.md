@@ -1,16 +1,25 @@
 # VibeComics: how to build a comic
 
-VibeComics is a comic builder. Pages are made of panels; each panel is a stack
-of image layers with speech bubbles on top; everything is stored in the user's
-Google Drive. This file tells you, an AI agent, **how to build a good comic with
-it, step by step**. It does not list functions.
+VibeComics is a comic builder that can be used to generate graphic novels or comics using LLM agents. This file tells you, an AI agent, **how to build a good comic with it, step by step**.
+
+## Hirearchy
+
+Each comic has multiple pages.
+A comic also has cast, props and scenes to ensure continuity.
+Each cast, prop or scene can have "variations", that depict the same entity in different orientations or conditions.
+Each page is divided into multiple panels. Panels can be resized or split.
+Each panel has a background, multiple layers, and speech bubbles.
+Layers and background can refer to specific cast, props or background with it variation, and the image for them can be generated using AI.
+Speech bubbles could be thoughts, shouting, caption and regular speect.
+
+## Using the CLI to drive comic generation
 
 - **How you drive it: the `vibecomics` command line, not a browser.** It is one
   file, `vibecomics.mjs`, with nothing to install (Node.js 20 or newer; check
   `node --version`). Download it:
-  `curl -fsSLO https://nparashuram.github.io/vibecomics/vibecomics.mjs` (it is
+  `curl -fsSLO https://vibecomics.github.io/vibecomics.mjs` (it is
   served next to this file, so if you read this file from somewhere else, use the
-  same address with `llms.txt` replaced by `vibecomics.mjs`). Then
+  same address with `llms-guide.md` replaced by `vibecomics.mjs`). Then
   `node vibecomics.mjs help`. Every function is a command:
   `node vibecomics.mjs <namespace> <function> [arguments]`. It prints JSON. You do
   not need a browser and you do not need to inject any JavaScript. Below,
@@ -104,7 +113,7 @@ There is no separate synopsis or outline field: a page-by-page beat sheet
 would get stitched into every single image's prompt too, drowning out what is
 actually specific to each one. Keep the premise and the page-by-page plan
 somewhere else entirely (your own notes, a doc) and put what belongs to each
-page or panel in that page's or panel's own prompt instead.
+panel in its layers' prompts instead.
 
 ### 2. Build the story bible
 
@@ -169,20 +178,16 @@ Every new page starts as one blank panel that you then cut up into the layout.
 Choose the page size first (the standard comic sizes are in the API
 reference); it decides every image's proportions.
 
-### 4. Write the prompts for every page, panel and layer, before any image
+### 4. Write the prompt for every layer, before any image
 
-Build the whole comic as **prompts first**, at three levels. Each level says
-only what belongs to it, so the parts add up when they are stitched together
-(step 5) without repeating or contradicting each other:
+Build the whole comic as **prompts first**, one per layer. Each prompt says only
+what its own image shows, so the parts add up when they are stitched together
+(step 5) without repeating or contradicting each other. For each panel, put in
+the moment it shows, the camera (shot and angle), the mood and where the words
+will go, and add the layers it needs, writing each layer's prompt while its image
+slot is still empty:
 
-- **The page prompt:** the intent of the whole page. What happens on it (the
-  beats from step 3), its mood and pacing, how the panels flow. Set it when you
-  add the page, or later.
-- **The panel prompt:** the intent of one panel. The moment it shows, the
-  camera (shot and angle), the mood, what it must get across, where the words
-  will go.
-- **The layer prompts:** for each panel, add the layers it needs and write the
-  prompt in each one while its image slot is still empty:
+- **The layer prompts:**
   - one **background** layer: the setting, at the bottom of the stack, filling
     the panel;
   - one **foreground** layer per character or prop that appears, so each can be
@@ -208,8 +213,7 @@ only what belongs to it, so the parts add up when they are stitched together
     bible.
 
 These prompts are the record of how every image is asked for. The user can open
-the page in the editor and read your plan (the page and panel prompts are boxes
-in the inspector, and each empty layer shows its prompt), so this is also where
+the page in the editor and read your plan (each empty layer shows its prompt), so this is also where
 they can correct you cheaply, before any image has been generated. Fix the
 plan, then start generating.
 
@@ -222,18 +226,15 @@ generators draw a full scene the moment any place or setting language shows up
 anywhere in the prompt, even alongside "isolated subject" or "transparent
 background," and even labeled "for context only, do not draw it" (tested and
 confirmed: a scene description added this way still gets drawn). So a
-foreground layer's prompt leaves out the page prompt, the panel prompt, _and_
-any scene description entirely, however tempting it is to include them for
-continuity or lighting.
+foreground layer's prompt leaves out any scene description entirely, however
+tempting it is to include it for continuity or lighting.
 
 **Background** (in this order):
 
 1. The **STYLE paragraph**, verbatim.
-2. The **page prompt** of the page it is on, verbatim.
-3. The **panel prompt** of the panel it is in, verbatim.
-4. The **scene description** from the bible, verbatim.
-5. The **layer prompt**: what this image shows.
-6. The **technical requirements** (next section), including the exact size or
+2. The **scene description** from the bible, verbatim.
+3. The **layer prompt**: what this image shows.
+4. The **technical requirements** (next section), including the exact size or
    aspect ratio the app gives you for that layer.
 
 **Foreground** (in this order):
@@ -376,8 +377,7 @@ to look at a page and tell you what is wrong. Check:
   show.
 
 Fix problems at the source: tighten the part of the prompt that caused it (the
-layer prompt, the panel or page prompt if the fault is shared, or the
-description in the bible), stitch the prompt again (quote the descriptions more
+layer prompt, or the description in the bible if the fault is shared), stitch the prompt again (quote the descriptions more
 exactly, attach the reference), regenerate that one image, and swap it in. The
 stored prompts then still describe what produced the image.
 
@@ -418,8 +418,8 @@ bible reference art and page art.
 Before generating any image, confirm:
 
 - The prompt is stitched from the stored parts, in order: the STYLE paragraph,
-  the page prompt, the panel prompt, the scene, the characters and objects, the
-  layer prompt, then the technical requirements.
+  the scene, the characters and props, the layer prompt, then the technical
+  requirements.
 - The STYLE paragraph is in the prompt, verbatim.
 - Every character, place and prop in the image is in the prompt with its
   description verbatim.
@@ -428,5 +428,5 @@ Before generating any image, confirm:
   than one variation, since that is where the reference art actually lives.
 - It is the right kind: a transparent PNG subject for foreground layers, an
   opaque exact-ratio picture for backgrounds.
-- The page prompt, the panel prompt and the layer prompt are written down in the
-  project, so the plan is on record and the user can read it.
+- The layer prompt is written down in the project, so the plan is on record and
+  the user can read it.

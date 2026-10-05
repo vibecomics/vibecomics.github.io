@@ -29,8 +29,8 @@ export interface Layer {
   variationId?: string;
   /**
    * What this layer's art shows: its own part of the image prompt, or a plain
-   * description. The page prompt, the panel prompt and the story bible supply
-   * the rest of the prompt an image model is given.
+   * description. The story bible (style, cast, props and scenes) supplies the
+   * rest of the prompt an image model is given.
    */
   prompt?: string;
   /**
@@ -81,12 +81,6 @@ export interface Panel {
   id: string;
   title?: string;
   /**
-   * The intent of the panel: what it shows and why (the moment, the camera, the
-   * mood). An LLM stitches it, after the page prompt and before each layer's
-   * prompt, into the prompt for the image of every layer in the panel.
-   */
-  prompt?: string;
-  /**
    * Position and size as percentages of the page. Panels tile the page, so a
    * panel's aspect ratio follows from its rectangle and the page size.
    */
@@ -109,12 +103,6 @@ export interface ComicPage {
   /** Zero-based page index, displayed as 0, 1, 2, ... */
   number: number;
   title: string;
-  /**
-   * The intent of the whole page: what happens on it, its mood and pacing. An
-   * LLM stitches it, first, into the prompt for the image of every layer on the
-   * page, followed by the panel prompt and the layer prompt.
-   */
-  prompt?: string;
   panels: Panel[];
 }
 

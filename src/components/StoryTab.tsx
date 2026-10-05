@@ -4,26 +4,46 @@ import type { StoryKind } from '../ai/builders';
 import type { GenerationTarget } from '../ai/generation';
 import type { ComicProject, MediaItem, Variation } from '../types/comic';
 import { TrashIcon } from './Icons';
+import HelpSection from './HelpSection';
 import ReferenceImages from './ReferenceImages';
+import StyleField from './StyleField';
 
 const STORY_TABS = {
   characters: {
     title: 'Characters',
     singular: 'character',
     placeholder: 'Visual description + continuity notes…',
+    help: 'The people in your comic. Describe each one once, with reference art, so they look the same on every page.',
     referenceImages: true,
+    style: {
+      field: 'characterStyle',
+      label: 'Character style',
+      rows: 2,
+      placeholder:
+        'e.g. Big expressive eyes, slim long proportions, warm olive skin, clean black outlines.',
+    },
   },
   objects: {
-    title: 'Objects',
-    singular: 'object',
+    title: 'Props',
+    singular: 'prop',
     placeholder: 'Shape, size, material, colours, markings, continuity notes…',
+    help: 'The things that recur in your story, such as a car, a weapon or a key. Describe each one once so it looks the same wherever it appears.',
     referenceImages: true,
+    style: null,
   },
   scenes: {
     title: 'Scenes',
     singular: 'scene',
     placeholder: 'Setting, time of day, mood, lighting…',
+    help: 'The places your story happens, such as a street, a lab or a bedroom. Each one is the setting behind the panels that take place there.',
     referenceImages: true,
+    style: {
+      field: 'sceneStyle',
+      label: 'Scene style',
+      rows: 2,
+      placeholder:
+        'e.g. Loose painterly backgrounds with soft edges, little detail in the distance, hazy golden-hour atmosphere.',
+    },
   },
 } as const;
 
@@ -108,9 +128,9 @@ interface StoryTabProps {
   onFocusApplied: () => void;
 }
 
-/** The characters, objects or scenes of the story bible: add, rename, describe, delete. */
+/** The characters, props or scenes of the story bible: add, rename, describe, delete. */
 export default function StoryTab({ project, kind, focus, onFocusApplied }: StoryTabProps) {
-  const { title, singular } = STORY_TABS[kind];
+  const { title, singular, style } = STORY_TABS[kind];
   const entries = project.metadata[kind];
   // The entry just shown by the generation queue, lit up for a moment so it's easy to spot.
   const [highlighted, setHighlighted] = useState<string | null>(null);
@@ -148,6 +168,11 @@ export default function StoryTab({ project, kind, focus, onFocusApplied }: Story
           +
         </button>
       </div>
+      {entries.length === 0 && (
+        <HelpSection title={`What are ${title.toLowerCase()}?`} open>
+          <p className="mb-0">{STORY_TABS[kind].help}</p>
+        </HelpSection>
+      )}
       {entries.map((entry) => (
         <EntryCard
           key={entry.id}
@@ -157,7 +182,21 @@ export default function StoryTab({ project, kind, focus, onFocusApplied }: Story
           highlighted={entry.id === highlighted}
         />
       ))}
-      {entries.length === 0 && <p className="text-muted">No {title.toLowerCase()} yet.</p>}
+      {style && (
+        <StyleField
+          id={`${kind}-style`}
+          label={style.label}
+          rows={style.rows}
+          placeholder={style.placeholder}
+          value={project.metadata[style.field] ?? ''}
+          autoSave
+          onSave={(text) =>
+            kind === 'characters'
+              ? cb().metadata.setCharacterStyle(text)
+              : cb().metadata.setSceneStyle(text)
+          }
+        />
+      )}
     </div>
   );
 }

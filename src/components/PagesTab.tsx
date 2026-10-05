@@ -6,7 +6,6 @@ import { usePersistentChoice } from '../utils/usePersistentChoice';
 import { useMediaQuery } from '../utils/useViewport';
 import InspectorPane from './InspectorPane';
 import PageButtons from './PageButtons';
-import PageDetails from './PageDetails';
 import PageSheet from './PageSheet';
 import { FIT_VIEW, MAX_SCALE, MIN_SCALE, ZOOM_STEP } from './pageView';
 import type { PageView } from './pageView';
@@ -121,6 +120,14 @@ export default function PagesTab({
               >
                 <div className="d-flex align-items-center gap-2 px-3 pt-2">
                   <h2 className="h6 mb-0 text-truncate flex-grow-1">{formatPageLabel(page)}</h2>
+                  {pages.length === 1 && (
+                    <button
+                      className="btn btn-sm btn-primary flex-shrink-0"
+                      onClick={() => cb().page.add()}
+                    >
+                      Add your first page
+                    </button>
+                  )}
                   <div
                     className="btn-group btn-group-sm flex-shrink-0"
                     role="group"
@@ -207,7 +214,6 @@ export default function PagesTab({
                 ) : (
                   <p className="text-muted p-3 mb-0 d-none d-md-block">No panel selected</p>
                 )}
-                <PageDetails page={page} pageIndex={pageIndex} />
               </InspectorPane>
             </>
           ) : (

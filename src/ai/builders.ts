@@ -710,15 +710,11 @@ export function panelsApi(deps: ComicBuilderDeps) {
         })
       );
     },
-    update: (panelId: string, patch: { title?: string; prompt?: string }): Panel => {
+    update: (panelId: string, patch: { title?: string }): Panel => {
       assertOptionalText(patch.title, 'title');
-      assertOptionalText(patch.prompt, 'prompt');
       return snapshot(
         mutate(deps, (p) =>
-          Object.assign(
-            requirePanel(p, panelId),
-            definedFields({ title: patch.title, prompt: patch.prompt })
-          )
+          Object.assign(requirePanel(p, panelId), definedFields({ title: patch.title }))
         )
       );
     },

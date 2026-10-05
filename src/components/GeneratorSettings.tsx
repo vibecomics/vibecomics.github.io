@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { cb } from '../ai/actions';
+import Modal from './Modal';
 import {
   detectComfyNodes,
   listComfyWorkflows,
@@ -153,165 +153,146 @@ export default function GeneratorSettings({ onClose }: Props) {
     });
   }
 
-  return createPortal(
-    <>
-      <div className="modal-backdrop show" />
-      <div
-        className="modal d-block"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Generator settings"
-        onClick={(e) => e.target === e.currentTarget && onClose()}
-      >
-        <div className="modal-dialog modal-lg modal-dialog-scrollable">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h2 className="modal-title h5">Generator settings</h2>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
-            </div>
-            <div className="modal-body">
-              <label className="form-label small">ComfyUI server URL</label>
-              <input
-                className="form-control form-control-sm mb-2"
-                placeholder="http://192.168.1.10:8081"
-                autoFocus
-                value={baseUrl}
-                onChange={(e) => setBaseUrl(e.target.value)}
-              />
-              {available && (
-                <>
-                  <label className="form-label small">Workflow</label>
-                  <select
-                    className="form-select form-select-sm mb-2"
-                    value={workflowName}
-                    onChange={(e) => chooseWorkflow(e.target.value)}
-                  >
-                    <option value="">Select a workflow saved in ComfyUI…</option>
-                    {[...new Set([...(workflowName ? [workflowName] : []), ...available])].map(
-                      (name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      )
-                    )}
-                  </select>
-                  <div className="form-text mb-2">
-                    {available.length === 0
-                      ? 'No workflows saved on that server yet. Save one in ComfyUI ("Save (API Format)" files go in its workflows folder) and reopen this.'
-                      : 'Workflows saved in ComfyUI. Only the name is kept in this browser; the workflow is fetched from the server when the page loads.'}
-                  </div>
-                </>
-              )}
-              {listError && <div className="text-danger small mb-2">{listError}</div>}
-              {task.error && <div className="text-danger small mb-2">{task.error}</div>}
+  return (
+    <Modal
+      title="Generator settings"
+      label="Generator settings"
+      wide
+      onClose={onClose}
+      footer={
+        <div className="modal-footer">
+          <button
+            type="button"
+            className="btn btn-outline-secondary btn-sm"
+            disabled={task.busy || !baseUrl}
+            onClick={testConnection}
+          >
+            Test connection
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={
+              task.busy ||
+              !baseUrl ||
+              !workflowName ||
+              !fields.positivePromptNodeId ||
+              !fields.outputNodeId
+            }
+            onClick={save}
+          >
+            Save
+          </button>
+        </div>
+      }
+    >
+      <label className="form-label small">ComfyUI server URL</label>
+      <input
+        className="form-control form-control-sm mb-2"
+        placeholder="http://192.168.1.10:8081"
+        autoFocus
+        value={baseUrl}
+        onChange={(e) => setBaseUrl(e.target.value)}
+      />
+      {available && (
+        <>
+          <label className="form-label small">Workflow</label>
+          <select
+            className="form-select form-select-sm mb-2"
+            value={workflowName}
+            onChange={(e) => chooseWorkflow(e.target.value)}
+          >
+            <option value="">Select a workflow saved in ComfyUI…</option>
+            {[...new Set([...(workflowName ? [workflowName] : []), ...available])].map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <div className="form-text mb-2">
+            {available.length === 0
+              ? 'No workflows saved on that server yet. Save one in ComfyUI ("Save (API Format)" files go in its workflows folder) and reopen this.'
+              : 'Workflows saved in ComfyUI. Only the name is kept in this browser; the workflow is fetched from the server when the page loads.'}
+          </div>
+        </>
+      )}
+      {listError && <div className="text-danger small mb-2">{listError}</div>}
+      {task.error && <div className="text-danger small mb-2">{task.error}</div>}
 
-              <details>
-                <summary className="small mb-2">Advanced: node mapping</summary>
-                <div className="mt-2">
-                  {!workflowName && (
-                    <div className="text-muted small mb-1">
-                      Pick a workflow saved on the server above to guess these automatically.
-                    </div>
-                  )}
-                  <div className="row g-2 mb-2">
-                    <div className="col-6">
-                      <label className="form-label small">Positive prompt node id</label>
-                      <input
-                        className="form-control form-control-sm"
-                        value={fields.positivePromptNodeId}
-                        onChange={(e) => setField('positivePromptNodeId', e.target.value)}
-                      />
-                    </div>
-                    <div className="col-6">
-                      <label className="form-label small">
-                        Prompt field name (optional, default "text")
-                      </label>
-                      <input
-                        className="form-control form-control-sm"
-                        value={fields.promptField}
-                        onChange={(e) => setField('promptField', e.target.value)}
-                      />
-                    </div>
-                    <div className="col-6">
-                      <label className="form-label small">Output (SaveImage) node id</label>
-                      <input
-                        className="form-control form-control-sm"
-                        value={fields.outputNodeId}
-                        onChange={(e) => setField('outputNodeId', e.target.value)}
-                      />
-                    </div>
-                    <div className="col-6">
-                      <label className="form-label small">
-                        Transparent output node id (optional)
-                      </label>
-                      <input
-                        className="form-control form-control-sm"
-                        value={fields.transparentOutputNodeId}
-                        onChange={(e) => setField('transparentOutputNodeId', e.target.value)}
-                      />
-                      <div className="form-text">
-                        A second SaveImage fed by a background-removal node (e.g. Inspyrenet Rembg),
-                        used instead of the output above for character/object layers.
-                      </div>
-                    </div>
-                    <div className="col-6">
-                      <label className="form-label small">
-                        Reference image node ids (comma-separated)
-                      </label>
-                      <input
-                        className="form-control form-control-sm"
-                        value={fields.referenceImageNodeIds}
-                        onChange={(e) => setField('referenceImageNodeIds', e.target.value)}
-                      />
-                    </div>
-                    <div className="col-3">
-                      <label className="form-label small">Size node id (optional)</label>
-                      <input
-                        className="form-control form-control-sm"
-                        value={fields.sizeNodeId}
-                        onChange={(e) => setField('sizeNodeId', e.target.value)}
-                      />
-                    </div>
-                    <div className="col-3">
-                      <label className="form-label small">Seed node id (optional)</label>
-                      <input
-                        className="form-control form-control-sm"
-                        value={fields.seedNodeId}
-                        onChange={(e) => setField('seedNodeId', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </details>
+      <details>
+        <summary className="small mb-2">Advanced: node mapping</summary>
+        <div className="mt-2">
+          {!workflowName && (
+            <div className="text-muted small mb-1">
+              Pick a workflow saved on the server above to guess these automatically.
             </div>
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="btn btn-outline-secondary btn-sm"
-                disabled={task.busy || !baseUrl}
-                onClick={testConnection}
-              >
-                Test connection
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                disabled={
-                  task.busy ||
-                  !baseUrl ||
-                  !workflowName ||
-                  !fields.positivePromptNodeId ||
-                  !fields.outputNodeId
-                }
-                onClick={save}
-              >
-                Save
-              </button>
+          )}
+          <div className="row g-2 mb-2">
+            <div className="col-6">
+              <label className="form-label small">Positive prompt node id</label>
+              <input
+                className="form-control form-control-sm"
+                value={fields.positivePromptNodeId}
+                onChange={(e) => setField('positivePromptNodeId', e.target.value)}
+              />
+            </div>
+            <div className="col-6">
+              <label className="form-label small">
+                Prompt field name (optional, default "text")
+              </label>
+              <input
+                className="form-control form-control-sm"
+                value={fields.promptField}
+                onChange={(e) => setField('promptField', e.target.value)}
+              />
+            </div>
+            <div className="col-6">
+              <label className="form-label small">Output (SaveImage) node id</label>
+              <input
+                className="form-control form-control-sm"
+                value={fields.outputNodeId}
+                onChange={(e) => setField('outputNodeId', e.target.value)}
+              />
+            </div>
+            <div className="col-6">
+              <label className="form-label small">Transparent output node id (optional)</label>
+              <input
+                className="form-control form-control-sm"
+                value={fields.transparentOutputNodeId}
+                onChange={(e) => setField('transparentOutputNodeId', e.target.value)}
+              />
+              <div className="form-text">
+                A second SaveImage fed by a background-removal node (e.g. Inspyrenet Rembg), used
+                instead of the output above for character/prop layers.
+              </div>
+            </div>
+            <div className="col-6">
+              <label className="form-label small">Reference image node ids (comma-separated)</label>
+              <input
+                className="form-control form-control-sm"
+                value={fields.referenceImageNodeIds}
+                onChange={(e) => setField('referenceImageNodeIds', e.target.value)}
+              />
+            </div>
+            <div className="col-3">
+              <label className="form-label small">Size node id (optional)</label>
+              <input
+                className="form-control form-control-sm"
+                value={fields.sizeNodeId}
+                onChange={(e) => setField('sizeNodeId', e.target.value)}
+              />
+            </div>
+            <div className="col-3">
+              <label className="form-label small">Seed node id (optional)</label>
+              <input
+                className="form-control form-control-sm"
+                value={fields.seedNodeId}
+                onChange={(e) => setField('seedNodeId', e.target.value)}
+              />
             </div>
           </div>
         </div>
-      </div>
-    </>,
-    document.body
+      </details>
+    </Modal>
   );
 }

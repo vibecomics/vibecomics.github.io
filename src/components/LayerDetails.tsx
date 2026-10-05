@@ -99,13 +99,13 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           <select
             className="form-select form-select-sm flex-grow-1"
             aria-label="What this layer shows"
-            title="The media picker lists this character's or object's images first"
+            title="The media picker lists this character's or prop's images first"
             value={layer.subjectId ?? ''}
             onChange={(e) => update({ subjectId: e.target.value || null })}
           >
             <option value="">Nothing in particular</option>
             {layer.subjectId && !known && (
-              <option value={layer.subjectId}>A deleted character or object</option>
+              <option value={layer.subjectId}>A deleted character or prop</option>
             )}
             {characters.length > 0 && (
               <optgroup label="Characters">
@@ -117,7 +117,7 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
               </optgroup>
             )}
             {objects.length > 0 && (
-              <optgroup label="Objects">
+              <optgroup label="Props">
                 {objects.map((entry) => (
                   <option key={entry.id} value={entry.id}>
                     {entry.name}

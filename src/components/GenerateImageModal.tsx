@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { createPortal } from 'react-dom';
+import Modal from './Modal';
 import { cb } from '../ai/actions';
 import {
   defaultReferenceNote,
@@ -188,217 +188,24 @@ export default function GenerateImageModal(props: Props) {
     onClose();
   }
 
-  return createPortal(
+  return (
     <>
-      <div className="modal-backdrop show" />
-      <div
-        className="modal d-block"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onClick={(e) => e.target === e.currentTarget && onClose()}
-      >
-        <div className="modal-dialog modal-lg modal-dialog-scrollable">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h2 className="modal-title h5">
-                {bulk ? '🪄' : '✨'} {title}
-              </h2>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
-            </div>
-            <div className="modal-body">
-              {promptButtons ? (
-                <div className="mb-3">
-                  <label className="form-label small">Prompt</label>
-                  <div className="d-flex flex-wrap gap-2 mb-2">
-                    {parts.map((part) => {
-                      const piece = part.text.trim();
-                      const selected = text.includes(piece);
-                      return (
-                        <button
-                          key={part.label}
-                          type="button"
-                          className={`btn btn-sm ${selected ? 'btn-primary' : 'btn-outline-secondary'}`}
-                          aria-pressed={selected}
-                          title={`${selected ? 'Remove' : 'Insert'} the ${part.label} text`}
-                          onClick={() => togglePromptPart(part)}
-                        >
-                          {selected && '✓ '}
-                          {part.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <textarea
-                    className="form-control form-control-sm w-100"
-                    rows={8}
-                    value={text}
-                    aria-label="Prompt"
-                    onChange={(e) => setText(e.target.value)}
-                  />
-                </div>
-              ) : (
-                <>
-                  <label className="form-label small">
-                    Prompt{' '}
-                    <span className="text-muted">({parts.length} parts stitched together)</span>
-                  </label>
-                  <div className="mb-3">
-                    {parts.length === 0 && (
-                      <div className="text-muted small mb-2">
-                        Every part of the prompt was removed — there's nothing to generate from.
-                      </div>
-                    )}
-                    {parts.map((part, i) => {
-                      const isOpen = expanded.has(part.label);
-                      return (
-                        <div key={part.label} className="mb-1">
-                          <div className="d-flex align-items-center">
-                            <button
-                              type="button"
-                              className="btn btn-link btn-sm flex-grow-1 text-start text-decoration-none d-flex align-items-center gap-2 px-2 py-1"
-                              style={{ minWidth: 0 }}
-                              onClick={() => togglePart(part.label)}
-                              aria-expanded={isOpen}
-                            >
-                              <span aria-hidden="true">{isOpen ? '▾' : '▸'}</span>
-                              <strong className="small text-nowrap">{part.label}</strong>
-                              {!isOpen && (
-                                <span
-                                  className="text-muted small text-truncate"
-                                  style={{ minWidth: 0 }}
-                                >
-                                  {part.text}
-                                </span>
-                              )}
-                            </button>
-                            {isOpen && (
-                              <button
-                                type="button"
-                                className="btn btn-link btn-sm p-0 me-2 text-secondary d-flex align-items-center"
-                                title={`Remove "${part.label}" from the prompt`}
-                                aria-label={`Remove "${part.label}" from the prompt`}
-                                onClick={() => removePart(i)}
-                              >
-                                <TrashIcon />
-                              </button>
-                            )}
-                          </div>
-                          {isOpen && (
-                            <div className="px-2 pb-2">
-                              <textarea
-                                className="form-control form-control-sm w-100"
-                                rows={4}
-                                value={part.text}
-                                aria-label={`${part.label} text`}
-                                onChange={(e) => updatePartText(i, e.target.value)}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-              <label className="form-label small">
-                Reference images{' '}
-                <span className="text-muted">
-                  ({Math.min(references.length, max)} of {max} used)
-                </span>
-              </label>
-              {max === 0 && (
-                <div className="text-muted small mb-2">
-                  This generator's workflow has no reference image inputs.
-                </div>
-              )}
-              <div className="d-flex flex-column gap-2 mb-2">
-                {references.map((ref, i) => {
-                  const item = media.find((m) => m.id === ref.mediaId);
-                  return (
-                    <div
-                      key={ref.mediaId}
-                      className={`d-flex gap-2 align-items-start${i >= max ? ' opacity-50' : ''}`}
-                    >
-                      {item ? (
-                        <MediaThumb
-                          item={item}
-                          onRemove={() => setReferences(references.filter((_, j) => j !== i))}
-                        />
-                      ) : (
-                        <span className="text-muted small">Missing image</span>
-                      )}
-                      <textarea
-                        className="form-control form-control-sm flex-grow-1"
-                        style={{ height: 72, resize: 'none' }}
-                        value={ref.note ?? ''}
-                        placeholder="What should the generator take from this image? e.g. “match this exact outfit”, “use the pose only”, “ignore the background”"
-                        aria-label={
-                          i >= max
-                            ? `Note about reference image ${i + 1} (not used — over the limit)`
-                            : `Note about reference image ${i + 1}`
-                        }
-                        onChange={(e) =>
-                          setReferences(
-                            references.map((r, j) => (j === i ? { ...r, note: e.target.value } : r))
-                          )
-                        }
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-              <button
-                type="button"
-                className="btn btn-outline-secondary btn-sm mb-3"
-                disabled={max === 0}
-                onClick={() => setPicking(true)}
-              >
-                + Add reference image
-              </button>
-              {!bulk && result && <Preview item={result} />}
-              {bulk && bulkResults && (
-                <ul className="list-unstyled mb-2">
-                  {bulkResults.map((r) => (
-                    <li key={r.id} className={r.ok ? 'text-body' : 'text-danger'}>
-                      {r.ok ? '✓' : '✗'} {r.label}
-                      {!r.ok && r.error ? ` — ${r.error}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {task.error && <div className="text-danger small mb-2">{task.error}</div>}
-            </div>
-            <div className="modal-footer">
-              {bulk ? (
-                bulkResults ? (
-                  <button type="button" className="btn btn-primary btn-sm" onClick={onClose}>
-                    Done
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    disabled={task.busy || !prompt.trim()}
-                    onClick={generate}
-                  >
-                    {task.busy && <Spinner />}🪄 Generate {bulk.label}
-                  </button>
-                )
-              ) : result ? (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-outline-secondary btn-sm"
-                    disabled={task.busy}
-                    onClick={generate}
-                  >
-                    {task.busy && <Spinner />}✨ Regenerate
-                  </button>
-                  <button type="button" className="btn btn-primary btn-sm" onClick={useResult}>
-                    Use this image
-                  </button>
-                </>
+      <Modal
+        title={
+          <>
+            {bulk ? '🪄' : '✨'} {title}
+          </>
+        }
+        label={title}
+        wide
+        onClose={onClose}
+        footer={
+          <div className="modal-footer">
+            {bulk ? (
+              bulkResults ? (
+                <button type="button" className="btn btn-primary btn-sm" onClick={onClose}>
+                  Done
+                </button>
               ) : (
                 <button
                   type="button"
@@ -406,13 +213,194 @@ export default function GenerateImageModal(props: Props) {
                   disabled={task.busy || !prompt.trim()}
                   onClick={generate}
                 >
-                  {task.busy && <Spinner />}✨ Generate
+                  {task.busy && <Spinner />}🪄 Generate {bulk.label}
                 </button>
-              )}
-            </div>
+              )
+            ) : result ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm"
+                  disabled={task.busy}
+                  onClick={generate}
+                >
+                  {task.busy && <Spinner />}✨ Regenerate
+                </button>
+                <button type="button" className="btn btn-primary btn-sm" onClick={useResult}>
+                  Use this image
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={task.busy || !prompt.trim()}
+                onClick={generate}
+              >
+                {task.busy && <Spinner />}✨ Generate
+              </button>
+            )}
           </div>
+        }
+      >
+        {promptButtons ? (
+          <div className="mb-3">
+            <label className="form-label small">Prompt</label>
+            <div className="d-flex flex-wrap gap-2 mb-2">
+              {parts.map((part) => {
+                const piece = part.text.trim();
+                const selected = text.includes(piece);
+                return (
+                  <button
+                    key={part.label}
+                    type="button"
+                    className={`btn btn-sm ${selected ? 'btn-primary' : 'btn-outline-secondary'}`}
+                    aria-pressed={selected}
+                    title={`${selected ? 'Remove' : 'Insert'} the ${part.label} text`}
+                    onClick={() => togglePromptPart(part)}
+                  >
+                    {selected && '✓ '}
+                    {part.label}
+                  </button>
+                );
+              })}
+            </div>
+            <textarea
+              className="form-control form-control-sm w-100"
+              rows={8}
+              value={text}
+              aria-label="Prompt"
+              onChange={(e) => setText(e.target.value)}
+            />
+          </div>
+        ) : (
+          <>
+            <label className="form-label small">
+              Prompt <span className="text-muted">({parts.length} parts stitched together)</span>
+            </label>
+            <div className="mb-3">
+              {parts.length === 0 && (
+                <div className="text-muted small mb-2">
+                  Every part of the prompt was removed — there's nothing to generate from.
+                </div>
+              )}
+              {parts.map((part, i) => {
+                const isOpen = expanded.has(part.label);
+                return (
+                  <div key={part.label} className="mb-1">
+                    <div className="d-flex align-items-center">
+                      <button
+                        type="button"
+                        className="btn btn-link btn-sm flex-grow-1 text-start text-decoration-none d-flex align-items-center gap-2 px-2 py-1"
+                        style={{ minWidth: 0 }}
+                        onClick={() => togglePart(part.label)}
+                        aria-expanded={isOpen}
+                      >
+                        <span aria-hidden="true">{isOpen ? '▾' : '▸'}</span>
+                        <strong className="small text-nowrap">{part.label}</strong>
+                        {!isOpen && (
+                          <span className="text-muted small text-truncate" style={{ minWidth: 0 }}>
+                            {part.text}
+                          </span>
+                        )}
+                      </button>
+                      {isOpen && (
+                        <button
+                          type="button"
+                          className="btn btn-link btn-sm p-0 me-2 text-secondary d-flex align-items-center"
+                          title={`Remove "${part.label}" from the prompt`}
+                          aria-label={`Remove "${part.label}" from the prompt`}
+                          onClick={() => removePart(i)}
+                        >
+                          <TrashIcon />
+                        </button>
+                      )}
+                    </div>
+                    {isOpen && (
+                      <div className="px-2 pb-2">
+                        <textarea
+                          className="form-control form-control-sm w-100"
+                          rows={4}
+                          value={part.text}
+                          aria-label={`${part.label} text`}
+                          onChange={(e) => updatePartText(i, e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+        <label className="form-label small">
+          Reference images{' '}
+          <span className="text-muted">
+            ({Math.min(references.length, max)} of {max} used)
+          </span>
+        </label>
+        {max === 0 && (
+          <div className="text-muted small mb-2">
+            This generator's workflow has no reference image inputs.
+          </div>
+        )}
+        <div className="d-flex flex-column gap-2 mb-2">
+          {references.map((ref, i) => {
+            const item = media.find((m) => m.id === ref.mediaId);
+            return (
+              <div
+                key={ref.mediaId}
+                className={`d-flex gap-2 align-items-start${i >= max ? ' opacity-50' : ''}`}
+              >
+                {item ? (
+                  <MediaThumb
+                    item={item}
+                    onRemove={() => setReferences(references.filter((_, j) => j !== i))}
+                  />
+                ) : (
+                  <span className="text-muted small">Missing image</span>
+                )}
+                <textarea
+                  className="form-control form-control-sm flex-grow-1"
+                  style={{ height: 72, resize: 'none' }}
+                  value={ref.note ?? ''}
+                  placeholder="What should the generator take from this image? e.g. “match this exact outfit”, “use the pose only”, “ignore the background”"
+                  aria-label={
+                    i >= max
+                      ? `Note about reference image ${i + 1} (not used — over the limit)`
+                      : `Note about reference image ${i + 1}`
+                  }
+                  onChange={(e) =>
+                    setReferences(
+                      references.map((r, j) => (j === i ? { ...r, note: e.target.value } : r))
+                    )
+                  }
+                />
+              </div>
+            );
+          })}
         </div>
-      </div>
+        <button
+          type="button"
+          className="btn btn-outline-secondary btn-sm mb-3"
+          disabled={max === 0}
+          onClick={() => setPicking(true)}
+        >
+          + Add reference image
+        </button>
+        {!bulk && result && <Preview item={result} />}
+        {bulk && bulkResults && (
+          <ul className="list-unstyled mb-2">
+            {bulkResults.map((r) => (
+              <li key={r.id} className={r.ok ? 'text-body' : 'text-danger'}>
+                {r.ok ? '✓' : '✗'} {r.label}
+                {!r.ok && r.error ? ` — ${r.error}` : ''}
+              </li>
+            ))}
+          </ul>
+        )}
+        {task.error && <div className="text-danger small mb-2">{task.error}</div>}
+      </Modal>
       {picking && (
         <MediaPicker
           title="Choose a reference image"
@@ -423,7 +411,6 @@ export default function GenerateImageModal(props: Props) {
           onClose={() => setPicking(false)}
         />
       )}
-    </>,
-    document.body
+    </>
   );
 }

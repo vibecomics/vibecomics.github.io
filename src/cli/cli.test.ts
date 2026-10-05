@@ -625,78 +625,49 @@ test('the rest of the API works through the command line', async () => {
   assert.equal((await run('storage', 'status')).json().connected, false);
 });
 
-test('pages and panels have prompts, through the CLI', async () => {
+test('pages and panels have titles, and layers have prompts, through the CLI', async () => {
   const { run, login, google } = setup();
   await login();
   const { id: folderId } = (await run('storage', 'createProject', 'Intents')).json();
   const saved = () => google.projectIn(folderId);
 
-  // A page created with a prompt; the cover page has none.
-  const page = (
-    await run('page', 'add', '--title', 'Chase', '--prompt', 'Rooftop chase, dusk.')
-  ).json();
-  assert.equal(page.prompt, 'Rooftop chase, dusk.');
-  assert.equal(saved().pages[0].prompt, undefined);
-  assert.equal(saved().pages[1].prompt, 'Rooftop chase, dusk.');
+  const page = (await run('page', 'add', '--title', 'Chase')).json();
+  assert.equal(page.title, 'Chase');
+  assert.equal(saved().pages[1].title, 'Chase');
 
   // page update: the index is positional, the fields are flags; without an index it is the current page.
-  const updated = (
-    await run('page', 'update', '1', '--prompt', 'The chase ends on the roof.')
-  ).json();
-  assert.equal(updated.prompt, 'The chase ends on the roof.');
-  assert.equal(updated.title, 'Chase'); // only the given fields change
+  const updated = (await run('page', 'update', '1', '--title', 'Chase, part 1')).json();
+  assert.equal(updated.title, 'Chase, part 1');
   assert.equal(
-    (await run('page', 'update', '--title', 'Chase, part 2')).json().prompt,
-    'The chase ends on the roof.'
+    (await run('page', 'update', '--title', 'Chase, part 2')).json().title,
+    'Chase, part 2'
   );
   assert.equal(saved().pages[1].title, 'Chase, part 2');
-  await run('page', 'update', '0', '--prompt', 'The cover: the city at dusk.');
-  assert.equal(saved().pages[0].prompt, 'The cover: the city at dusk.');
-  assert.equal((await run('page', 'select', '1')).json().prompt, 'The chase ends on the roof.');
 
-  // panels: a prompt via a flag or via JSON; a cut keeps it on the original and starts the new one empty
   const panelId = page.panels[0].id;
-  assert.equal(
-    (await run('panels', 'update', panelId, '--prompt', 'Wide, low angle.')).json().prompt,
-    'Wide, low angle.'
-  );
-  assert.equal(
-    (
-      await run('panels', 'update', panelId, '{"title":"Roof","prompt":"Wide, low angle, dusk."}')
-    ).json().title,
-    'Roof'
-  );
-  const [kept, fresh] = (await run('panels', 'split', panelId, 'vertical', '50')).json();
-  assert.equal(kept.prompt, 'Wide, low angle, dusk.');
-  assert.equal(fresh.prompt, undefined);
-  assert.equal((await run('panels', 'get', panelId)).json().prompt, 'Wide, low angle, dusk.');
-  assert.equal(saved().pages[1].panels[0].prompt, 'Wide, low angle, dusk.');
-
-  // An empty value clears it, and reads back as empty text
-  assert.equal((await run('panels', 'update', panelId, '--prompt', '')).json().prompt, '');
-  assert.equal((await run('page', 'update', '1', '--prompt', '')).json().prompt, '');
+  assert.equal((await run('panels', 'update', panelId, '--title', 'Roof')).json().title, 'Roof');
+  assert.equal((await run('panels', 'get', panelId)).json().title, 'Roof');
+  assert.equal(saved().pages[1].panels[0].title, 'Roof');
 
   // Mistakes
-  assert.match((await run('page', 'update', '9', '--prompt', 'x')).err, /Page 9 not found/);
-  assert.match((await run('page', 'update', '-1', '--prompt', 'x')).err, /Page -1 not found/);
-  assert.match((await run('panels', 'update', panelId, '{"prompt":5}')).err, /prompt must be text/);
+  assert.match((await run('page', 'update', '9', '--title', 'x')).err, /Page 9 not found/);
+  assert.match((await run('page', 'update', '-1', '--title', 'x')).err, /Page -1 not found/);
+  assert.match((await run('panels', 'update', panelId, '{"title":5}')).err, /title must be text/);
   assert.match((await run('panels', 'update', panelId, '5')).err, /patch must be a JSON object/);
   assert.match(
-    (await run('page', 'update', 'first', '--prompt', 'x')).err,
+    (await run('page', 'update', 'first', '--title', 'x')).err,
     /"first" is not a number/
   );
-  assert.equal((await run('panels', 'update', 'no-such-panel', '--prompt', 'x')).code, 1);
+  assert.equal((await run('panels', 'update', 'no-such-panel', '--title', 'x')).code, 1);
 
-  // The prompt is written down where the LLM can read it back next to the layer's own
+  // A layer's prompt is what its own image shows, and reads back next to it
+  const [, fresh] = (await run('panels', 'split', panelId, 'vertical', '50')).json();
   const layer = (
     await run('layers', 'add', fresh.id, '{"kind":"background","prompt":"Rooftop"}')
   ).json();
   const read = (await run('page', 'select', '1')).json();
   assert.equal(read.panels[1].layers[0].id, layer.id);
   assert.equal(read.panels[1].layers[0].prompt, 'Rooftop');
-
-  // Everything survives a reload from Drive, as a fresh process reads it
-  assert.equal((await run('page', 'current')).json().panels[0].prompt, '');
 });
 
 test('pages can be reordered from the CLI, and the cover stays first', async () => {
@@ -735,10 +706,10 @@ test('pages can be reordered from the CLI, and the cover stays first', async () 
   assert.equal(same.code, 0);
   assert.equal(await order(), '0:Cover 1:B 2:A 3:C');
 
-  // Content and prompts travel with the page
-  await run('page', 'update', '2', '--prompt', 'A is the chase');
+  // Content and titles travel with the page
+  await run('page', 'update', '2', '--title', 'A is the chase');
   await run('page', 'move', '2', '1');
-  assert.equal((await run('page', 'select', '1')).json().prompt, 'A is the chase');
+  assert.equal((await run('page', 'select', '1')).json().title, 'A is the chase');
 
   // Mistakes change nothing
   const before = await order();
@@ -766,19 +737,19 @@ test('a change made elsewhere is merged in when it does not clash', async () => 
       p.metadata.style = 'Written elsewhere';
     })
   );
-  const result = await run('page', 'update', '1', '--prompt', 'Mine');
+  const result = await run('page', 'update', '1', '--title', 'Mine');
   assert.equal(result.code, 0, result.err);
   const saved = google.projectIn(folderId);
   assert.equal(saved.metadata.style, 'Written elsewhere'); // theirs survived
-  assert.equal(saved.pages[1].prompt, 'Mine'); // and so did ours
+  assert.equal(saved.pages[1].title, 'Mine'); // and so did ours
 
   // A change made between two commands is simply read by the next one.
   google.externalEdit(folderId, (p) => {
-    p.pages[1].title = 'Renamed elsewhere';
+    p.pages[1].panels[0].title = 'Renamed elsewhere';
   });
-  assert.equal((await run('page', 'update', '1', '--prompt', 'After')).code, 0);
-  assert.equal(google.projectIn(folderId).pages[1].title, 'Renamed elsewhere');
-  assert.equal(google.projectIn(folderId).pages[1].prompt, 'After');
+  assert.equal((await run('page', 'update', '1', '--title', 'After')).code, 0);
+  assert.equal(google.projectIn(folderId).pages[1].panels[0].title, 'Renamed elsewhere');
+  assert.equal(google.projectIn(folderId).pages[1].title, 'After');
 });
 
 test('a clash is reported, nothing is overwritten, and applying it again works', async () => {
@@ -789,23 +760,23 @@ test('a clash is reported, nothing is overwritten, and applying it again works',
 
   google.afterNextProjectRead(() =>
     google.externalEdit(folderId, (p) => {
-      p.pages[1].prompt = 'Theirs';
+      p.pages[1].title = 'Theirs';
     })
   );
-  const clash = await run('page', 'update', '1', '--prompt', 'Ours');
+  const clash = await run('page', 'update', '1', '--title', 'Ours');
   assert.equal(clash.code, 1);
   assert.match(clash.err, /Nothing was saved/);
-  assert.match(clash.err, /Page 1 "X" › prompt/);
+  assert.match(clash.err, /Page 1 "Ours" › title/);
   assert.match(clash.err, /yours: {2}Ours/);
   assert.match(clash.err, /theirs: Theirs/);
-  assert.match(clash.err, /before: \(not set\)/);
+  assert.match(clash.err, /before: X/);
   assert.match(clash.err, /Fetch the project again.*apply this change again/);
-  assert.equal(google.projectIn(folderId).pages[1].prompt, 'Theirs'); // untouched
+  assert.equal(google.projectIn(folderId).pages[1].title, 'Theirs'); // untouched
 
   // The next command fetches the current project, so the same change now goes through.
-  const again = await run('page', 'update', '1', '--prompt', 'Ours');
+  const again = await run('page', 'update', '1', '--title', 'Ours');
   assert.equal(again.code, 0, again.err);
-  assert.equal(google.projectIn(folderId).pages[1].prompt, 'Ours');
+  assert.equal(google.projectIn(folderId).pages[1].title, 'Ours');
 });
 
 test('changing something the other side deleted is a conflict', async () => {
@@ -849,16 +820,16 @@ test('changes that keep landing while the CLI merges are merged too', async () =
     });
     google.afterNextProjectRead(() =>
       google.externalEdit(folderId, (p) => {
-        p.pages[1].title = 'Second elsewhere';
+        p.pages[1].panels[0].title = 'Second elsewhere';
       })
     );
   });
-  const result = await run('page', 'update', '1', '--prompt', 'Ours');
+  const result = await run('page', 'update', '1', '--title', 'Ours');
   assert.equal(result.code, 0, result.err);
   const saved = google.projectIn(folderId);
   assert.equal(saved.metadata.style, 'First elsewhere');
-  assert.equal(saved.pages[1].title, 'Second elsewhere');
-  assert.equal(saved.pages[1].prompt, 'Ours');
+  assert.equal(saved.pages[1].panels[0].title, 'Second elsewhere');
+  assert.equal(saved.pages[1].title, 'Ours');
 });
 
 test('reading and writing keep the Drive version in step, so a lone CLI never conflicts with itself', async () => {

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
+import type { FormEvent } from 'react';
 import { cb } from '../ai/actions';
 import type { DeviceCodeInfo } from '../drive/driveClient';
 import type { StorageConnectionInfo } from '../storage/connections';
 import { errorMessage } from '../utils/errors';
+import Modal from './Modal';
 import Spinner from './Spinner';
 import { useBusy } from './useBusy';
 
@@ -13,41 +14,6 @@ interface Props {
   /** Called after a connect/disconnect that this card already knows succeeded, for a snappier
    * refresh than waiting on the next `connections` prop update. */
   onChange: () => void;
-}
-
-const kindLabel = (c: StorageConnectionInfo): string =>
-  c.kind === 'drive' ? 'Google Drive' : c.label;
-
-function ModalShell({
-  title,
-  onClose,
-  children,
-}: {
-  title: string;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  return (
-    <>
-      <div
-        className="modal show d-block"
-        tabIndex={-1}
-        role="dialog"
-        onClick={(e) => e.target === e.currentTarget && onClose()}
-      >
-        <div className="modal-dialog">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h2 className="modal-title h5 mb-0">{title}</h2>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
-            </div>
-            <div className="modal-body">{children}</div>
-          </div>
-        </div>
-      </div>
-      <div className="modal-backdrop show" />
-    </>
-  );
 }
 
 /** Connect Google Drive via the OAuth device flow: a code and URL to approve from any device. */
@@ -61,7 +27,7 @@ function ConnectDriveModal({
   onClose: () => void;
 }) {
   return (
-    <ModalShell title="Connect Google Drive" onClose={onClose}>
+    <Modal title="Connect Google Drive" label="Connect Google Drive" onClose={onClose}>
       {deviceCode ? (
         <>
           <p className="mb-1">
@@ -85,7 +51,7 @@ function ConnectDriveModal({
           {waiting ? 'Starting…' : 'Preparing to connect…'}
         </p>
       )}
-    </ModalShell>
+    </Modal>
   );
 }
 
@@ -113,7 +79,11 @@ function ConnectServerModal({
   }
 
   return (
-    <ModalShell title="Connect an HTTP storage server" onClose={onClose}>
+    <Modal
+      title="Connect an HTTP storage server"
+      label="Connect an HTTP storage server"
+      onClose={onClose}
+    >
       <form onSubmit={(e) => void submit(e)}>
         <label className="form-label" htmlFor="storage-server-url">
           Server URL
@@ -144,7 +114,7 @@ function ConnectServerModal({
           </button>
         </div>
       </form>
-    </ModalShell>
+    </Modal>
   );
 }
 
@@ -226,16 +196,18 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
                   className="list-group-item d-flex align-items-center justify-content-between px-0"
                 >
                   <span className="text-truncate">
-                    {kindLabel(c)}
+                    {c.label}
                     {!c.connected && <span className="text-muted small ms-2">(not connected)</span>}
                   </span>
                   <span className="d-flex gap-2 flex-shrink-0">
-                    {!c.connected && c.kind === 'server' && (
+                    {!c.connected && (
                       <button
                         type="button"
                         className="btn btn-sm btn-outline-secondary"
                         disabled={reconnecting.busy}
-                        onClick={() => void reconnect(c.label)}
+                        onClick={() =>
+                          c.kind === 'drive' ? startDrive() : void reconnect(c.label)
+                        }
                       >
                         {reconnecting.busy && <Spinner />}
                         Reconnect
@@ -260,7 +232,7 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
 
           <h4 className="small text-uppercase text-muted mb-2">Add storage</h4>
           <div className="d-flex gap-2 flex-wrap">
-            {!drive?.connected && (
+            {!drive && (
               <button type="button" className="btn btn-outline-primary" onClick={startDrive}>
                 + Add Google Drive
               </button>

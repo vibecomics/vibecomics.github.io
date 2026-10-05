@@ -30,6 +30,11 @@ test('welcome and anything unreadable parse to the welcome page', () => {
   }
 });
 
+test('parses the first-run screen', () => {
+  assert.deepEqual(parseHash('#nux'), { screen: 'nux' });
+  assert.equal(formatHash({ screen: 'nux' }), '#nux');
+});
+
 test('parses comic tabs and pages', () => {
   assert.deepEqual(parseHash('#comic=Ashnix%20tardy&cast'), {
     screen: 'comic',

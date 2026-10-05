@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
+import Modal from './Modal';
 import type { MediaItem } from '../types/comic';
 import MediaGrid from './MediaGrid';
 import type { MediaShapePreference } from './mediaOrder';
@@ -48,52 +48,41 @@ export default function MediaPicker({
     };
   }, [onClose]);
 
-  return createPortal(
+  return (
     <>
-      <div className="modal-backdrop show" />
-      <div
-        className="modal d-block"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onClick={(e) => e.target === e.currentTarget && onClose()}
-      >
-        <div className="modal-dialog modal-lg modal-dialog-scrollable">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h2 className="modal-title h5">{title}</h2>
-              <button type="button" className="btn-close" aria-label="Close" onClick={onClose} />
-            </div>
-            <div className="modal-body">
-              <MediaGrid
-                media={media}
-                prefer={prefer}
-                subjectId={subjectId}
-                currentId={currentId}
-                autoFocusSearch
-                showCount={false}
-                onCounts={(found, total) => setCounts({ found, total })}
-                onUpload={(file) => {
-                  onClose();
-                  onUpload(file);
-                }}
-                onPick={(item) => {
-                  onClose();
-                  onPick(item);
-                }}
-              />
-            </div>
-            <div className="modal-footer justify-content-start">
-              <span className="text-muted small">
-                {counts.found === counts.total
-                  ? `${counts.total} images`
-                  : `${counts.found} of ${counts.total} images`}
-              </span>
-            </div>
+      <Modal
+        title={title}
+        label={title}
+        wide
+        onClose={onClose}
+        footer={
+          <div className="modal-footer justify-content-start">
+            <span className="text-muted small">
+              {counts.found === counts.total
+                ? `${counts.total} images`
+                : `${counts.found} of ${counts.total} images`}
+            </span>
           </div>
-        </div>
-      </div>
-    </>,
-    document.body
+        }
+      >
+        <MediaGrid
+          media={media}
+          prefer={prefer}
+          subjectId={subjectId}
+          currentId={currentId}
+          autoFocusSearch
+          showCount={false}
+          onCounts={(found, total) => setCounts({ found, total })}
+          onUpload={(file) => {
+            onClose();
+            onUpload(file);
+          }}
+          onPick={(item) => {
+            onClose();
+            onPick(item);
+          }}
+        />
+      </Modal>
+    </>
   );
 }

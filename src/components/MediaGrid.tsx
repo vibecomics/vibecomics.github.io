@@ -227,7 +227,7 @@ export default function MediaGrid({
         <input
           type="search"
           className="form-control form-control-sm"
-          placeholder="Search by image, character, object or layer name"
+          placeholder="Search by image, character, prop or layer name"
           aria-label="Search images"
           autoFocus={autoFocusSearch}
           value={text}

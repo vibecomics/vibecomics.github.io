@@ -2,12 +2,19 @@ import { useState } from 'react';
 import { cb } from '../ai/actions';
 import type { ComicProject } from '../types/comic';
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_PRESETS } from '../types/comic';
+import { isCoverOnly } from '../state/project';
+import type { EditorTab } from './editorTabs';
+import HelpSection from './HelpSection';
+import PageSizeOptions from './PageSizeOptions';
+import StyleField from './StyleField';
 
-/** Project title, page size and the STYLE paragraph stitched into every image's prompt. */
-export default function OutlineTab({ project }: { project: ComicProject }) {
-  const [style, setStyle] = useState(project.metadata.style);
-  const [characterStyle, setCharacterStyle] = useState(project.metadata.characterStyle ?? '');
-  const [sceneStyle, setSceneStyle] = useState(project.metadata.sceneStyle ?? '');
+interface Props {
+  project: ComicProject;
+  onTabChange: (tab: EditorTab) => void;
+}
+
+/** Project title, page size, and the comic style stitched into every image's prompt. */
+export default function OutlineTab({ project, onTabChange }: Props) {
   const [note, setNote] = useState('');
   const pageSize = project.metadata.pageSize ?? DEFAULT_PAGE_SIZE;
   const presetIndex = PAGE_SIZE_PRESETS.findIndex(
@@ -16,8 +23,39 @@ export default function OutlineTab({ project }: { project: ComicProject }) {
 
   return (
     <div className="container py-4" style={{ maxWidth: 800 }}>
-      <h2 className="h5 mb-1">Style</h2>
-      <p className="text-muted small mb-4">{project.title}</p>
+      <h2 className="h5 mb-4">Comic Style (Project: {project.title})</h2>
+
+      {isCoverOnly(project) && (
+        <HelpSection title="How a comic is built" open>
+          <p>
+            A comic is made of pages. Each page is split into panels, and each panel is built from
+            layers and a background.
+          </p>
+          <p>
+            To keep the comic consistent, you also create the characters, props and scenes it uses.
+            Together they are the cast, props and scenes, and every panel can reuse them.
+          </p>
+          <p className="mb-0">
+            This project has no pages yet.{' '}
+            <button
+              type="button"
+              className="btn btn-link p-0 align-baseline"
+              onClick={() => onTabChange('pages')}
+            >
+              Create a page
+            </button>{' '}
+            or{' '}
+            <button
+              type="button"
+              className="btn btn-link p-0 align-baseline"
+              onClick={() => onTabChange('cast')}
+            >
+              create a character
+            </button>{' '}
+            to get started.
+          </p>
+        </HelpSection>
+      )}
 
       <div className="mb-4">
         <label className="form-label fw-semibold" htmlFor="outline-pagesize">
@@ -40,102 +78,22 @@ export default function OutlineTab({ project }: { project: ComicProject }) {
               {pageSize.label} — {pageSize.widthIn}&quot; × {pageSize.heightIn}&quot;
             </option>
           )}
-          {PAGE_SIZE_PRESETS.map((preset, i) => (
-            <option key={preset.label} value={i}>
-              {preset.label}
-            </option>
-          ))}
+          <PageSizeOptions />
         </select>
         <div className="form-text">
           {pageSize.widthIn}&quot; × {pageSize.heightIn}&quot; — stored in the project metadata.
+          {note && <span className="text-success ms-2">{note}</span>}
         </div>
       </div>
 
-      <div className="mb-2 d-flex justify-content-between align-items-center">
-        <label className="form-label fw-semibold mb-0" htmlFor="outline-text">
-          STYLE paragraph
-        </label>
-        {note && <span className="text-success small">{note}</span>}
-      </div>
-      <textarea
+      <StyleField
         id="outline-text"
-        className="form-control"
+        label="Comic style"
         rows={4}
-        value={style}
-        onChange={(e) => setStyle(e.target.value)}
-        placeholder="A short paragraph fixing the visual style: medium, line, palette, lighting, mood…"
+        value={project.metadata.style}
+        placeholder="e.g. Inked line art with flat colour, muted earth tones with one bright accent, soft light from a window, gritty 1980s noir."
+        onSave={(text) => cb().metadata.setStyle(text)}
       />
-      <div className="form-text">
-        Stitched, verbatim, into every image's prompt of every kind — keep it to what's true of
-        everything (medium, line, palette, lighting, mood). There's no synopsis field: track the
-        story itself elsewhere (each page and panel has its own prompt for what happens there).
-        Wording that only makes sense for a figure (eye style, skin tone) belongs in Character style
-        below instead — putting it here too is what makes an object or scene prompt draw a person.
-      </div>
-      <button
-        className="btn btn-primary mt-3"
-        onClick={() => {
-          cb().metadata.setStyle(style);
-          setNote('Style saved.');
-        }}
-      >
-        Save style
-      </button>
-
-      <hr className="my-4" />
-
-      <label className="form-label fw-semibold" htmlFor="outline-character-style">
-        Character style
-      </label>
-      <textarea
-        id="outline-character-style"
-        className="form-control"
-        rows={2}
-        value={characterStyle}
-        onChange={(e) => setCharacterStyle(e.target.value)}
-        placeholder="Design language that only makes sense for a figure: eye style, proportions, skin tone…"
-      />
-      <div className="form-text">
-        Stitched in only for a character's prompt (reference art, or a foreground layer whose
-        subject is a character), right after Style. Left out of object and scene prompts entirely. A
-        character may be a person or an animal, so keep this to what's true of either.
-      </div>
-      <button
-        className="btn btn-primary mt-3"
-        onClick={() => {
-          cb().metadata.setCharacterStyle(characterStyle);
-          setNote('Character style saved.');
-        }}
-      >
-        Save character style
-      </button>
-
-      <hr className="my-4" />
-
-      <label className="form-label fw-semibold" htmlFor="outline-scene-style">
-        Scene style
-      </label>
-      <textarea
-        id="outline-scene-style"
-        className="form-control"
-        rows={2}
-        value={sceneStyle}
-        onChange={(e) => setSceneStyle(e.target.value)}
-        placeholder="Rendering notes specific to establishing/background art: level of detail, atmosphere…"
-      />
-      <div className="form-text">
-        Stitched in only for a scene's prompt (reference art, or a background layer), right after
-        Style. Left out of character and object prompts entirely.
-      </div>
-      <button
-        className="btn btn-primary mt-3"
-        onClick={() => {
-          cb().metadata.setSceneStyle(sceneStyle);
-          setNote('Scene style saved.');
-        }}
-      >
-        Save scene style
-      </button>
     </div>
   );
 }

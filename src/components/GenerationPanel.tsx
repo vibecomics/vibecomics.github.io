@@ -118,7 +118,7 @@ export default function GenerationPanel({ onClose, onShow }: Props) {
           disabled={dirtyCount === 0 || task.busy}
           title={
             dirtyCount === 0
-              ? 'Nothing is dirty — every layer, character, object and scene already matches its prompt'
+              ? 'Nothing is dirty — every layer, character, prop and scene already matches its prompt'
               : `Generate images for every layer, background and story-bible reference (cast, objects, scenes) whose art no longer matches its prompt (${dirtyCount})`
           }
           onClick={() =>

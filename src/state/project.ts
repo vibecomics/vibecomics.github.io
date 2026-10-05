@@ -3,6 +3,9 @@ import { blankMetadata, DEFAULT_PAGE_SIZE } from '../types/comic';
 import { createPanel, normalizePagePanels } from './layout';
 import { newId } from '../utils/id';
 
+/** A new project is cover-only: the one page the app creates, before the user adds any. */
+export const isCoverOnly = (project: ComicProject): boolean => project.pages.length <= 1;
+
 export function createBlankProject(
   title = 'Untitled Comic',
   pageSize: PageSize = DEFAULT_PAGE_SIZE
@@ -137,7 +140,6 @@ function checkVariation(value: unknown, path: string): void {
 function checkPage(value: unknown, path: string): void {
   const page = expectRecord(value, path);
   expectStrings(page, path, ['id', 'title']);
-  optionalString(page, path, 'prompt');
   if (!Number.isInteger(page.number) || (page.number as number) < 0) {
     fail(path, '"number" must be a non-negative integer');
   }
@@ -150,7 +152,6 @@ function checkPanel(value: unknown, path: string): void {
   const panel = expectRecord(value, path);
   expectStrings(panel, path, ['id']);
   optionalString(panel, path, 'title');
-  optionalString(panel, path, 'prompt');
   checkPanelRect(panel, path);
   expectArray(panel.layers, path, 'layers').forEach((layer, i) =>
     checkLayer(layer, `${path}.layers[${i}]`)

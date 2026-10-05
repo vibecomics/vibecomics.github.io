@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { ComicProject } from '../types/comic';
-import { assertValidProject, createBlankProject, normalizeProject } from './project';
+import { assertValidProject, createBlankProject, isCoverOnly, normalizeProject } from './project';
 
 const layer = (overrides: Record<string, unknown> = {}) => ({
   id: 'l1',
@@ -144,32 +144,9 @@ test('a media item may carry a thumbnail file name, which must be a string', () 
   assert.throws(() => assertValidProject(project), /thumbnailFileName/);
 });
 
-test('pages and panels may have a prompt, which must be text', () => {
-  const project = createBlankProject('Test');
-  assertValidProject(project); // no prompt at all is fine (older projects)
-
-  project.pages[0].prompt = 'The chase ends on the rooftop.';
-  project.pages[0].panels[0].prompt = 'Low angle: nowhere left to run.';
-  assertValidProject(project);
-  project.pages[0].prompt = '';
-  assertValidProject(project);
-
-  const badPage = structuredClone(project) as unknown as { pages: Array<{ prompt: unknown }> };
-  badPage.pages[0].prompt = 3;
-  assert.throws(() => assertValidProject(badPage), /project\.pages\[0\].*prompt/);
-
-  const badPanel = structuredClone(project) as unknown as {
-    pages: Array<{ panels: Array<{ prompt: unknown }> }>;
-  };
-  badPanel.pages[0].panels[0].prompt = { text: 'no' };
-  assert.throws(() => assertValidProject(badPanel), /project\.pages\[0\]\.panels\[0\].*prompt/);
-});
-
-test('page and panel prompts survive normalization', () => {
-  const project = createBlankProject('Test');
-  project.pages[0].prompt = 'Page intent';
-  project.pages[0].panels[0].prompt = 'Panel intent';
-  normalizeProject(project);
-  assert.equal(project.pages[0].prompt, 'Page intent');
-  assert.equal(project.pages[0].panels[0].prompt, 'Panel intent');
+test('a new project is cover-only until a page is added', () => {
+  const project = createBlankProject('Ashnix');
+  assert.equal(isCoverOnly(project), true);
+  project.pages.push({ id: 'page-1', number: 1, title: 'One', panels: [] });
+  assert.equal(isCoverOnly(project), false);
 });

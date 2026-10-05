@@ -96,7 +96,9 @@ export default function EditorScreen({
             />
           ) : (
             <div className="flex-grow-1 overflow-auto" style={{ minHeight: 0, minWidth: 0 }}>
-              {tab === 'outline' && <OutlineTab key={project.id} project={project} />}
+              {tab === 'outline' && (
+                <OutlineTab key={project.id} project={project} onTabChange={onTabChange} />
+              )}
               {tab === 'cast' && (
                 <>
                   <StoryTab

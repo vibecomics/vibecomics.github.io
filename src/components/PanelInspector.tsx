@@ -2,9 +2,9 @@ import { cb } from '../ai/actions';
 import type { ComicPage, MediaItem, Panel } from '../types/comic';
 import BackgroundSection from './BackgroundSection';
 import BubblesSection from './BubblesSection';
+import HelpSection from './HelpSection';
 import LayersSection from './LayersSection';
 import { TrashIcon } from './Icons';
-import PromptField from './PromptField';
 import type { Selection } from './selection';
 import { useExpansion } from './useExpansion';
 
@@ -49,13 +49,14 @@ export default function PanelInspector({ page, panel, media, selection, onSelect
         </button>
       </div>
 
-      <PromptField
-        id="panel-prompt"
-        label="Panel prompt"
-        placeholder="The moment this panel shows: camera, mood, what it must get across. Follows the page prompt and precedes each layer prompt."
-        value={panel.prompt ?? ''}
-        onChange={(prompt) => cb().panels.update(panel.id, { prompt })}
-      />
+      {panel.layers.length === 0 && (
+        <HelpSection title="What is a panel?" open>
+          <p className="mb-0">
+            A panel is one box on the page. To split it, click and drag the scissors on its edge,
+            then let go over the panel to cut it in two.
+          </p>
+        </HelpSection>
+      )}
       <BubblesSection
         panel={panel}
         selection={selection}

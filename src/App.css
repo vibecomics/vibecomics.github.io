@@ -756,3 +756,49 @@ kept the same size regardless of that content so a row of them lines up evenly. 
   --bs-btn-active-bg: #dee2e6;
   --bs-btn-active-border-color: #dee2e6;
 }
+
+/* Expandable help: an info-coloured, italic box with a "?" badge, so it is never mistaken for content. */
+.help-section {
+  background: var(--bs-info-bg-subtle);
+  border: 1px solid var(--bs-info-border-subtle);
+  border-left: 4px solid var(--bs-info-text-emphasis);
+  border-radius: var(--bs-border-radius);
+  color: var(--bs-info-text-emphasis);
+  padding: 0.75rem 1rem;
+}
+
+.help-section > summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  list-style: none;
+}
+
+.help-section > summary::-webkit-details-marker {
+  display: none;
+}
+
+.help-section > summary::before {
+  content: '?';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--bs-info-text-emphasis);
+  color: var(--bs-info-bg-subtle);
+  font-size: 0.9rem;
+  font-style: normal;
+}
+
+.help-section > .help-body {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-style: italic;
+}
+
+.help-section p:last-child {
+  margin-bottom: 0;
+}

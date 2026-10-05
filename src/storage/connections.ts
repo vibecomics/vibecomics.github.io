@@ -13,6 +13,7 @@ import type { ProjectFolder } from './types';
 
 const SERVER_URLS_KEY = 'vibecomics.storageServerUrls';
 const LEGACY_SERVER_URL_KEY = 'vibecomics.storageServerUrl';
+const DRIVE_USED_KEY = 'vibecomics.driveUsed';
 const DRIVE_CONNECTION_ID = 'drive';
 const serverConnectionId = (url: string): string => `server:${url}`;
 
@@ -40,24 +41,49 @@ export interface RemoteProject extends ProjectFolder {
 
 let connections: Connection[] = [];
 
-function readRememberedServerUrls(): string[] {
+/** Browser storage, which private windows and blocked site data can refuse: a refusal reads as empty. */
+function readStored(key: string): string | null {
   try {
-    const raw = window.localStorage.getItem(SERVER_URLS_KEY);
-    if (raw) return JSON.parse(raw) as string[];
-    const legacy = window.localStorage.getItem(LEGACY_SERVER_URL_KEY);
-    return legacy ? [legacy] : [];
+    return window.localStorage.getItem(key);
   } catch {
-    return [];
+    return null;
   }
 }
 
-function writeRememberedServerUrls(urls: string[]): void {
+function writeStored(key: string, value: string | null): void {
   try {
-    window.localStorage.setItem(SERVER_URLS_KEY, JSON.stringify(urls));
-    window.localStorage.removeItem(LEGACY_SERVER_URL_KEY);
+    if (value === null) window.localStorage.removeItem(key);
+    else window.localStorage.setItem(key, value);
   } catch {
-    // Private browsing or blocked site data: the connection still works this session.
+    // The connection still works this session; it is just not remembered.
   }
+}
+
+function readRememberedServerUrls(): string[] {
+  const raw = readStored(SERVER_URLS_KEY);
+  if (raw) {
+    try {
+      return JSON.parse(raw) as string[];
+    } catch {
+      return [];
+    }
+  }
+  const legacy = readStored(LEGACY_SERVER_URL_KEY);
+  return legacy ? [legacy] : [];
+}
+
+function writeRememberedServerUrls(urls: string[]): void {
+  writeStored(SERVER_URLS_KEY, JSON.stringify(urls));
+  writeStored(LEGACY_SERVER_URL_KEY, null);
+}
+
+/** Whether Drive was connected in this browser before: a flag only, never a credential. */
+function readDriveUsed(): boolean {
+  return readStored(DRIVE_USED_KEY) === '1';
+}
+
+function writeDriveUsed(used: boolean): void {
+  writeStored(DRIVE_USED_KEY, used ? '1' : null);
 }
 
 export function getConnection(id: string): Connection | undefined {
@@ -71,6 +97,7 @@ export function listConnections(): Connection[] {
 
 /** Register the (already-authorized) Drive backend as a connection. */
 export function connectDriveConnection(): void {
+  writeDriveUsed(true);
   if (!getConnection(DRIVE_CONNECTION_ID)) {
     connections.push({
       id: DRIVE_CONNECTION_ID,
@@ -116,6 +143,7 @@ export async function disconnectConnection(id: string): Promise<void> {
     const url = id.slice('server:'.length);
     writeRememberedServerUrls(readRememberedServerUrls().filter((u) => u !== url));
   }
+  if (id === DRIVE_CONNECTION_ID) writeDriveUsed(false);
 }
 
 /** On app start: try reconnecting every remembered server URL; a dead one is skipped, not fatal. */
@@ -142,7 +170,11 @@ export function listConnectionInfo(): StorageConnectionInfo[] {
       label: url,
       connected: false,
     }));
-  return [...live, ...offline];
+  const offlineDrive: StorageConnectionInfo[] =
+    readDriveUsed() && !liveIds.has(DRIVE_CONNECTION_ID)
+      ? [{ id: DRIVE_CONNECTION_ID, kind: 'drive', label: 'Google Drive', connected: false }]
+      : [];
+  return [...live, ...offlineDrive, ...offline];
 }
 
 /** Lower wins: a server's project shadows a Drive project of the same name. */

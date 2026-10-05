@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
 import type { MediaItem, Panel } from '../types/comic';
+import HelpSection from './HelpSection';
 import LayerRow from './LayerRow';
 import MediaPicker from './MediaPicker';
 import Spinner from './Spinner';
@@ -28,6 +29,13 @@ export default function BackgroundSection({ panel, media, selection, onSelect, e
   return (
     <section className="mb-3" aria-label="Background">
       <h3 className="h6">Background</h3>
+      {!background && (
+        <HelpSection title="What is the background?" open>
+          <p className="mb-0">
+            The setting behind everything else in the panel. Set one from a scene or an image.
+          </p>
+        </HelpSection>
+      )}
       {background ? (
         <LayerRow
           panelId={panel.id}
