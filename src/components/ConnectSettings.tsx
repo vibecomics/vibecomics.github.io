@@ -119,21 +119,20 @@ function ConnectServerModal({
 }
 
 /**
- * The Settings "Storage" section: what's already connected (live, or a remembered server URL that
- * failed to reconnect on load, with Reconnect/Remove) separate from adding something new — each of
- * the two "Add" buttons opens a popup that walks through connecting: Google Drive via the OAuth
- * device-code flow (see drive/driveClient.ts), or a self-hosted HTTP storage server (see
- * http-storage/) by its URL. Any number of servers can be added.
+ * The Settings "Storage" section: the storage that is connected now, with a Disconnect button for
+ * each, and below it the "Add" buttons. Each opens a popup that walks through connecting: Google
+ * Drive via the OAuth device-code flow (see drive/driveClient.ts), or a self-hosted HTTP storage
+ * server (see http-storage/) by its URL. Any number of servers can be added.
  */
 export default function ConnectSettings({ connections, deviceCode, onChange }: Props) {
   const [showDriveModal, setShowDriveModal] = useState(false);
   const [showServerModal, setShowServerModal] = useState(false);
   const [error, setError] = useState('');
   const device = useBusy();
-  const reconnecting = useBusy();
   const disconnecting = useBusy();
   const [disconnectingId, setDisconnectingId] = useState<string | null>(null);
-  const drive = connections.find((c) => c.kind === 'drive');
+  const live = connections.filter((c) => c.connected);
+  const drive = live.find((c) => c.kind === 'drive');
 
   // Close the Drive popup once the device flow finishes, one way or another (App.tsx clears
   // deviceCode in both cases); a success shows up as a new row via the connections prop.
@@ -160,16 +159,6 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
     onChange();
   }
 
-  async function reconnect(url: string) {
-    setError('');
-    try {
-      await reconnecting.run(() => cb().storage.connectWithServer(url));
-      onChange();
-    } catch (e) {
-      setError(errorMessage(e));
-    }
-  }
-
   async function disconnect(id: string) {
     setError('');
     setDisconnectingId(id);
@@ -187,32 +176,15 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
         <div className="card-body">
           <h3 className="card-title h6">Storage</h3>
 
-          <h4 className="small text-uppercase text-muted mb-2">Connected</h4>
-          {connections.length > 0 ? (
+          {live.length > 0 ? (
             <ul className="list-group list-group-flush mb-3">
-              {connections.map((c) => (
+              {live.map((c) => (
                 <li
                   key={c.id}
                   className="list-group-item d-flex align-items-center justify-content-between px-0"
                 >
-                  <span className="text-truncate">
-                    {c.label}
-                    {!c.connected && <span className="text-muted small ms-2">(not connected)</span>}
-                  </span>
+                  <span className="text-truncate">{c.label}</span>
                   <span className="d-flex gap-2 flex-shrink-0">
-                    {!c.connected && (
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-outline-secondary"
-                        disabled={reconnecting.busy}
-                        onClick={() =>
-                          c.kind === 'drive' ? startDrive() : void reconnect(c.label)
-                        }
-                      >
-                        {reconnecting.busy && <Spinner />}
-                        Reconnect
-                      </button>
-                    )}
                     <button
                       type="button"
                       className="btn btn-sm btn-outline-danger"
@@ -220,7 +192,7 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
                       onClick={() => void disconnect(c.id)}
                     >
                       {disconnecting.busy && disconnectingId === c.id && <Spinner />}
-                      {c.connected ? 'Disconnect' : 'Remove'}
+                      Disconnect
                     </button>
                   </span>
                 </li>
