@@ -117,6 +117,7 @@ export function namespaceHelp(name: string): string {
 const BROWSER_ONLY = new Set([
   'storage.connectWithServer',
   'storage.showProjects',
+  'storage.backupTo',
   'page.openPreview',
   'page.closePreview',
 ]);

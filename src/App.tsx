@@ -22,6 +22,7 @@ import {
   connectDriveConnection,
   connectServerConnection,
   disconnectConnection,
+  getConnection,
   listAllProjects,
   listConnectionInfo,
   listConnections,
@@ -33,6 +34,7 @@ import {
   ensureProjectFolder,
   findFileByName,
   getActiveBackend,
+  getActiveBackendKind,
   loadProjectFile,
   saveProjectJson,
   setActiveBackend,
@@ -40,6 +42,8 @@ import {
   trashFile,
   uploadImage,
 } from './storage/activeBackend';
+import { backupProject } from './storage/backup';
+import { setBackupStatus } from './storage/backupStatus';
 import { loadProject } from './storage/projectStore';
 import {
   formatHash,
@@ -523,6 +527,57 @@ export default function App() {
         };
       },
 
+      backupTo: async (connectionId) => {
+        const sourceId = getActiveBackend();
+        const folderId = folderIdRef.current;
+        const folderName = comicRef.current;
+        if (!sourceId || !folderId || !folderName || !projectRef.current) {
+          return { ok: false, error: 'No project is open.' };
+        }
+        if (connectionId === sourceId) {
+          return { ok: false, error: 'That is already where this project is stored.' };
+        }
+        if (!(await saver.save())) {
+          return { ok: false, error: 'Could not save changes before backing up.' };
+        }
+        if (folderIdRef.current !== folderId || !projectRef.current) {
+          return { ok: false, error: 'The open project changed before the backup could start.' };
+        }
+        const source = getConnection(sourceId)?.backend;
+        const target = getConnection(connectionId)?.backend;
+        const label = backendLabel(connectionId);
+        if (!source) {
+          return {
+            ok: false,
+            error: "The open project's own storage connection is no longer live.",
+          };
+        }
+        if (!target) {
+          return { ok: false, error: `${label} is not connected.` };
+        }
+        let total = 0;
+        setBackupStatus({ label, state: 'running', done: 0, total: 0 });
+        try {
+          const summary = await backupProject(
+            source,
+            target,
+            folderId,
+            folderName,
+            projectRef.current,
+            (done, grandTotal) => {
+              total = grandTotal;
+              setBackupStatus({ label, state: 'running', done, total });
+            }
+          );
+          setBackupStatus({ label, state: 'done', done: total, total, summary });
+          return { ok: true };
+        } catch (e) {
+          const error = errorMessage(e);
+          setBackupStatus({ label, state: 'error', done: 0, total: 0, error });
+          return { ok: false, error: `Could not back up to ${label}: ${error}` };
+        }
+      },
+
       ...createMediaDeps({
         getProject: () => projectRef.current,
         getFolderId: () => folderIdRef.current,
@@ -564,6 +619,8 @@ export default function App() {
         onShowGeneration={showGeneration}
         saveState={saver.saveState}
         dirty={saver.dirty}
+        backendKind={getActiveBackendKind()}
+        deviceCode={deviceCode}
         onRefresh={refreshProject}
         conflictTabs={new Set(saver.conflicts.map((c) => c.where.tab))}
         conflictPageIds={new Set(saver.conflicts.flatMap((c) => c.where.pageId ?? []))}

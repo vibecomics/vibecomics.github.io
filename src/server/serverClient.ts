@@ -51,6 +51,7 @@ export function createServerBackend(url: string): StorageBackendImpl {
     trashFile: rest.trashFile,
     downloadFile: rest.downloadFile,
     findFileByName: rest.findFileByName,
+    listFolderFiles: rest.listFolderFiles,
     saveProjectJson: rest.saveProjectJson,
     loadProjectFile: rest.loadProjectFile,
     hasAccess: () => connected,

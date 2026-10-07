@@ -366,6 +366,21 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * @returns A promise resolving to { ok, error? }: ok is true when nothing is left unsaved.
        */
       save: (): Promise<ActionResult> => deps.flushStorageSave(),
+
+      /**
+       * Manually back up the open project to another connection: saves any
+       * unsaved changes first, then copies project.json and every media file
+       * it names to a folder of the same name on that connection, creating it
+       * if needed or overwriting it if one already exists there. One-way and
+       * on demand only — nothing is backed up automatically.
+       * @param connectionId - The destination connection, from storage.listConnections() (it must already be connected).
+       * @returns A promise resolving to { ok, error? }.
+       */
+      backupTo: async (connectionId: string): Promise<ActionResult> =>
+        (await deps.backupTo?.(connectionId)) ?? {
+          ok: false,
+          error: 'Backup is not supported in this session.',
+        },
     },
 
     /**

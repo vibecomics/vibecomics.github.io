@@ -10,6 +10,46 @@ const icon = {
   'aria-hidden': true,
 } as const;
 
+/** A floppy disk: save to the active storage connection. */
+export function FloppyDiskIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M2.5 1.5h9.586a1 1 0 0 1 .707.293l1.414 1.414a1 1 0 0 1 .293.707V13.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z" />
+      <path d="M4.5 1.5v4h6v-4" />
+      <rect x="4" y="9" width="8" height="5.5" />
+    </svg>
+  );
+}
+
+/** A cloud with an arrow leaving upward: save to, or back up to, Google Drive. */
+export function CloudUploadIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4.8 12.5a2.6 2.6 0 0 1-.4-5.17 3.5 3.5 0 0 1 6.84-1.46A2.75 2.75 0 0 1 11 12.5z" />
+      <path d="M8 10.2V5.3M6 7.3 8 5l2 2.3" />
+    </svg>
+  );
+}
+
 export function TrashIcon() {
   return (
     <svg {...icon}>

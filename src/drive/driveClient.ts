@@ -143,6 +143,7 @@ export const driveBackend: StorageBackendImpl = {
   trashFile: drive.trashFile,
   downloadFile: drive.downloadFile,
   findFileByName: drive.findFileByName,
+  listFolderFiles: drive.listFolderFiles,
   saveProjectJson: drive.saveProjectJson,
   loadProjectFile: drive.loadProjectFile,
   hasAccess: hasDriveAccess,

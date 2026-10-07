@@ -1,33 +1,17 @@
 import { cb } from '../ai/actions';
 import type { SaveState } from '../state/useProjectSaver';
+import { CloudUploadIcon, FloppyDiskIcon } from './Icons';
 
 interface Props {
   state: SaveState;
   /** True when there are changes not yet written to storage. */
   dirty: boolean;
+  /** The open project's own storage connection: a Drive project shows a cloud icon instead of a floppy disk. */
+  backendKind: 'drive' | 'server' | null;
 }
 
-function FloppyDiskIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.2"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M2.5 1.5h9.586a1 1 0 0 1 .707.293l1.414 1.414a1 1 0 0 1 .293.707V13.5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1z" />
-      <path d="M4.5 1.5v4h6v-4" />
-      <rect x="4" y="9" width="8" height="5.5" />
-    </svg>
-  );
-}
-
-/** Floppy-disk button that saves now; it shows a spinner while saving. */
-export default function SaveButton({ state, dirty }: Props) {
+/** Saves now; it shows a spinner while saving. Floppy disk for an HTTP storage project, cloud for a Drive one. */
+export default function SaveButton({ state, dirty, backendKind }: Props) {
   const saving = state === 'saving';
   const title = saving
     ? 'Saving…'
@@ -53,6 +37,8 @@ export default function SaveButton({ state, dirty }: Props) {
       >
         {saving ? (
           <span className="spinner-border spinner-border-sm" role="status" aria-label="Saving" />
+        ) : backendKind === 'drive' ? (
+          <CloudUploadIcon />
         ) : (
           <FloppyDiskIcon />
         )}

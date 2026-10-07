@@ -89,6 +89,9 @@ export const INPUTS = {
   'storage.disconnectConnection': {
     id: { type: 'string', example: 'server:http://localhost:8081' },
   },
+  'storage.backupTo': {
+    connectionId: { type: 'string', example: 'server:http://localhost:8081' },
+  },
 
   'project.lint': {},
   'project.load': {

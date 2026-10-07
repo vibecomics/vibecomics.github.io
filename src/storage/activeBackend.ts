@@ -45,6 +45,12 @@ export function hasStorageAccess(): boolean {
   return connection ? connection.backend.hasAccess() : false;
 }
 
+/** Which kind of storage backs the open project, for icon choices (a Drive project vs. a server one). */
+export function getActiveBackendKind(): 'drive' | 'server' | null {
+  const connection = active ? getConnection(active) : undefined;
+  return connection ? connection.kind : null;
+}
+
 export const listProjectFolders = (): Promise<ProjectFolder[]> => current().listProjectFolders();
 
 export const ensureProjectFolder = (name: string): Promise<ProjectFolder> =>

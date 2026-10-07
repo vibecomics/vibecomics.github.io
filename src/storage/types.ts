@@ -18,6 +18,8 @@ export interface StoredFile {
   mimeType: string;
   /** The backend's counter for the file: it goes up on every change. */
   version?: string;
+  /** Byte size, when the backend can report it cheaply (without downloading the file). */
+  size?: number;
 }
 
 /** A project.json as read from storage, with the version it had. */

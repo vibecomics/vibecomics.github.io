@@ -77,6 +77,7 @@ export interface FileMeta {
   name: string;
   mimeType: string;
   version: string;
+  size: number;
 }
 
 /** Reject anything in a name that could escape its directory or hide from a listing. */
@@ -137,6 +138,17 @@ async function versionOf(filePath: string): Promise<string | null> {
   }
 }
 
+/** A file's version and byte size in one stat call, or null if it does not exist. */
+async function statOf(filePath: string): Promise<{ version: string; size: number } | null> {
+  try {
+    const info = await stat(filePath, { bigint: true });
+    return { version: info.mtimeNs.toString(), size: Number(info.size) };
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw e;
+  }
+}
+
 /**
  * Write `data` to `filePath` atomically: write to a hidden temp file in the same directory, then
  * rename. The temp file is hidden so a listing never shows it.
@@ -185,15 +197,15 @@ export function createStore(root: string) {
     }
     const fileName = rawFile;
     const filePath = path.join(projectDir(project), fileName);
-    const version = await versionOf(filePath);
-    if (version === null) throw new NotFoundError(`No file "${fileName}" in "${project}".`);
-    return { project, fileName, filePath, version };
+    const info = await statOf(filePath);
+    if (info === null) throw new NotFoundError(`No file "${fileName}" in "${project}".`);
+    return { project, fileName, filePath, version: info.version, size: info.size };
   }
 
   /** A file's metadata, or NotFoundError. */
   async function statFile(rawProject: unknown, rawFile: unknown): Promise<FileMeta> {
-    const { fileName, version } = await requireFile(rawProject, rawFile);
-    return { id: fileName, name: fileName, mimeType: mimeTypeOf(fileName), version };
+    const { fileName, version, size } = await requireFile(rawProject, rawFile);
+    return { id: fileName, name: fileName, mimeType: mimeTypeOf(fileName), version, size };
   }
 
   return {
@@ -301,10 +313,10 @@ export function createStore(root: string) {
       rawProject: unknown,
       rawFile: unknown
     ): Promise<{ buffer: Buffer; meta: FileMeta }> {
-      const { fileName, filePath, version } = await requireFile(rawProject, rawFile);
+      const { fileName, filePath, version, size } = await requireFile(rawProject, rawFile);
       return {
         buffer: await fsReadFile(filePath),
-        meta: { id: fileName, name: fileName, mimeType: mimeTypeOf(fileName), version },
+        meta: { id: fileName, name: fileName, mimeType: mimeTypeOf(fileName), version, size },
       };
     },
 

@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { GenerationTarget } from '../ai/generation';
+import type { DeviceCodeInfo } from '../drive/driveClient';
 import type { ComicProject } from '../types/comic';
 import type { SaveState } from '../state/useProjectSaver';
 import type { Selection } from './selection';
@@ -28,6 +29,9 @@ interface Props {
   onShowGeneration: (target: GenerationTarget) => void;
   saveState: SaveState;
   dirty: boolean;
+  /** The open project's own storage connection: picks Save's icon and Backup's direction. */
+  backendKind: 'drive' | 'server' | null;
+  deviceCode: DeviceCodeInfo | null;
   /** The tabs, and the pages (by id), that hold a conflict with changes made elsewhere: they get a dot. */
   conflictTabs: Set<EditorTab>;
   conflictPageIds: Set<string>;
@@ -49,6 +53,8 @@ export default function EditorScreen({
   onShowGeneration,
   saveState,
   dirty,
+  backendKind,
+  deviceCode,
   conflictTabs,
   conflictPageIds,
   conflictBar,
@@ -65,6 +71,8 @@ export default function EditorScreen({
           onTabChange={onTabChange}
           saveState={saveState}
           dirty={dirty}
+          backendKind={backendKind}
+          deviceCode={deviceCode}
           conflictTabs={conflictTabs}
           onRefresh={onRefresh}
         />

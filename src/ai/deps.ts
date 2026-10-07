@@ -48,6 +48,8 @@ export interface ComicBuilderDeps {
   showProjectTiles(): Promise<ProjectFolder[]>;
   /** Save now if there are unsaved changes. */
   flushStorageSave(): Promise<ActionResult>;
+  /** Copy the open project (and its media) to another connection, overwriting a same-named folder there. */
+  backupTo?(connectionId: string): Promise<ActionResult>;
   uploadStorageMedia(
     name: string,
     dataUrl: string,

@@ -92,6 +92,33 @@ export function createDriveRest({ getToken, fetch: fetchImpl = fetch }: DriveRes
     return found;
   }
 
+  /** Every file directly inside a folder, in as few requests as its count needs (Drive pages at up to 1000). */
+  async function listFolderFiles(folderId: string): Promise<StoredFile[]> {
+    const found: StoredFile[] = [];
+    let pageToken: string | undefined;
+    do {
+      const res = await driveRequest(
+        `${DRIVE_API}/files?q=${encodeURIComponent(`'${folderId}' in parents and trashed=false`)}` +
+          '&fields=nextPageToken,files(id,name,mimeType,size,version)&pageSize=1000' +
+          (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '')
+      );
+      const body = (await res.json()) as {
+        files?: Array<DriveFile & { size?: string }>;
+        nextPageToken?: string;
+      };
+      for (const file of body.files ?? []) {
+        found.push({
+          name: file.name,
+          mimeType: file.mimeType,
+          version: file.version,
+          size: file.size === undefined ? undefined : Number(file.size),
+        });
+      }
+      pageToken = body.nextPageToken;
+    } while (pageToken);
+    return found;
+  }
+
   return {
     /** Folders this app created (the `drive.file` scope hides everything else). */
     listProjectFolders(): Promise<ProjectFolder[]> {
@@ -129,6 +156,7 @@ export function createDriveRest({ getToken, fetch: fetchImpl = fetch }: DriveRes
     },
 
     findFileByName,
+    listFolderFiles,
 
     /** Move a file to the Drive trash (recoverable there). A file that is already gone counts as trashed. */
     async trashFile(folderId: string, fileName: string): Promise<void> {

@@ -17,6 +17,9 @@ export interface StorageBackendImpl {
   downloadFile(folderId: string, fileName: string): Promise<Blob>;
   /** The file named `name` directly inside the project folder, or undefined when there is none. */
   findFileByName(folderId: string, name: string): Promise<StoredFile | undefined>;
+  /** Every file directly inside the project folder, in one call — for callers that would otherwise
+   * look files up one by one (e.g. the backup copy, deciding what has already been copied). */
+  listFolderFiles(folderId: string): Promise<StoredFile[]>;
   saveProjectJson(
     folderId: string,
     project: unknown,

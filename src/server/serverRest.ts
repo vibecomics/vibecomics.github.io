@@ -83,6 +83,12 @@ export function createServerRest({ getBaseUrl, fetch: fetchImpl = fetch }: Serve
       }
     },
 
+    /** Every file in the project folder, in one request. */
+    async listFolderFiles(folderId: string): Promise<StoredFile[]> {
+      const res = await serverRequest(`/projects/${encodeURIComponent(folderId)}/files`);
+      return (await res.json()) as StoredFile[];
+    },
+
     /** Move a file to its project's trash. A file that is already gone counts as trashed. */
     async trashFile(folderId: string, fileName: string): Promise<void> {
       try {
