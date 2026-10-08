@@ -2,9 +2,11 @@
  * Google Drive integration: OAuth 2.0 entirely client-side, no backend.
  *
  * Scope is `drive.file`, so the app only sees files and folders it created.
- * The access token lives only in this module's memory (never web storage,
- * cookies or the URL), so reloading the page drops it and one click
- * reconnects.
+ * The access token lives only in this module's memory, never web storage,
+ * cookies or the URL. The refresh token Google grants alongside it *is*
+ * persisted, in localStorage (see `restoreDriveAccess`), so a reload doesn't
+ * force the user back through the device flow - accepting that an XSS bug
+ * could steal it, since there's no server to hold it instead.
  *
  * The only way in is the OAuth device flow (RFC 8628, `requestDeviceAccess`):
  * it works from injected scripts (no popup, no user gesture), which is what
@@ -16,7 +18,7 @@
 
 import { getGoogleDeviceClientId, getGoogleDeviceClientSecret } from '../config';
 import type { StorageBackendImpl } from '../storage/backend';
-import { pollDeviceOnce, revokeToken, startDeviceFlow } from './deviceOAuth';
+import { pollDeviceOnce, refreshAccessToken, revokeToken, startDeviceFlow } from './deviceOAuth';
 import type { DeviceCodeInfo } from './deviceOAuth';
 import { createDriveRest } from './driveRest';
 
@@ -36,6 +38,25 @@ export function isDriveConfigured(): boolean {
 
 let token: { value: string; expiresAt: number } | null = null;
 
+const REFRESH_TOKEN_KEY = 'vibecomics.driveRefreshToken';
+
+function readRefreshToken(): string | null {
+  try {
+    return localStorage.getItem(REFRESH_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeRefreshToken(value: string | null): void {
+  try {
+    if (value === null) localStorage.removeItem(REFRESH_TOKEN_KEY);
+    else localStorage.setItem(REFRESH_TOKEN_KEY, value);
+  } catch {
+    // The connection still works this session; it just won't survive a reload.
+  }
+}
+
 function storeToken(value: string, expiresInSeconds: number | string | undefined): void {
   token = { value, expiresAt: Date.now() + (Number(expiresInSeconds) || 3600) * 1000 };
 }
@@ -49,12 +70,37 @@ function hasDriveAccess(): boolean {
   return getAccessToken() !== null;
 }
 
-/** Revoke the grant at Google and drop the token. */
+/**
+ * On app start: if a refresh token survived a previous session, exchange it for a fresh access
+ * token so the user doesn't have to reconnect. Returns whether Drive access was restored.
+ */
+export async function restoreDriveAccess(): Promise<boolean> {
+  const clientId = getGoogleDeviceClientId();
+  const clientSecret = getGoogleDeviceClientSecret();
+  const refreshToken = readRefreshToken();
+  if (!clientId || !clientSecret || !refreshToken) return false;
+  try {
+    const { accessToken, expiresIn } = await refreshAccessToken(
+      { clientId, clientSecret },
+      refreshToken
+    );
+    storeToken(accessToken, expiresIn);
+    return true;
+  } catch {
+    writeRefreshToken(null);
+    return false;
+  }
+}
+
+/** Revoke the grant at Google and drop both the access token and the persisted refresh token. */
 async function disconnectDrive(): Promise<void> {
   cancelDeviceAccess();
   const revoked = token;
   token = null;
-  if (revoked) await revokeToken(revoked.value);
+  const refreshToken = readRefreshToken();
+  writeRefreshToken(null);
+  const toRevoke = refreshToken ?? revoked?.value;
+  if (toRevoke) await revokeToken(toRevoke);
 }
 
 // ---------------------------------------------------------------------------
@@ -81,6 +127,7 @@ async function pollDeviceToken(
     const result = await pollDeviceOnce(client, deviceCode);
     if (result.status === 'granted') {
       storeToken(result.accessToken, result.expiresIn);
+      if (result.refreshToken) writeRefreshToken(result.refreshToken);
       return;
     }
     if (result.status === 'failed') throw new Error(result.message);

@@ -71,35 +71,36 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
     <div className="col-12">
       <div className="card shadow-sm">
         <div className="card-body">
-          <h3 className="card-title h6">Storage</h3>
+          <h3 className="card-title h5">Storage</h3>
 
-          {live.length > 0 ? (
-            <ul className="list-group list-group-flush mb-3">
-              {live.map((c) => (
-                <li
-                  key={c.id}
-                  className="list-group-item d-flex align-items-center justify-content-between px-0"
-                >
-                  <span className="text-truncate">{c.label}</span>
-                  <span className="d-flex gap-2 flex-shrink-0">
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-danger"
-                      disabled={disconnecting.busy}
-                      onClick={() => void disconnect(c.id)}
-                    >
-                      {disconnecting.busy && disconnectingId === c.id && <Spinner />}
-                      Disconnect
-                    </button>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-muted small mb-3">Nothing connected yet.</p>
-          )}
+          <div className="border-bottom pb-3 mb-3">
+            {live.length > 0 ? (
+              <ul className="list-group list-group-flush">
+                {live.map((c) => (
+                  <li
+                    key={c.id}
+                    className="list-group-item border-0 d-flex align-items-center justify-content-between px-0"
+                  >
+                    <span className="text-truncate">{c.label}</span>
+                    <span className="d-flex gap-2 flex-shrink-0">
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-outline-danger"
+                        disabled={disconnecting.busy}
+                        onClick={() => void disconnect(c.id)}
+                      >
+                        {disconnecting.busy && disconnectingId === c.id && <Spinner />}
+                        Disconnect
+                      </button>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-muted small mb-0">Nothing connected yet.</p>
+            )}
+          </div>
 
-          <h4 className="small text-uppercase text-muted mb-2">Add storage</h4>
           <div className="d-flex gap-2 flex-wrap">
             {!drive && (
               <button type="button" className="btn btn-outline-primary" onClick={startDrive}>

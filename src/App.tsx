@@ -14,7 +14,12 @@ import PreviewScreen from './components/PreviewScreen';
 import ProjectTiles from './components/ProjectTiles';
 import StatusToast from './components/StatusToast';
 import type { Status } from './components/StatusToast';
-import { awaitDeviceAccess, isDriveConfigured, requestDeviceAccess } from './drive/driveClient';
+import {
+  awaitDeviceAccess,
+  isDriveConfigured,
+  requestDeviceAccess,
+  restoreDriveAccess,
+} from './drive/driveClient';
 import type { DeviceCodeInfo } from './drive/driveClient';
 import { readGeneratorConfig, writeGeneratorConfig } from './generators/browserConfigStore';
 import { removeWhiteBackground } from './utils/removeWhiteBackground';
@@ -348,14 +353,17 @@ export default function App() {
     }
   }
 
-  // On load: reconnect any remembered HTTP storage servers (no secret, just a health check), then
-  // show whatever projects that and any already-live connection turn up, and land on the place the
-  // URL names. Drive's token is never persisted, so it always needs a fresh device-flow connect from
-  // Settings.
+  // On load: restore Drive access from its persisted refresh token (if any), reconnect any
+  // remembered HTTP storage servers (no secret, just a health check), then show whatever projects
+  // those turn up, and land on the place the URL names.
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
-    void reconnectRememberedServers()
+    void restoreDriveAccess()
+      .then((restored) => {
+        if (restored) connectDriveConnection();
+      })
+      .then(() => reconnectRememberedServers())
       .then(() => refreshTiles())
       .then(() => applyHash(startHashRef.current))
       .finally(() => setReady(true));
