@@ -1,8 +1,8 @@
 /**
- * Live status of the one manual backup that can be running at a time, for BackupButton to show a
+ * Live status of the one manual backup that can be running at a time, for useBackup to show a
  * percentage and a details popup without threading progress through props. Same shape as the
  * generation queue (ai/generation.ts): a module-level store, written from App.tsx's backupTo dep as
- * the copy runs, read via useSyncExternalStore so the button re-renders on every tick.
+ * the copy runs, read via useSyncExternalStore so the menu item re-renders on every tick.
  */
 import type { BackupSummary } from './backup';
 
