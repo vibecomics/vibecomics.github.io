@@ -4,6 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Privacy Policy - VibeComics</title>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-2EW4F03KTW"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-2EW4F03KTW');
+    </script>
     <style>
       body {
         max-width: 42rem;
@@ -39,8 +50,9 @@
 
     <p>
       <strong>Short version: we do not store anything.</strong> VibeComics has no server, no
-      database, no user accounts, no analytics and no advertising. Your comics live on your own
-      Google Drive, and we never receive them.
+      database, no user accounts and no advertising. Your comics live on your own Google Drive, and
+      we never receive them. We do use Google Analytics to understand how the site is used; see
+      below.
     </p>
 
     <h2>What VibeComics is</h2>
@@ -89,8 +101,21 @@
         A copy of the app's own files (its code and images), kept by the browser's cache so the site
         loads faster. It contains no comic content.
       </li>
+      <li>
+        Cookies set by Google Analytics (see below), used to distinguish visitors and measure usage
+        of the site.
+      </li>
     </ul>
-    <p>We do not use cookies.</p>
+
+    <h2>Analytics</h2>
+    <p>
+      VibeComics uses Google Analytics to understand how the site is used, for example which pages
+      are visited and how often. Google Analytics collects information such as your approximate
+      location, device and browser type, and the pages you visit, and sets cookies to do so. It does
+      not have access to your comics or your Google Drive content. See
+      <a href="https://policies.google.com/privacy">Google's Privacy Policy</a> for how Google
+      handles this data.
+    </p>
 
     <h2>Third parties</h2>
     <ul>
@@ -98,6 +123,10 @@
         <strong>Google.</strong> Signing in and using Drive involves Google, which handles that data
         under <a href="https://policies.google.com/privacy">Google's Privacy Policy</a>. The page
         loads Google's sign-in script from Google's servers.
+      </li>
+      <li>
+        <strong>Google Analytics.</strong> The page loads Google's analytics script to measure site
+        usage, as described above.
       </li>
       <li>
         <strong>Hosting.</strong> The site is served as static files, for example from GitHub Pages.
