@@ -3,12 +3,12 @@ import { cb } from '../ai/actions';
 import type { DeviceCodeInfo } from '../drive/driveClient';
 import type { SaveState } from '../state/useProjectSaver';
 import { useMediaQuery } from '../utils/useViewport';
-import BackupButton from './BackupButton';
 import ConflictDot from './ConflictDot';
 import DropdownMenu, { DropdownItem } from './DropdownMenu';
 import { EDITOR_TABS } from './editorTabs';
 import type { EditorTab } from './editorTabs';
 import GeneratorButton from './GeneratorButton';
+import { useBackup } from './useBackup';
 import { useBusy } from './useBusy';
 import RefreshButton from './RefreshButton';
 import SaveButton from './SaveButton';
@@ -52,6 +52,7 @@ export default function EditorNavbar({
   // hamburger menu instead, next to Backup, to keep the toolbar itself down to one row.
   const wide = useMediaQuery('(min-width: 768px)');
   const saving = saveState === 'saving';
+  const backup = useBackup({ backendKind, deviceCode, disabled: saving });
 
   return (
     <nav className="navbar navbar-dark bg-dark flex-nowrap gap-2 px-3">
@@ -92,11 +93,26 @@ export default function EditorNavbar({
             </button>
           </li>
         )}
-        <BackupButton backendKind={backendKind} deviceCode={deviceCode} disabled={saving} />
+        {backup && (
+          <li>
+            <button
+              type="button"
+              className={`dropdown-item d-flex align-items-center gap-2${backup.isError ? ' text-danger' : ''}`}
+              disabled={backup.disabled}
+              onClick={backup.onSelect}
+            >
+              {backup.icon}
+              {backup.label}
+            </button>
+          </li>
+        )}
         <DropdownItem onClick={() => void menuTask.run(() => cb().storage.closeProject())}>
           Close project
         </DropdownItem>
       </DropdownMenu>
+      {/* Always mounted, unlike the dropdown above (which unmounts its children the instant one is
+          selected) — see useBackup's doc comment for why its modals must live out here. */}
+      {backup?.modals}
 
       <span className="navbar-brand mb-0 h1 fs-5 text-truncate me-auto">{title}</span>
 
