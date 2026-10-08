@@ -51,7 +51,7 @@ import {
   storyApi,
   variationsApi,
 } from './builders';
-import type { PendingGeneration, PendingReference } from './builders';
+import type { LayerKind, PendingGeneration, PendingReference, StoryKind } from './builders';
 import type {
   ActionResult,
   BubbleInput,
@@ -1628,9 +1628,11 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * result as its layer's image as it goes (unlike generate.layer, there's
        * no one to preview a batch for). A failure on one item does not stop
        * the rest.
+       * @param kinds - Optional: only regenerate dirty layers of these kinds (e.g. ['background'] for backgrounds only). Omit to regenerate every dirty layer.
        * @returns A promise resolving to one { pageId, panelId, layerId, ok, error? } per dirty item found when it started.
        */
-      dirty: (): Promise<GenerationOutcome[]> => generateAllDirty(deps, setLayerMedia),
+      dirty: (kinds?: LayerKind[]): Promise<GenerationOutcome[]> =>
+        generateAllDirty(deps, setLayerMedia, kinds),
 
       /**
        * What generate.dirtyReferences() would generate, without generating
@@ -1654,9 +1656,11 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * rest. Mirrors generate.dirty(), but for story-bible reference art
        * instead of layers — run both to regenerate everything stale in the
        * project.
+       * @param kinds - Optional: only regenerate dirty reference art for these story-bible lists (e.g. ['characters'] for cast only). Omit to regenerate every dirty variation.
        * @returns A promise resolving to one { kind, entryId, variationId, ok, error? } per dirty item found when it started.
        */
-      dirtyReferences: (): Promise<VariationRefOutcome[]> => generateAllDirtyVariations(deps),
+      dirtyReferences: (kinds?: StoryKind[]): Promise<VariationRefOutcome[]> =>
+        generateAllDirtyVariations(deps, kinds),
 
       /**
        * Read the image generator configuration. Per-machine, not part of the project.

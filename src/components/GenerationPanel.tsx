@@ -1,12 +1,29 @@
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import { cb } from '../ai/actions';
-import { dirtyLayerRefs, dirtyVariationRefs } from '../ai/builders';
+import { pendingGenerations, pendingReferenceGenerations } from '../ai/builders';
+import type { LayerKind, StoryKind } from '../ai/builders';
 import type { GenerationTarget, QueueItem } from '../ai/generation';
 import { useMediaQuery } from '../utils/useViewport';
 import { useProject } from './ProjectContext';
 import { useBusy } from './useBusy';
 import { useGenerationQueue } from './useGenerationStatus';
+
+/** One checkbox in the "Generate" split button's dropdown: a story-bible list (reference art) or a
+ * layer kind, each independently selectable so "Generate" can be pointed at just cast, or just
+ * backgrounds, instead of everything dirty. */
+type Category =
+  | { group: 'reference'; kind: StoryKind; label: string }
+  | { group: 'layer'; kind: LayerKind; label: string };
+
+const CATEGORIES: Category[] = [
+  { group: 'reference', kind: 'characters', label: 'Cast' },
+  { group: 'reference', kind: 'objects', label: 'Props' },
+  { group: 'reference', kind: 'scenes', label: 'Scenes' },
+  { group: 'layer', kind: 'foreground', label: 'Layers' },
+  { group: 'layer', kind: 'background', label: 'Backgrounds' },
+];
 
 interface Props {
   onClose: () => void;
@@ -64,20 +81,40 @@ function QueueRow({ item, onShow }: { item: QueueItem; onShow: () => void }) {
 
 /**
  * The right-side panel opened by the toolbar's 🪄 button: every generation that's queued, running,
- * or has finished since the queue was last cleared, plus one "Generate all" button that queues every
- * dirty layer *and* every dirty story-bible reference (cast, objects, scenes) together — there is no
- * separate button per category, since from here "dirty" just means "needs a new image," regardless of
- * what it's for. Unlike the old queue dropdown, finished rows stay put until "Clear generated" removes
- * them, so you can see what was actually produced. Not modal: it stays open (no backdrop, no
+ * or has finished since the queue was last cleared, plus a "Generate" split button that queues every
+ * dirty item in the checked categories (cast, props, scenes, layers, backgrounds — see CATEGORIES);
+ * all are checked by default, so a plain click still generates everything dirty. Unlike the old queue
+ * dropdown, finished rows stay put until "Clear generated" removes them, so you can see what was
+ * actually produced. Not modal: it stays open (no backdrop, no
  * click-outside-to-close) while you keep working elsewhere — e.g. switching tabs to start another
  * generation — closing only when its own × is clicked (or, on a phone, when a row is opened), so you
  * can watch a batch run while doing something else. Clicking a row takes you to what it was for.
  */
 export default function GenerationPanel({ onClose, onShow }: Props) {
   const project = useProject();
-  const dirtyCount = dirtyLayerRefs(project).length + dirtyVariationRefs(project).length;
+  const pendingLayers = pendingGenerations(project);
+  const pendingRefs = pendingReferenceGenerations(project);
+  const dirtyCount = pendingLayers.length + pendingRefs.length;
   const queue = useGenerationQueue();
   const task = useBusy();
+  const [menuOpen, setMenuOpen] = useState(false);
+  // All checked by default, so a plain click still generates everything dirty, same as before.
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(CATEGORIES.map((c) => c.kind))
+  );
+  const countOf = (category: Category) =>
+    category.group === 'reference'
+      ? pendingRefs.filter((r) => r.kind === category.kind).length
+      : pendingLayers.filter((l) => l.kind === category.kind).length;
+  const selectedStoryKinds = CATEGORIES.filter(
+    (c): c is Category & { group: 'reference' } => c.group === 'reference' && selected.has(c.kind)
+  ).map((c) => c.kind);
+  const selectedLayerKinds = CATEGORIES.filter(
+    (c): c is Category & { group: 'layer' } => c.group === 'layer' && selected.has(c.kind)
+  ).map((c) => c.kind);
+  const selectedCount =
+    pendingRefs.filter((r) => selectedStoryKinds.includes(r.kind)).length +
+    pendingLayers.filter((l) => selectedLayerKinds.includes(l.kind)).length;
   // A full-width flex sibling would squeeze the comic page to nothing on a phone, so there it's an
   // overlay instead (see the wide/narrow split below) — the same trade-off InspectorPane makes.
   const wide = useMediaQuery('(min-width: 768px)');
@@ -112,34 +149,113 @@ export default function GenerationPanel({ onClose, onShow }: Props) {
       </div>
 
       <div className="border-top px-3 py-2 d-flex align-items-center gap-2 flex-wrap">
-        <button
-          type="button"
-          className="btn btn-primary btn-sm text-nowrap"
-          disabled={dirtyCount === 0 || task.busy}
-          title={
-            dirtyCount === 0
-              ? 'Nothing is dirty — every layer, character, prop and scene already matches its prompt'
-              : `Generate images for every layer, background and story-bible reference (cast, objects, scenes) whose art no longer matches its prompt (${dirtyCount})`
-          }
-          onClick={() =>
-            void task.run(async () => {
-              // Reference art (cast/objects/scenes) first: a layer's or background's own generation
-              // reads whatever reference images its subject/scene currently has, so those should be
-              // fresh before any layer that might use them runs, not generated after or alongside it.
-              await cb().generate.dirtyReferences();
-              await cb().generate.dirty();
-            })
-          }
-        >
-          {task.busy && (
-            <span
-              className="spinner-border spinner-border-sm me-1"
-              role="status"
-              aria-label="Generating"
-            />
+        {/* position-relative anchors the dropdown below (the generate button row), so the menu can
+            be sized to this row's full width instead of just its toggle's. */}
+        <div className="position-relative flex-grow-1">
+          <div className="d-flex" style={{ gap: 1 }}>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm text-nowrap flex-grow-1 rounded-end-0"
+              disabled={selectedCount === 0 || task.busy}
+              title={
+                dirtyCount === 0
+                  ? 'Nothing is dirty — every layer, character, prop and scene already matches its prompt'
+                  : selectedCount === 0
+                    ? 'Nothing is checked in the dropdown — pick what to generate'
+                    : `Generate images for the checked categories whose art no longer matches its prompt (${selectedCount})`
+              }
+              onClick={() =>
+                void task.run(async () => {
+                  // Reference art (cast/objects/scenes) first: a layer's or background's own
+                  // generation reads whatever reference images its subject/scene currently has, so
+                  // those should be fresh before any layer that might use them runs, not generated
+                  // after or alongside it.
+                  if (selectedStoryKinds.length)
+                    await cb().generate.dirtyReferences(selectedStoryKinds);
+                  if (selectedLayerKinds.length) await cb().generate.dirty(selectedLayerKinds);
+                })
+              }
+            >
+              {task.busy && (
+                <span
+                  className="spinner-border spinner-border-sm me-1"
+                  role="status"
+                  aria-label="Generating"
+                />
+              )}
+              {task.busy
+                ? 'Generating…'
+                : `🪄 Generate${selectedCount > 0 ? ` (${selectedCount})` : ''}`}
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm rounded-start-0 px-2"
+              aria-label="Choose what to generate"
+              aria-expanded={menuOpen}
+              disabled={task.busy}
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              ▾
+            </button>
+          </div>
+          {menuOpen && (
+            <>
+              <div
+                className="position-fixed top-0 start-0 w-100 h-100"
+                style={{ zIndex: 999 }}
+                onClick={() => setMenuOpen(false)}
+              />
+              {/* Opens upward and spans this row's full width: below/narrow would land under the
+                  page (this is the panel's own footer) or get clipped to the caret's width. */}
+              <ul
+                className="dropdown-menu show w-100"
+                data-bs-popper="static"
+                style={{
+                  top: 'auto',
+                  bottom: '100%',
+                  marginBottom: 4,
+                  maxHeight: 260,
+                  overflowY: 'auto',
+                }}
+              >
+                {CATEGORIES.map((category) => {
+                  const id = `generate-category-${category.kind}`;
+                  const count = countOf(category);
+                  // Nothing dirty in this category: check it off the list rather than letting it
+                  // stay checked but inert, or unchecked and mistaken for a deliberate exclusion.
+                  const empty = count === 0;
+                  return (
+                    <li key={category.kind} className="px-3 py-1">
+                      <div className="form-check text-nowrap">
+                        <input
+                          type="checkbox"
+                          className="form-check-input"
+                          id={id}
+                          checked={selected.has(category.kind)}
+                          disabled={empty}
+                          onChange={(e) =>
+                            setSelected((s) => {
+                              const next = new Set(s);
+                              if (e.target.checked) next.add(category.kind);
+                              else next.delete(category.kind);
+                              return next;
+                            })
+                          }
+                        />
+                        <label
+                          className={`form-check-label${empty ? ' text-muted' : ''}`}
+                          htmlFor={id}
+                        >
+                          {category.label} ({count})
+                        </label>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
           )}
-          {task.busy ? 'Generating…' : `🪄 Generate all${dirtyCount > 0 ? ` (${dirtyCount})` : ''}`}
-        </button>
+        </div>
         {activeCount > 0 && (
           <button
             type="button"
@@ -179,10 +295,12 @@ export default function GenerationPanel({ onClose, onShow }: Props) {
     );
   }
 
+  // On a phone, a 340px bar leaves most of the screen showing whatever was behind it; the panel
+  // reads better as a full-screen sheet here, same as InspectorPane's phone layout.
   return createPortal(
     <aside
-      className="position-fixed top-0 bottom-0 end-0 bg-body border-start shadow d-flex flex-column"
-      style={{ zIndex: 1041, width: 340, maxWidth: '90vw' }}
+      className="position-fixed top-0 bottom-0 start-0 end-0 bg-body shadow d-flex flex-column"
+      style={{ zIndex: 1041 }}
       aria-label="Generation queue"
     >
       {content}

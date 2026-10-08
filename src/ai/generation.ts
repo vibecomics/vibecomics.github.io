@@ -25,7 +25,7 @@ import {
   layerArtSize,
   requireProject,
 } from './builders';
-import type { LayerRef, VariationRef } from './builders';
+import type { LayerKind, LayerRef, StoryKind, VariationRef } from './builders';
 import type { ComicBuilderDeps } from './deps';
 import {
   allEntryImageIds,
@@ -659,9 +659,17 @@ function describeVariation(
 
 export async function generateAllDirty(
   deps: ComicBuilderDeps,
-  commit: CommitLayerImage
+  commit: CommitLayerImage,
+  kinds?: readonly LayerKind[]
 ): Promise<GenerationOutcome[]> {
-  const refs = dirtyLayerRefs(requireProject(deps));
+  const project = requireProject(deps);
+  let refs = dirtyLayerRefs(project);
+  if (kinds) {
+    refs = refs.filter((ref) => {
+      const layer = findPanel(project, ref.panelId)?.layers.find((l) => l.id === ref.layerId);
+      return layer && kinds.includes(layer.kind);
+    });
+  }
 
   // Queue every dirty layer's generation up front, not one at a time as each finishes:
   // trackedGeneration marks its key "queued" the instant it's called, so the queue (and any panel
@@ -715,12 +723,15 @@ export interface VariationRefOutcome extends VariationRef {
  * Generates images for every dirty variation (reference art for a character, object or scene) across
  * the whole story bible, one request at a time, committing each result into that variation's imageIds
  * as it goes (like generateAllDirty, there's no one to preview a batch for). Mirrors generateAllDirty,
- * but for story-bible reference art instead of layers.
+ * but for story-bible reference art instead of layers. `kinds`, when given, restricts this to only
+ * those story-bible lists (e.g. ['characters'] regenerates dirty cast reference art only).
  */
 export async function generateAllDirtyVariations(
-  deps: ComicBuilderDeps
+  deps: ComicBuilderDeps,
+  kinds?: readonly StoryKind[]
 ): Promise<VariationRefOutcome[]> {
-  const refs = dirtyVariationRefs(requireProject(deps));
+  let refs = dirtyVariationRefs(requireProject(deps));
+  if (kinds) refs = refs.filter((ref) => kinds.includes(ref.kind));
 
   // Queue every dirty variation's generation up front, not one at a time as each finishes: same
   // reasoning as generateAllDirty and generateAllVariations.

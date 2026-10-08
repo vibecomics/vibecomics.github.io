@@ -31,6 +31,7 @@ import type {
 } from './deps';
 
 export const LAYER_KINDS = ['background', 'foreground'] as const;
+export type LayerKind = (typeof LAYER_KINDS)[number];
 export const BUBBLE_KINDS = ['speech', 'thought', 'shout', 'caption'] as const;
 const AXES = ['horizontal', 'vertical'] as const;
 const EDGES = ['top', 'bottom', 'left', 'right'] as const;

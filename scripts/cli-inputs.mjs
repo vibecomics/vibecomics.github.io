@@ -355,7 +355,23 @@ export const INPUTS = {
   'generate.layerPrompt': { panelId: PANEL_ID, layerId: LAYER_ID },
   'generate.layerPromptParts': { panelId: PANEL_ID, layerId: LAYER_ID },
   'generate.pending': {},
-  'generate.dirty': {},
+  'generate.dirty': {
+    kinds: {
+      type: 'json',
+      optional: true,
+      example: '["background"]',
+      help: 'Restrict to these layer kinds: "background", "foreground". Omit to regenerate every dirty layer.',
+    },
+  },
+  'generate.pendingReferences': {},
+  'generate.dirtyReferences': {
+    kinds: {
+      type: 'json',
+      optional: true,
+      example: '["characters"]',
+      help: 'Restrict to these story-bible lists: "characters", "scenes", "objects". Omit to regenerate every dirty variation.',
+    },
+  },
   'generate.getConfig': {},
   'generate.setConfig': {
     config: {
