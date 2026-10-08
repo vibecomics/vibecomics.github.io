@@ -429,9 +429,11 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * and duplicate ids.
        * Warnings: two characters, scenes or images with the same name, a
        * character and an object with the same name, layers and images left with
-       * a default name, an image with no thumbnail, an image used nowhere, and a
+       * a default name, an image with no thumbnail, an image used nowhere, a
        * character, object or scene that is used on a layer but has no
-       * description or reference images. Info: layers with no subject or
+       * description or reference images, a background layer with a subjectId
+       * (subjects belong in a scene instead), and a foreground layer with a
+       * sceneId (scenes only belong on a background). Info: layers with no subject or
        * scene, layers with neither image nor prompt, an image that is both a
        * subject's art and its reference art.
        * @returns An array of findings, errors first: { code, severity: "error" | "warning" | "info", message, where: { tab, pageId?, panelId?, layerId?, entityId?, mediaId? }, fix? }. `fix`, when present, is a safe API call that only clears or unlinks something: { call: "layers.update", args: [panelId, layerId, { subjectId: null }] }; run it as ComicBuilder.<call>(...args). Findings without a fix need a decision: their message says what to do. An empty array means nothing was found. Throws when no project is open.
@@ -608,8 +610,9 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * afterwards with resize; delete a panel with delete (a neighbour stretches
      * over its space). See the page namespace for more examples.
      *
-     * A panel has a prompt: its intent, set with update (see the layers
-     * namespace for how it is combined with the page and layer prompts).
+     * A panel has only a title (set with update) — there is no panel prompt.
+     * What a panel's images show comes entirely from its layers' own
+     * prompts (see the layers namespace).
      *
      * A panel's aspect ratio follows from its rectangle and metadata.pageSize
      * (see size), so generate artwork at that ratio. The panel array is in the
@@ -1602,11 +1605,13 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * The default prompt for a layer's (or background's) image, broken into the labeled pieces
-       * that get stitched together (e.g. Style, Page, Panel, Scene/Character/Object, Layer prompt,
-       * Technical requirements — which appear depends on the layer's kind and what's linked; see
-       * generate.layerPrompt for the single joined string). Read this to show or edit each piece on
-       * its own before generating; joining every part's text with a blank line between them (in
-       * order) reproduces generate.layerPrompt.
+       * that get stitched together — Style; the kind's style addendum (Character style or Scene
+       * style, when set; an object foreground gets none); Character/Scene/Object, the linked
+       * entry's own description; Layer prompt; Technical requirements. There is no Page or Panel
+       * piece: pages and panels have no prompt of their own, only a title. Which pieces appear
+       * depends on the layer's kind and what's linked; see generate.layerPrompt for the single
+       * joined string. Read this to show or edit each piece on its own before generating; joining
+       * every part's text with a blank line between them (in order) reproduces generate.layerPrompt.
        * @param panelId - The panel id.
        * @param layerId - The layer id.
        * @returns The parts, each { label, text }, in stitching order. Throws when the panel or layer is not found.
@@ -1732,8 +1737,9 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * Generate a new image for one variation (pose/state) of a character, object or scene (see the
        * Variation type and the variations namespace): built the same way as
        * characters/scenes/objects.generateImage, plus this variation's own prompt text stitched in
-       * last. Uses this variation's own reference images by default (falling back to every image the
-       * entry has, across every variation, if this one has none yet). Registers the image but does not
+       * last. Uses this variation's own reference images by default (falling back to the entry's own
+       * pose-neutral images if this one has none yet — never another variation's, which would
+       * actively mislead the model about pose or orientation). Registers the image but does not
        * add it to the variation's imageIds — review it, then commit yourself with
        * variations.update(kind, entryId, variationId, { imageIds: [...] }).
        * @param kind - Which story-bible list the entry is in.
@@ -1765,7 +1771,8 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * The reference images generate.variationImage sends by default: this variation's own images,
-       * or, if it has none yet, every image the entry has (its own imageIds plus every variation's).
+       * or, if it has none yet, the entry's own pose-neutral images — never another variation's,
+       * which would actively mislead the model about pose or orientation.
        * @param kind - Which story-bible list the entry is in.
        * @param entryId - The entry id.
        * @param variationId - The variation id.

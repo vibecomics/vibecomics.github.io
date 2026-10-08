@@ -98,17 +98,12 @@ const CONVENTIONS = [
   '  invent image URLs.',
 ];
 
-/** How to build a comic (workflow, style, continuity), kept as plain Markdown. */
+/**
+ * How to build a comic (workflow, style, continuity), kept as plain Markdown.
+ * It already has its own "Files served next to the app" section, so nothing
+ * is appended here before it is written to public/llms.txt.
+ */
 const LLMS_GUIDE = fs.readFileSync(path.join(ROOT, 'scripts', 'llms-guide.md'), 'utf8').trim();
-
-const SERVED_FILES = [
-  '## Files served next to the app',
-  '',
-  '- `llms.txt`: this guide',
-  '- `vibecomics.mjs`: the command line (Node.js 20+): every API function as a command, no browser needed',
-  '- `api.txt`: the API reference (also `ComicBuilder.help()` in the running app)',
-  '- `schema/comic-project.schema.json`: JSON Schema of the project model',
-];
 
 const PAGE_SIZE_PRESET_LINES = readPageSizePresets();
 
@@ -117,15 +112,16 @@ const DATA_MODEL = [
   '',
   '- `ComicProject`: `{ id, title, pages[], updatedAt, savedAt, metadata }`: `savedAt` (ISO time of the last save) is required, `updatedAt` optional',
   '- `ComicPage`: `{ id, number, title, panels[] }`: `number` is 0-based and shown as 0, 1, …',
-  '- `Panel`: `{ id, title?, x, y, width, height, layers[], bubbles[] }`: `x`/`y`/`width`/`height` are % of the page; the panels of a page tile it with no gaps',
-  '- `Layer`: `{ id, name, kind: "background" | "foreground", mediaId?, prompt?, aspectRatio?, visible, x, y, width, rotation (degrees), opacity (0-1), flipX? }`: `mediaId` is the image (omitted while the layer is only a prompt); `aspectRatio` is width / height of its art; `x`/`y`/`width` are % of panel size; aspect ratio preserved, never stretched; `flipX: true` mirrors the image left to right (`layers.flip` toggles it); layers stack in array order, and a `background` layer fills its panel',
+  "- `Panel`: `{ id, title?, x, y, width, height, layers[], bubbles[] }`: `x`/`y`/`width`/`height` are % of the page; the panels of a page tile it with no gaps; no prompt of its own — a panel's images come entirely from its layers' prompts",
+  '- `Layer`: `{ id, name, kind: "background" | "foreground", mediaId?, mediaHistory?[], subjectId?, sceneId?, variationId?, prompt?, aspectRatio?, visible, x, y, width, rotation (degrees), opacity (0-1), flipX?, dirty? }`: `mediaId` is the image (omitted while the layer is only a prompt); `mediaHistory` keeps previous mediaIds, most-recent-first; `subjectId`/`sceneId` link the layer to a character/object or scene; `variationId` picks one of that entry\'s variations; `aspectRatio` is width / height of its art; `x`/`y`/`width` are % of panel size; aspect ratio preserved, never stretched; `flipX: true` mirrors the image left to right (`layers.flip` toggles it); `dirty` is set automatically when the prompt (or linked scene/subject/variation) has changed since the image was made; layers stack in array order, and a `background` layer fills its panel',
   '- `Bubble`: `{ id, kind: "speech" | "thought" | "shout" | "caption", text, x, y, width, height, tailX?, tailY? }`: % of the panel; the text is scaled to fit',
-  '- `ProjectMetadata`: `{ outline, pageSize, characters[], scenes[], objects[], media[] }`',
+  '- `ProjectMetadata`: `{ style, characterStyle?, sceneStyle?, pageSize, characters[], scenes[], objects[], media[] }`: `style` is stitched into every image prompt; `characterStyle`/`sceneStyle` are addenda stitched only into character or scene/background prompts respectively',
   '- `PageSize`: `{ label, widthIn, heightIn }`; the presets (any custom size with positive widthIn/heightIn also works):',
   ...PAGE_SIZE_PRESET_LINES,
-  '- `Character` / `ComicObject`: `{ id, name, description, imageIds[], sceneIds[] }`',
-  '- `Scene`: `{ id, name, description, characterIds[], imageIds[] }`',
-  '- `MediaItem`: `{ id, name, fileName, mimeType, thumbnailFileName? }`',
+  '- `Variation`: `{ id, name, prompt, imageIds[], dirty? }`: one pose or state (e.g. a character\'s "Back view", a scene\'s "Night") — its own prompt text stitched in after the entry\'s description, plus the reference art for that pose/state specifically',
+  '- `Character` / `ComicObject`: `{ id, name, description, imageIds[], variations[], sceneIds[] }`',
+  '- `Scene`: `{ id, name, description, imageIds[], variations[], characterIds[] }`',
+  "- `MediaItem`: `{ id, name, fileName, mimeType, thumbnailFileName?, subjectId?, sceneId? }`: `subjectId`/`sceneId` mark an image as art of that character/object or scene (not its reference art, which lives in that entry's or variation's own `imageIds`)",
   '',
   'Machine-readable schema: `schema/comic-project.schema.json` (JSON Schema, draft 2020-12).',
 ];
@@ -327,7 +323,7 @@ function main() {
         2
       )};\n`
   );
-  fs.writeFileSync(LLMS_TXT, `${LLMS_GUIDE}\n\n${SERVED_FILES.join('\n')}\n`);
+  fs.writeFileSync(LLMS_TXT, `${LLMS_GUIDE}\n`);
   const shown = (file) => path.relative(ROOT, file);
   console.log(
     `extract-docs: wrote ${collected.docs.size} entries to ${shown(GEN_TS)}, ${shown(API_TXT)}, ${shown(LLMS_TXT)} and ${shown(COMMANDS_TS)}`
