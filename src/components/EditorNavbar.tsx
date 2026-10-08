@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { cb } from '../ai/actions';
 import type { DeviceCodeInfo } from '../drive/driveClient';
 import type { SaveState } from '../state/useProjectSaver';
+import { useMediaQuery } from '../utils/useViewport';
 import BackupButton from './BackupButton';
 import ConflictDot from './ConflictDot';
 import DropdownMenu, { DropdownItem } from './DropdownMenu';
@@ -46,8 +47,11 @@ export default function EditorNavbar({
   const menuProps = (menu: Exclude<OpenMenu, null>) => ({
     open: openMenu === menu,
     onOpenChange: (open: boolean) => setOpenMenu(open ? menu : null),
-    className: 'd-md-none',
   });
+  // Save stays a one-tap toolbar button where there's room for it; on a phone it moves into the
+  // hamburger menu instead, next to Backup, to keep the toolbar itself down to one row.
+  const wide = useMediaQuery('(min-width: 768px)');
+  const saving = saveState === 'saving';
 
   return (
     <nav className="navbar navbar-dark bg-dark flex-nowrap gap-2 px-3">
@@ -68,6 +72,27 @@ export default function EditorNavbar({
           Open project
         </DropdownItem>
         <DropdownItem onClick={() => cb().page.openPreview()}>Preview this page</DropdownItem>
+        {!wide && (
+          <li>
+            <button
+              type="button"
+              className="dropdown-item"
+              disabled={saving || !dirty}
+              onClick={() => void cb().storage.save()}
+            >
+              {saving
+                ? 'Saving…'
+                : saveState === 'conflict'
+                  ? 'Changes made elsewhere clash with yours'
+                  : saveState === 'error'
+                    ? 'Save failed — click to retry'
+                    : dirty
+                      ? 'Save now'
+                      : 'All changes saved'}
+            </button>
+          </li>
+        )}
+        <BackupButton backendKind={backendKind} deviceCode={deviceCode} disabled={saving} />
         <DropdownItem onClick={() => void menuTask.run(() => cb().storage.closeProject())}>
           Close project
         </DropdownItem>
@@ -80,6 +105,7 @@ export default function EditorNavbar({
       <DropdownMenu
         {...menuProps('tabs')}
         align="end"
+        className="d-md-none"
         toggle={
           <>
             {EDITOR_TABS.find((t) => t.id === tab)?.label}
@@ -97,12 +123,7 @@ export default function EditorNavbar({
       </DropdownMenu>
 
       <RefreshButton onRefresh={onRefresh} disabled={saveState === 'saving'} />
-      <SaveButton state={saveState} dirty={dirty} backendKind={backendKind} />
-      <BackupButton
-        backendKind={backendKind}
-        deviceCode={deviceCode}
-        disabled={saveState === 'saving'}
-      />
+      {wide && <SaveButton state={saveState} dirty={dirty} backendKind={backendKind} />}
     </nav>
   );
 }

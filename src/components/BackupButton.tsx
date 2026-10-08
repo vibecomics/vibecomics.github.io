@@ -107,14 +107,14 @@ function BackupStatusModal({
 }
 
 /**
- * The button next to Save that copies the open project to the *other* kind of storage: Drive when
+ * The hamburger menu item that copies the open project to the *other* kind of storage: Drive when
  * the project lives on an HTTP storage server, or a server when it lives on Drive. One-way, manual
  * only. If that other storage is not connected yet, it shows the same connect dialog Settings uses,
  * then backs up as soon as that connection is live.
  *
- * While a backup is running (or just finished), the button shows a live percentage instead of its
- * icon, its tooltip stays a fixed "Starting upload" rather than updating on every file, and clicking
- * it opens a popup with the live count or, once done, a summary and every file that didn't make it.
+ * While a backup is running (or just finished), the item's label shows a live percentage instead of
+ * "Back up to …", and selecting it opens a popup with the live count or, once done, a summary and
+ * every file that didn't make it — same as selecting it again later, once the first backup has run.
  */
 export default function BackupButton({ backendKind, deviceCode, disabled }: Props) {
   const target = backendKind ? otherKind(backendKind) : null;
@@ -198,10 +198,11 @@ export default function BackupButton({ backendKind, deviceCode, disabled }: Prop
   if (!target) return null;
 
   const hasRun = status !== null;
-  const title = error
+  const percent = status && status.total > 0 ? Math.round((status.done / status.total) * 100) : 0;
+  const label = error
     ? error
     : status?.state === 'running'
-      ? 'Starting upload'
+      ? `Backing up… ${percent}%`
       : status?.state === 'done'
         ? 'Backup finished — click for details'
         : status?.state === 'error'
@@ -210,23 +211,18 @@ export default function BackupButton({ backendKind, deviceCode, disabled }: Prop
             ? 'Back up to Google Drive'
             : 'Back up to HTTP storage';
   const isError = Boolean(error) || status?.state === 'error';
-  const percent = status && status.total > 0 ? Math.round((status.done / status.total) * 100) : 0;
 
   return (
     <>
-      <span title={title}>
+      <li>
         <button
           type="button"
-          className={`btn btn-sm d-flex align-items-center justify-content-center ${
-            isError ? 'btn-danger' : 'btn-outline-light'
-          }`}
-          style={{ width: 36, height: 31 }}
+          className={`dropdown-item d-flex align-items-center gap-2${isError ? ' text-danger' : ''}`}
           disabled={!hasRun && disabled}
-          aria-label={target === 'drive' ? 'Back up to Google Drive' : 'Back up to HTTP storage'}
           onClick={() => (hasRun ? setShowStatusModal(true) : void start())}
         >
           {status?.state === 'running' ? (
-            <span className="small fw-semibold">{percent}%</span>
+            <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
           ) : status?.state === 'done' ? (
             <span aria-hidden="true">✓</span>
           ) : status?.state === 'error' ? (
@@ -236,8 +232,9 @@ export default function BackupButton({ backendKind, deviceCode, disabled }: Prop
           ) : (
             <FloppyDiskIcon />
           )}
+          {label}
         </button>
-      </span>
+      </li>
       {showDriveModal && (
         <ConnectDriveModal
           deviceCode={deviceCode}
