@@ -208,6 +208,11 @@ functions):
   page, and do not create a duplicate cover.
 - Everything that follows in this file happens inside this open project.
   Nothing in sections 6–13 works without one.
+- Tell the human, once: they can log into the VibeComics website
+  themselves and open this project there to watch it fill in as you
+  work, without waiting for your report (section 14). Seeing it is a
+  cheap way for them to catch something they want changed early and
+  tell you, rather than after a whole page is done.
 
 ## 6. The story bible and the prompts — exactly where each prompt lives
 
@@ -357,6 +362,11 @@ with a short title that says what the page is.
   a tall panel for a fall or a reveal; a wide one for a landscape. Vary
   size and shape from page to page; avoid a uniform grid unless that is
   the agreed style.
+- Avoid more than one full page-height panel on a page. One tall panel
+  reads fine for a fall or a reveal; several side by side are hard to
+  generate art for (each is an awkward, elongated crop) and hard for the
+  reader's eye to follow. If a page wants more than one dramatic moment,
+  give them mixed heights instead of stacking full-height panels.
 - Decide the camera per panel — wide, medium, close-up, high or low
   angle — and change it between neighbouring panels. Keep screen
   direction consistent: do not flip who stands on the left without a
@@ -397,14 +407,28 @@ For each panel:
    A layer prompt says only what belongs to this one image:
    - foreground: the pose, action, expression, and gaze of that one
      subject — and nothing about where it is. Never describe the place
-     in a foreground layer prompt (see section 9 for why).
+     in a foreground layer prompt (see section 9 for why). When a panel
+     holds more than one character, write the blocking into each one's
+     own layer prompt, not just the gaze: where that character is
+     looking, what they are doing, and how they relate to the others in
+     the panel (facing each other, back to back, one looking past the
+     other at something off-panel). This is deliberately not a rule
+     that everyone faces one way — some panels want that, some want
+     attention split or deliberately mismatched. The point is that you
+     decided the direction on purpose, not that it was left to chance.
    - background: what this view of the scene shows — the part of the
      place in frame, the time, where characters will stand, where
      bubbles will sit.
      Do not repeat the character's, prop's, or scene's description in the
      layer prompt. That description is stored once, in the bible, and is
      stitched in automatically (section 9). Repeating it here creates two
-     versions of the truth, and they will drift apart.
+     versions of the truth, and they will drift apart. The same rule
+     runs the other way: if a detail turns out to repeat across more
+     than one image of the same character, prop, or scene (a scar, a
+     prop they always carry, a limp), it does not belong scattered
+     across layer prompts — move it into that entry's own bible
+     description (section 6) instead, so every prompt that uses the
+     entry carries it automatically.
 
 A layer with a prompt and no image is a plan, not a failure. The whole
 comic should exist in this prompt-only state, and be checkable by the
@@ -425,18 +449,21 @@ into character prompts, the scene style addendum only into scene and
 background prompts, and objects get neither. If an addendum is empty, it
 contributes nothing and the recipe is otherwise unchanged.
 
-Use the stitching the project itself provides. The API documentation
-describes the prompt and prompt-parts functions for each recipe — search
-for them, read the parts back from the project, and use the stitched
-result rather than reassembling it by hand. The **technical requirements**
-that close every recipe are the line those functions return for that kind
-of image; do not write your own version of that line, and do not
-paraphrase theirs. (Before a project exists — for example, while showing
-the human an example during intake — you cannot call those functions, so
-present any early example as parts, with the technical line shown as a
-placeholder, never as an invented quote.) If you generate an image with a
-tool outside the CLI, reproduce the same order yourself, using the
-technical line the project returns.
+Use the stitching the project itself provides — never reassemble it by
+hand. The function to call is specific to what you are stitching:
+`generate.layerPrompt()` for a layer or background (its
+`layerPromptParts` sibling returns the same prompt as labeled pieces, if
+you need to inspect or edit one), `generate.referencePrompt()` for a
+bible entry's reference art, and `generate.variationPrompt()` for a
+variation's own image (each has a `...Parts` sibling too). The
+**technical requirements** that close every recipe are the line those
+functions return for that kind of image; do not write your own version
+of that line, and do not paraphrase theirs. (Before a project exists —
+for example, while showing the human an example during intake — you
+cannot call those functions, so present any early example as parts, with
+the technical line shown as a placeholder, never as an invented quote.)
+If you generate an image with a tool outside the CLI, reproduce the same
+order yourself, using the technical line the project returns.
 
 **A bible entry's reference image** (no variation involved), in order:
 
@@ -521,31 +548,31 @@ the connection if it provides a test). Three outcomes:
   directly below — every prompt is fetched from the API, assembled by
   the project, never stitched by hand.
 
-**Take every image prompt from the API. Never write one yourself,
-and never stitch one together by hand.** Section 9 shows how a prompt
-is assembled so you can recognise the pieces — but the project already
-stores every piece, and the API assembles them exactly. A prompt
-copied from a plan, a brief, or your memory drifts from what the
-project contains, and that drift is where wrong images come from.
+**Fetch every prompt from the API. Never write one yourself, and never
+hand-stitch one — even from parts you just read back.** Section 9 names
+the exact functions: `generate.layerPrompt()` / `generate.layerPromptParts()`
+for layers and backgrounds, `generate.referencePrompt()` and
+`generate.variationPrompt()` for bible art. Calling them is what makes
+the prompt you generate from byte-for-byte what the project stores,
+instead of your reconstruction of it. A prompt copied from a plan, a
+brief, or your memory drifts from what the project contains, and that
+drift is where wrong images come from.
 
 Work from the API's list, not from your own:
 
-1. Ask the API what is outstanding (search api.txt for the "pending"
-   generation calls). One lists every layer and background that has a
-   prompt but no image yet; its sibling does the same for story-bible
-   reference art.
-2. For each outstanding item, fetch its assembled prompt (search
-   api.txt for "layerPrompt"; its "parts" sibling returns the same
-   prompt as labeled pieces, if you need to inspect or edit one
-   piece). Fetch the item's default reference images the same way
-   (search api.txt for "layerReferences" and "entryReferences").
-   Bible art uses the reference/variation prompt calls (search
-   api.txt for "referencePrompt" and "variationPrompt").
+1. Ask the API what is outstanding with `generate.pending()`. It lists
+   every layer and background that has a prompt but no image yet; its
+   sibling does the same for story-bible reference art.
+2. For each outstanding item, fetch its assembled prompt with
+   `generate.layerPrompt()` (or `generate.referencePrompt()` /
+   `generate.variationPrompt()` for bible art). Fetch the item's
+   default reference images the same way (search api.txt for
+   "layerReferences" and "entryReferences").
 3. Generate with those exact words and those references — bible
    reference art first, before any layer images, per the order above.
 4. Upload the finished image and attach it to the layer or entry it
-   belongs to (search api.txt for the media upload calls), then ask
-   the pending call again. Repeat until the list is empty.
+   belongs to (search api.txt for the media upload calls), then call
+   `generate.pending()` again. Repeat until the list is empty.
 
 If a prompt is wrong, fix the stored piece — the layer's prompt, the
 entry's description, the metadata style prompt — and fetch again.

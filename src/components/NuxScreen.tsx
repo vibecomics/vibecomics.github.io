@@ -18,12 +18,12 @@ function AiPrompt({ connections }: { connections: StorageConnectionInfo[] }) {
   const live = connections.find((c) => c.connected);
   const where = live ? live.label : 'my Google Drive, or a storage server I name';
   const guide = new URL('llms.txt', document.baseURI).href;
-  const prompt = `Read ${guide} and follow it to build a comic about: <your idea>. Use the vibecomics CLI and keep the comic in ${where}. Ask me for anything you need first, then start.`;
+  const prompt = `Read ${guide} and follow it to build a comic. Use the vibecomics CLI and keep the comic in ${where}. Ask me for anything you need first. Once you're done with storage, tell me, and we'll start on the overall comic story.`;
   return (
     <>
       <p className="mb-2">
         Copy and paste the following prompt into your AI agent (ChatGPT, Claude Code, Claude on the
-        web, or similar), then add your idea.
+        web, or similar).
       </p>
       <textarea
         className="form-control font-monospace small"
