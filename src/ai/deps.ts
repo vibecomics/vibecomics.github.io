@@ -24,8 +24,8 @@ export interface ComicBuilderDeps {
   setStatus(msg: string): void;
   /** Connect Google Drive as an additional connection (it does not replace any other). */
   connectStorageWithDevice(): Promise<DeviceCodeInfo>;
-  /** Connect an HTTP storage server as an additional connection; several can be connected at once. */
-  connectStorageWithServer(url: string): Promise<void>;
+  /** Connect an S3-compatible bucket as an additional connection; several can be connected at once. */
+  connectStorageWithS3(connectionString: string): Promise<void>;
   /** Disconnect every live connection (the browser) or log out of Drive (the CLI). */
   disconnectStorage(): Promise<void>;
   /** `connected` is true when at least one connection is live. */

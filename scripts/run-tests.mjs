@@ -1,6 +1,6 @@
 /**
- * Runs every src/**\/*.test.ts and http-storage/**\/*.test.ts with Node's built-in test runner. The tests are
- * TypeScript, so they are bundled with esbuild into a temp directory first.
+ * Runs every src/**\/*.test.ts with Node's built-in test runner. The tests are TypeScript, so
+ * they are bundled with esbuild into a temp directory first.
  */
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,7 +22,7 @@ function findTests(dir) {
 
 const outdir = fs.mkdtempSync(path.join(os.tmpdir(), 'comic-builder-tests-'));
 try {
-  const entryPoints = ['src', 'http-storage'].flatMap((dir) => findTests(path.join(ROOT, dir)));
+  const entryPoints = findTests(path.join(ROOT, 'src'));
   await esbuild.build({
     entryPoints,
     bundle: true,
@@ -31,6 +31,11 @@ try {
     outdir,
     outExtension: { '.js': '.mjs' },
     logLevel: 'warning',
+    // @aws-sdk/client-s3's dependencies require() Node built-ins deep inside functions, which
+    // esbuild can't hoist into static ESM imports; see scripts/build-cli.mjs for the full story.
+    banner: {
+      js: "import { createRequire as __vcCreateRequire } from 'node:module';\nconst require = __vcCreateRequire(import.meta.url);",
+    },
   });
   const bundled = fs
     .readdirSync(outdir, { recursive: true })

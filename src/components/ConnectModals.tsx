@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import type { DeviceCodeInfo } from '../drive/driveClient';
+import { buildS3ConnectionString } from '../s3/s3Config';
 import { errorMessage } from '../utils/errors';
 import Modal from './Modal';
 import Spinner from './Spinner';
@@ -45,24 +46,46 @@ export function ConnectDriveModal({
   );
 }
 
-/** Connect a self-hosted HTTP storage server (see http-storage/) by its base URL. */
-export function ConnectServerModal({
+/**
+ * Connect an S3-compatible bucket (self-hosted, or real AWS S3/R2/B2) by its endpoint,
+ * credentials and bucket. The assembled connection string, credentials included, is remembered
+ * in this browser (see storage/connections.ts) so it reconnects automatically next time — this
+ * form only needs filling in once per bucket, per browser.
+ */
+export function ConnectS3Modal({
   onConnect,
   onClose,
 }: {
-  onConnect: (url: string) => Promise<void>;
+  onConnect: (connectionString: string) => Promise<void>;
   onClose: () => void;
 }) {
-  const [url, setUrl] = useState('');
+  const [host, setHost] = useState('');
+  const [bucket, setBucket] = useState('');
+  const [accessKeyId, setAccessKeyId] = useState('');
+  const [secretAccessKey, setSecretAccessKey] = useState('');
+  const [region, setRegion] = useState('us-east-1');
+  const [tls, setTls] = useState(false);
   const [error, setError] = useState('');
   const connecting = useBusy();
 
+  const valid = host.trim() && bucket.trim() && accessKeyId.trim();
+
   async function submit(e: FormEvent) {
     e.preventDefault();
-    if (!url.trim()) return;
+    if (!valid) return;
     setError('');
     try {
-      await connecting.run(() => onConnect(url));
+      const connectionString = buildS3ConnectionString(
+        {
+          host: host.trim(),
+          bucket: bucket.trim(),
+          region: region.trim(),
+          forcePathStyle: true,
+          tls,
+        },
+        { accessKeyId: accessKeyId.trim(), secretAccessKey: secretAccessKey.trim() }
+      );
+      await connecting.run(() => onConnect(connectionString));
     } catch (e2) {
       setError(errorMessage(e2));
     }
@@ -70,35 +93,90 @@ export function ConnectServerModal({
 
   return (
     <Modal
-      title="Connect an HTTP storage server"
-      label="Connect an HTTP storage server"
+      title="Connect an S3-compatible bucket"
+      label="Connect an S3-compatible bucket"
       onClose={onClose}
     >
       <form onSubmit={(e) => void submit(e)}>
-        <label className="form-label" htmlFor="storage-server-url">
-          Server URL
+        <label className="form-label" htmlFor="s3-host">
+          Endpoint host
         </label>
         <input
-          id="storage-server-url"
-          type="url"
+          id="s3-host"
           className="form-control"
-          placeholder="http://localhost:8081"
-          value={url}
+          placeholder="192.168.1.10:9000"
+          value={host}
           autoFocus
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => setHost(e.target.value)}
           disabled={connecting.busy}
         />
-        <p className="form-text">The address of a running http-storage/ server.</p>
-        {error && <div className="alert alert-danger py-2 small">{error}</div>}
+        <p className="form-text">
+          A self-hosted server's host:port, or a real S3/R2/B2 endpoint's host.
+        </p>
+        <label className="form-label" htmlFor="s3-bucket">
+          Bucket
+        </label>
+        <input
+          id="s3-bucket"
+          className="form-control"
+          value={bucket}
+          onChange={(e) => setBucket(e.target.value)}
+          disabled={connecting.busy}
+        />
+        <label className="form-label mt-3" htmlFor="s3-access-key">
+          Access key ID
+        </label>
+        <input
+          id="s3-access-key"
+          className="form-control"
+          value={accessKeyId}
+          onChange={(e) => setAccessKeyId(e.target.value)}
+          disabled={connecting.busy}
+        />
+        <label className="form-label mt-3" htmlFor="s3-secret-key">
+          Secret access key <span className="text-muted">(optional)</span>
+        </label>
+        <input
+          id="s3-secret-key"
+          type="password"
+          className="form-control"
+          value={secretAccessKey}
+          onChange={(e) => setSecretAccessKey(e.target.value)}
+          disabled={connecting.busy}
+        />
+        <p className="form-text">
+          Leave blank if this key was set up with no secret. Remembered in this browser so you won't
+          need to re-enter it next time.
+        </p>
+        <label className="form-label mt-3" htmlFor="s3-region">
+          Region
+        </label>
+        <input
+          id="s3-region"
+          className="form-control"
+          value={region}
+          onChange={(e) => setRegion(e.target.value)}
+          disabled={connecting.busy}
+        />
+        <div className="form-check mt-3">
+          <input
+            id="s3-tls"
+            type="checkbox"
+            className="form-check-input"
+            checked={tls}
+            onChange={(e) => setTls(e.target.checked)}
+            disabled={connecting.busy}
+          />
+          <label className="form-check-label" htmlFor="s3-tls">
+            Use HTTPS
+          </label>
+        </div>
+        {error && <div className="alert alert-danger py-2 small mt-3">{error}</div>}
         <div className="d-flex justify-content-end gap-2 mt-3">
           <button type="button" className="btn btn-secondary" onClick={onClose}>
             Cancel
           </button>
-          <button
-            type="submit"
-            className="btn btn-primary"
-            disabled={connecting.busy || !url.trim()}
-          >
+          <button type="submit" className="btn btn-primary" disabled={connecting.busy || !valid}>
             {connecting.busy && <Spinner />}
             Connect
           </button>

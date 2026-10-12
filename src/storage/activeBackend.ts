@@ -4,7 +4,7 @@
  * here instead of importing a backend directly, so they work the same regardless of which
  * connection the open project came from.
  *
- * The connections themselves (Google Drive, any number of HTTP storage servers) are owned by
+ * The connections themselves (Google Drive, any number of S3-compatible buckets) are owned by
  * storage/connections.ts; this module just tracks which one's id is "active" right now and
  * resolves it to a backend on every call, so a project selector refresh in the background never
  * disturbs whichever connection is serving the open project.
@@ -45,8 +45,8 @@ export function hasStorageAccess(): boolean {
   return connection ? connection.backend.hasAccess() : false;
 }
 
-/** Which kind of storage backs the open project, for icon choices (a Drive project vs. a server one). */
-export function getActiveBackendKind(): 'drive' | 'server' | null {
+/** Which kind of storage backs the open project, for icon choices (a Drive project vs. an S3 one). */
+export function getActiveBackendKind(): 'drive' | 's3' | null {
   const connection = active ? getConnection(active) : undefined;
   return connection ? connection.kind : null;
 }

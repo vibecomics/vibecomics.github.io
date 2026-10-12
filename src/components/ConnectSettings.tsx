@@ -3,7 +3,7 @@ import { cb } from '../ai/actions';
 import type { DeviceCodeInfo } from '../drive/driveClient';
 import type { StorageConnectionInfo } from '../storage/connections';
 import { errorMessage } from '../utils/errors';
-import { ConnectDriveModal, ConnectServerModal } from './ConnectModals';
+import { ConnectDriveModal, ConnectS3Modal } from './ConnectModals';
 import Spinner from './Spinner';
 import { useBusy } from './useBusy';
 
@@ -18,12 +18,12 @@ interface Props {
 /**
  * The Settings "Storage" section: the storage that is connected now, with a Disconnect button for
  * each, and below it the "Add" buttons. Each opens a popup that walks through connecting: Google
- * Drive via the OAuth device-code flow (see drive/driveClient.ts), or a self-hosted HTTP storage
- * server (see http-storage/) by its URL. Any number of servers can be added.
+ * Drive via the OAuth device-code flow (see drive/driveClient.ts), or an S3-compatible bucket (see
+ * s3/) by its endpoint, credentials and bucket. Any number of buckets can be added.
  */
 export default function ConnectSettings({ connections, deviceCode, onChange }: Props) {
   const [showDriveModal, setShowDriveModal] = useState(false);
-  const [showServerModal, setShowServerModal] = useState(false);
+  const [showS3Modal, setShowS3Modal] = useState(false);
   const [error, setError] = useState('');
   const device = useBusy();
   const disconnecting = useBusy();
@@ -50,9 +50,9 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
     );
   }
 
-  async function connectServer(url: string) {
-    await cb().storage.connectWithServer(url);
-    setShowServerModal(false);
+  async function connectS3(connectionString: string) {
+    await cb().storage.connectWithS3(connectionString);
+    setShowS3Modal(false);
     onChange();
   }
 
@@ -110,9 +110,9 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
             <button
               type="button"
               className="btn btn-outline-primary"
-              onClick={() => setShowServerModal(true)}
+              onClick={() => setShowS3Modal(true)}
             >
-              + Add HTTP storage
+              + Add S3 bucket
             </button>
           </div>
 
@@ -127,8 +127,8 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
           onClose={() => setShowDriveModal(false)}
         />
       )}
-      {showServerModal && (
-        <ConnectServerModal onConnect={connectServer} onClose={() => setShowServerModal(false)} />
+      {showS3Modal && (
+        <ConnectS3Modal onConnect={connectS3} onClose={() => setShowS3Modal(false)} />
       )}
     </div>
   );

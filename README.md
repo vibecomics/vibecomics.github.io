@@ -3,7 +3,7 @@
 Build and edit a comic (or graphic novel) in your browser. VibeComics is a
 static site with no server or database of its own: your comic is stored as a
 `project.json` plus artwork files somewhere you pick: either a folder on
-**your Google Drive**, or a self-hosted [HTTP storage server](#run-your-own-storage-server-optional).
+**your Google Drive**, or an [S3-compatible bucket](#run-your-own-storage-optional).
 
 ## Run it locally
 
@@ -72,29 +72,27 @@ The device client secret ships in the app bundle by design—Google's device
 flow model assumes distributed apps cannot keep secrets (same model used by
 tools like rclone).
 
-## Run your own storage server (optional)
+## Run your own storage (optional)
 
-Instead of Google Drive, VibeComics can store a comic through `http-storage/`,
-a small standalone Node server bundled at build time into a single
-dependency-free file, `http-storage/dist/http-storage.mjs`. It plays the same
-role Drive does: one folder per project, a `project.json` with the same
-optimistic-concurrency versioning, media files alongside it, over a plain
-CORS-enabled REST API, so the app can talk to it with `fetch` from anywhere
-you run it (`http://localhost:8081` by default, bound to every interface).
+Instead of Google Drive, VibeComics can store a comic in any S3-compatible
+bucket (`src/s3/`) — any self-hosted S3-compatible server, or real AWS S3 /
+Cloudflare R2 / Backblaze B2, by connection string alone (no code change:
+they all speak the same wire protocol). It plays the same role Drive does:
+one project per key prefix, a `project.json` with the same
+optimistic-concurrency versioning (native S3 conditional writes), media
+files alongside it.
 
-```bash
-npm run http-storage
-```
+On the app's connect screen, pick "Connect an S3-compatible bucket" and
+enter the endpoint, bucket and credentials. The whole connection, credentials
+included, is remembered in that browser (plaintext in localStorage — fine on
+a trusted home network, not something to rely on if the bucket is reachable
+from anywhere less trusted), so it reconnects automatically on the next
+page load.
 
-Configure it with environment variables: `HTTP_STORAGE_PATH` (where projects
-are stored; defaults to `~/data/vibecomics-data`), `HTTP_STORAGE_PORT`
-(default 8081), `HTTP_STORAGE_HOST` (default `0.0.0.0`) and
-`HTTP_STORAGE_CORS_ORIGIN` (default `*`).
-
-On the app's connect screen, pick "Your own server" and enter its URL. It has
-no login: the app just checks it answers `GET /health`, then uses it. The URL
-is remembered (it is not a secret), so it prefills that field next time, but
-every page load starts back at the connect screen: nothing connects on its own.
+Note: since the S3 client runs in the browser too, the bucket needs a CORS
+rule exposing the `ETag` header (used for the optimistic-concurrency version
+checks) — allow origin, GET/PUT/POST/HEAD/DELETE, and expose `ETag`; how you
+apply that depends on which S3-compatible server you run.
 
 ## Deploy
 

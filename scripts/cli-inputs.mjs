@@ -82,15 +82,20 @@ export const INPUTS = {
   'storage.createProject': {
     name: { type: 'string', example: 'My first comic' },
     pageSize: { ...PAGE_SIZE, optional: true },
-    connectionId: { type: 'string', optional: true, example: 'server:http://localhost:8081' },
+    connectionId: { type: 'string', optional: true, example: 's3:http://localhost:9000/my-bucket' },
   },
   'storage.openProject': { idOrName: { type: 'string', example: 'My first comic' } },
-  'storage.connectWithServer': { url: { type: 'string', example: 'http://localhost:4000' } },
+  'storage.connectWithS3': {
+    connectionString: {
+      type: 'string',
+      example: 's3://accessKey:secretKey@localhost:9000/my-bucket',
+    },
+  },
   'storage.disconnectConnection': {
-    id: { type: 'string', example: 'server:http://localhost:8081' },
+    id: { type: 'string', example: 's3:http://localhost:9000/my-bucket' },
   },
   'storage.backupTo': {
-    connectionId: { type: 'string', example: 'server:http://localhost:8081' },
+    connectionId: { type: 'string', example: 's3:http://localhost:9000/my-bucket' },
   },
 
   'project.lint': {},

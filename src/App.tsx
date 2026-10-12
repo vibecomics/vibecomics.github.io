@@ -25,13 +25,13 @@ import { readGeneratorConfig, writeGeneratorConfig } from './generators/browserC
 import { removeWhiteBackground } from './utils/removeWhiteBackground';
 import {
   connectDriveConnection,
-  connectServerConnection,
+  connectS3Connection,
   disconnectConnection,
   getConnection,
   listAllProjects,
   listConnectionInfo,
   listConnections,
-  reconnectRememberedServers,
+  reconnectRememberedS3Connections,
 } from './storage/connections';
 import {
   backendLabel,
@@ -354,8 +354,9 @@ export default function App() {
   }
 
   // On load: restore Drive access from its persisted refresh token (if any), reconnect any
-  // remembered HTTP storage servers (no secret, just a health check), then show whatever projects
-  // those turn up, and land on the place the URL names.
+  // remembered S3 buckets (their full config, credentials included, is remembered in
+  // localStorage — see storage/connections.ts), then show whatever projects turn up, and land on
+  // the place the URL names.
   useEffect(() => {
     if (startedRef.current) return;
     startedRef.current = true;
@@ -363,7 +364,7 @@ export default function App() {
       .then((restored) => {
         if (restored) connectDriveConnection();
       })
-      .then(() => reconnectRememberedServers())
+      .then(() => reconnectRememberedS3Connections())
       .then(() => refreshTiles())
       .then(() => applyHash(startHashRef.current))
       .finally(() => setReady(true));
@@ -445,9 +446,9 @@ export default function App() {
         return info;
       },
 
-      connectStorageWithServer: async (url) => {
+      connectStorageWithS3: async (connectionString) => {
         try {
-          await connectServerConnection(url);
+          await connectS3Connection(connectionString);
         } catch (e) {
           setStatus(`Could not connect: ${errorMessage(e)}`, true);
           throw e;

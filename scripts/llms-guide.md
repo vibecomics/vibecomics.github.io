@@ -56,7 +56,7 @@ Rules that apply to both:
 Your job in this section ends when: the CLI runs, its help works, and you
 can search both documentation sources.
 
-## 2. Storage: connect Google Drive — connection only, no project yet
+## 2. Storage: connect Google Drive or an S3-compatible bucket — connection only, no project yet
 
 Do this before any story work, but note what this section is _for_: it
 **connects storage**. It does not create a project. A new project's page
@@ -66,8 +66,16 @@ would lock in a default page size that is probably wrong.
 
 - The VibeComics website stores nothing on its own servers. A comic, its
   images, and everything in it live in storage the human chooses.
-- **Google Drive is the recommended default.** Use it unless the human
-  names a different storage they already have.
+- **There are two equal options: Google Drive, or an S3-compatible
+  bucket** (a self-hosted server, or real AWS S3/R2/B2). Neither is the
+  default — ask the human which one they want, unless they have already
+  said. If they haven't used VibeComics before and have no preference,
+  Google Drive is the one that needs nothing set up ahead of time (just
+  an approval in the browser); an S3 bucket needs them to already have
+  one running somewhere.
+
+### Option A: Google Drive
+
 - Connect through the CLI's login flow. These commands are documented in
   the **CLI's built-in help**, not in api.txt:
   1. Run the CLI login command. It gives you a web address and a code.
@@ -88,15 +96,32 @@ would lock in a default page size that is probably wrong.
   work on assumed storage.
 - Tell the human, in one sentence, what they are approving: the app can
   only see files and folders it created in their Drive, nothing else.
+
+### Option B: an S3-compatible bucket
+
+- Search the API documentation for the storage function that connects
+  one (it takes a single connection string). You cannot construct that
+  string yourself — **ask the human for every piece it needs**: the
+  bucket's endpoint (host and port), the bucket name, and its access key
+  (the secret is optional — ask for it too, but the human may say the key
+  has none). Ask for all of it up front in one message, don't guess any
+  part of it, and don't invent a placeholder value for a piece they didn't
+  give you.
+- Tell the human, before they hand over the details, that the browser
+  will remember this connection (bucket and credentials) securely so
+  they only need to give it to you once — they won't be asked again on
+  later visits in the same browser.
+- If connecting fails, show the human the exact error (a wrong endpoint,
+  bucket, or credential all fail differently) and ask them to check that
+  piece — do not retry with a guessed correction.
+
+### Either way
+
 - Once connected, list the human's existing projects (search api.txt for
   the storage functions) so you know what already exists. If the human
   arrived asking to continue a named existing comic, open that one now
   and skip to section 6. Otherwise, do **not** open or create anything
   yet.
-- If, and only if, the human themselves names an HTTP storage server
-  address, there is an HTTP storage option — search the API documentation
-  for connecting with a server. Do not offer it, suggest it, or explain
-  it otherwise.
 
 Your job in this section ends when: storage is connected and you have
 listed what projects already exist. No project needs to exist yet.

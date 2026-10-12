@@ -25,7 +25,9 @@ await esbuild.build({
   format: 'esm',
   target: 'node20',
   define: googleDefines(),
-  banner: { js: '#!/usr/bin/env node' },
+  banner: {
+    js: "#!/usr/bin/env node\nimport { createRequire as __vcCreateRequire } from 'node:module';\nconst require = __vcCreateRequire(import.meta.url);",
+  },
   logLevel: 'warning',
 });
 fs.chmodSync(OUT, 0o755);

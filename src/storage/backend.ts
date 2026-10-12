@@ -1,8 +1,8 @@
 import type { ProjectFile, ProjectFolder, StoredFile } from './types';
 
 /**
- * The storage operations any project store must implement: Google Drive, a self-hosted HTTP server
- * (http-storage/), or a future one. `activeBackend.ts` holds one of these per connected session and
+ * The storage operations any project store must implement: Google Drive, an S3-compatible bucket
+ * (s3/), or a future one. `activeBackend.ts` holds one of these per connected session and
  * dispatches every call through it, so adding a backend never touches the dispatch code - implement
  * this shape, add it to the registry there, and give the splash screen a way to connect it.
  */

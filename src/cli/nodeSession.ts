@@ -2,10 +2,13 @@
  * The CLI's counterpart of App.tsx: the ComicBuilderDeps for one command run in
  * Node. The project is loaded from its storage connection before the command
  * (when one is open), changed in memory by the API, and written back after it.
- * The Google login, any connected HTTP storage servers, and the open project
- * (and which connection it came from) persist in the state file between runs.
- * The Drive and server REST calls, the media and project-folder logic are the
- * same code the page uses (driveRest.ts, serverRest.ts, storageDeps.ts).
+ * The Google login persists in the state file between runs; connected S3
+ * buckets persist there too, but only their non-secret endpoint/bucket/region
+ * (see s3/s3Config.ts) — every run rebuilds the S3 client from
+ * VIBECOMICS_S3_ACCESS_KEY_ID / VIBECOMICS_S3_SECRET_ACCESS_KEY, since each CLI
+ * run is a separate process and secrets never land in the state file. The
+ * Drive and S3 REST calls, the media and project-folder logic are the same
+ * code the page uses (driveRest.ts, s3Rest.ts, storageDeps.ts).
  */
 import type { ComicBuilderDeps } from '../ai/deps';
 import { createMediaDeps, createOrOpenProject, parseProject } from '../ai/storageDeps';
@@ -17,8 +20,10 @@ import {
 } from '../drive/deviceOAuth';
 import type { DeviceClient, DeviceCodeInfo } from '../drive/deviceOAuth';
 import { createDriveRest } from '../drive/driveRest';
-import { checkServerHealth, normalizeServerUrl } from '../server/serverClient';
-import { createServerRest } from '../server/serverRest';
+import { checkS3Health } from '../s3/s3Backend';
+import { createS3Client } from '../s3/s3Client';
+import { parseS3ConnectionString, s3ConnectionId, s3Label } from '../s3/s3Config';
+import { createS3Rest } from '../s3/s3Rest';
 import type { StorageConnectionInfo } from '../storage/connections';
 import { ProjectChangedError } from '../storage/types';
 import type { ProjectFolder } from '../storage/types';
@@ -30,8 +35,6 @@ import { StateStore } from './state';
 
 const TOKEN_EXPIRY_MARGIN_MS = 60_000;
 const DRIVE_CONNECTION_ID = 'drive';
-/** Matches storage/connections.ts's id scheme for a server connection, so ids read the same in both. */
-const serverConnectionId = (url: string): string => `server:${url}`;
 
 export interface NodeSessionOptions {
   store: StateStore;
@@ -108,12 +111,29 @@ export function createNodeSession(options: NodeSessionOptions) {
   const drive = createDriveRest({ getToken: validToken, fetch: fetchImpl });
   const driveConnected = (): boolean => Boolean(validToken() || state.auth?.refreshToken);
 
-  /** One connection's REST calls: Drive, or a server built fresh from its remembered URL. */
+  /**
+   * Credentials for every S3 target this run, read fresh from the environment (never from the
+   * state file). One credential pair for the whole run is a deliberate simplification: switch
+   * VIBECOMICS_S3_ACCESS_KEY_ID/VIBECOMICS_S3_SECRET_ACCESS_KEY between runs to use a different one.
+   */
+  function requireS3Credentials() {
+    const accessKeyId = process.env.VIBECOMICS_S3_ACCESS_KEY_ID;
+    // The secret may legitimately be blank (a key set up with no secret) — only the access key
+    // itself is required.
+    const secretAccessKey = process.env.VIBECOMICS_S3_SECRET_ACCESS_KEY ?? '';
+    if (!accessKeyId) {
+      throw new Error('Set VIBECOMICS_S3_ACCESS_KEY_ID to use a connected S3 bucket.');
+    }
+    return { accessKeyId, secretAccessKey };
+  }
+
+  /** One connection's REST calls: Drive, or an S3 target rebuilt from its remembered config. */
   function repoFor(connectionId: string) {
     if (connectionId === DRIVE_CONNECTION_ID) return drive;
-    if (connectionId.startsWith('server:')) {
-      const url = connectionId.slice('server:'.length);
-      return createServerRest({ getBaseUrl: () => url, fetch: fetchImpl });
+    const target = (state.s3 ?? []).find((t) => s3ConnectionId(t) === connectionId);
+    if (target) {
+      const client = createS3Client(target, requireS3Credentials());
+      return createS3Rest({ getClient: () => client, bucket: target.bucket });
     }
     throw new Error(`Unknown storage connection "${connectionId}".`);
   }
@@ -121,12 +141,12 @@ export function createNodeSession(options: NodeSessionOptions) {
   /** The connection the open project (if any) came from; absent means an older state file, i.e. Drive. */
   const projectConnectionId = (): string => state.project?.connectionId ?? DRIVE_CONNECTION_ID;
 
-  /** Every project folder across Drive (if logged in) and every connected server, tagged with where it came from. */
+  /** Every project folder across Drive (if logged in) and every connected S3 bucket, tagged with where it came from. */
   async function listAllProjectFolders(): Promise<ProjectFolder[]> {
-    if (!driveConnected() && (state.servers?.length ?? 0) === 0) {
+    if (!driveConnected() && (state.s3?.length ?? 0) === 0) {
       throw new Error(
         'Not connected to any storage. Run "vibecomics auth login" for Google Drive, or ' +
-          '"vibecomics storage connectWithServer <url>" for a self-hosted server.'
+          '"vibecomics storage connectWithS3 <connectionString>" for an S3-compatible bucket.'
       );
     }
     const found: ProjectFolder[] = [];
@@ -141,24 +161,24 @@ export function createNodeSession(options: NodeSessionOptions) {
           }))
         );
       } catch {
-        // Drive is logged in but unreachable right now: skip it like a dead server rather than failing the list.
+        // Drive is logged in but unreachable right now: skip it like a dead bucket rather than failing the list.
       }
     }
-    for (const url of state.servers ?? []) {
+    for (const target of state.s3 ?? []) {
       try {
-        const folders = await repoFor(serverConnectionId(url)).listProjectFolders();
+        const folders = await repoFor(s3ConnectionId(target)).listProjectFolders();
         found.push(
           ...folders.map((f) => ({
             ...f,
-            connectionId: serverConnectionId(url),
-            connectionLabel: url,
+            connectionId: s3ConnectionId(target),
+            connectionLabel: s3Label(target),
           }))
         );
       } catch {
         // Remembered but not reachable right now.
       }
     }
-    // A project of the same name in more than one connection: the server's copy wins (matches the app).
+    // A project of the same name in more than one connection: the S3 bucket's copy wins (matches the app).
     const byName = new Map<string, ProjectFolder>();
     for (const f of found) {
       const existing = byName.get(f.name);
@@ -300,8 +320,8 @@ export function createNodeSession(options: NodeSessionOptions) {
     },
 
     /**
-     * Revoke the Drive login at Google and forget it on this machine. Leaves any connected
-     * servers and the open project alone unless that project came from Drive, in which case it
+     * Revoke the Drive login at Google and forget it on this machine. Leaves any connected S3
+     * buckets and the open project alone unless that project came from Drive, in which case it
      * is dropped too (unsaved changes are lost, same as the browser disconnecting Drive).
      */
     async logout(): Promise<AuthReport> {
@@ -447,14 +467,13 @@ export function createNodeSession(options: NodeSessionOptions) {
     setStatus: () => undefined,
 
     connectStorageWithDevice: startLogin,
-    connectStorageWithServer: async (url) => {
-      const normalized = normalizeServerUrl(url);
-      await checkServerHealth(normalized, fetchImpl);
+    connectStorageWithS3: async (connectionString) => {
+      const { config, credentials } = parseS3ConnectionString(connectionString);
+      await checkS3Health(config, credentials);
+      const id = s3ConnectionId(config);
       setState((s) => ({
         ...s,
-        servers: (s.servers ?? []).includes(normalized)
-          ? s.servers
-          : [...(s.servers ?? []), normalized],
+        s3: (s.s3 ?? []).some((t) => s3ConnectionId(t) === id) ? s.s3 : [...(s.s3 ?? []), config],
       }));
     },
     disconnectStorage: async () => {
@@ -468,7 +487,7 @@ export function createNodeSession(options: NodeSessionOptions) {
       setState(() => ({}));
     },
     getStorageStatus: () => ({
-      connected: driveConnected() || (state.servers?.length ?? 0) > 0,
+      connected: driveConnected() || (state.s3?.length ?? 0) > 0,
       configured: deviceClient !== null,
     }),
     listStorageConnections: async (): Promise<StorageConnectionInfo[]> => {
@@ -480,14 +499,14 @@ export function createNodeSession(options: NodeSessionOptions) {
           connected: driveConnected(),
         },
       ];
-      for (const url of state.servers ?? []) {
+      for (const target of state.s3 ?? []) {
         let connected = true;
         try {
-          await checkServerHealth(url, fetchImpl);
+          await checkS3Health(target, requireS3Credentials());
         } catch {
           connected = false;
         }
-        result.push({ id: serverConnectionId(url), kind: 'server', label: url, connected });
+        result.push({ id: s3ConnectionId(target), kind: 's3', label: s3Label(target), connected });
       }
       return result;
     },
@@ -498,9 +517,8 @@ export function createNodeSession(options: NodeSessionOptions) {
       }
       if (id === DRIVE_CONNECTION_ID) {
         await auth.logout();
-      } else if (id.startsWith('server:')) {
-        const url = id.slice('server:'.length);
-        setState((s) => ({ ...s, servers: (s.servers ?? []).filter((u) => u !== url) }));
+      } else if (id.startsWith('s3:')) {
+        setState((s) => ({ ...s, s3: (s.s3 ?? []).filter((t) => s3ConnectionId(t) !== id) }));
       }
     },
 
@@ -516,12 +534,12 @@ export function createNodeSession(options: NodeSessionOptions) {
         (() => {
           const live = [
             ...(driveConnected() ? [DRIVE_CONNECTION_ID] : []),
-            ...(state.servers ?? []).map(serverConnectionId),
+            ...(state.s3 ?? []).map(s3ConnectionId),
           ];
           if (live.length === 1) return live[0];
           if (live.length === 0) {
             throw new Error(
-              `No storage connection is live. ${LOGIN_HINT} or run "storage connectWithServer <url>".`
+              `No storage connection is live. ${LOGIN_HINT} or run "storage connectWithS3 <connectionString>".`
             );
           }
           throw new Error(

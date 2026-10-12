@@ -7,10 +7,10 @@ interface Props {
   /** True when there are changes not yet written to storage. */
   dirty: boolean;
   /** The open project's own storage connection: a Drive project shows a cloud icon instead of a floppy disk. */
-  backendKind: 'drive' | 'server' | null;
+  backendKind: 'drive' | 's3' | null;
 }
 
-/** Saves now; it shows a spinner while saving. Floppy disk for an HTTP storage project, cloud for a Drive one. */
+/** Saves now; it shows a spinner while saving. Floppy disk for an S3 bucket project, cloud for a Drive one. */
 export default function SaveButton({ state, dirty, backendKind }: Props) {
   const saving = state === 'saving';
   const title = saving

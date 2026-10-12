@@ -1,5 +1,5 @@
 /**
- * What every storage backend (Google Drive, the HTTP storage server) shares: the shape of a project
+ * What every storage backend (Google Drive, an S3-compatible bucket) shares: the shape of a project
  * folder, a stored image and a project.json read back, and the two errors a load or save can end in.
  */
 

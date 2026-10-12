@@ -17,7 +17,7 @@ Browser (React UI) ──window.ComicBuilder──> state (React useState + refs
 storage/activeBackend.ts ──────────────────── saveProjectJson()
         │                                    (routes to whichever is active)
         ▼
-Google Drive API (OAuth token, page memory)   — or —   http-storage server (plain fetch, no auth)
+Google Drive API (OAuth token, page memory)   — or —   S3-compatible bucket (self-hosted/S3/R2/B2, AWS SDK)
 ```
 
 - **One code path.** The UI and any AI agent call the same functions on
@@ -31,13 +31,13 @@ Google Drive API (OAuth token, page memory)   — or —   http-storage server (
   project as having unsaved changes.
 - **One project store, picked per session.** There is no local-storage copy
   of the comic. The store is either Google Drive (`drive.file` scope: the
-  app can only see folders/files it created) or a self-hosted HTTP storage
-  server (`http-storage/`), chosen once on the splash screen and held as
-  `storage/activeBackend.ts`'s module-level `active` flag for the rest of
-  the session. Everything that reads or writes project data — `App.tsx`,
-  `useProjectSaver`, `mediaImages.ts` — goes through that module's
-  functions instead of importing a backend directly, so it behaves the same
-  either way. See §6a.
+  app can only see folders/files it created) or an S3-compatible bucket
+  (`src/s3/` — any self-hosted server, or real AWS S3/R2/B2), chosen once on
+  the splash screen and held as `storage/activeBackend.ts`'s module-level
+  `active` flag for the rest of the session. Everything that reads or
+  writes project data — `App.tsx`, `useProjectSaver`, `mediaImages.ts` —
+  goes through that module's functions instead of importing a backend
+  directly, so it behaves the same either way. See §6a.
 
 ## 2. Screens
 
@@ -49,11 +49,10 @@ Google Drive API (OAuth token, page memory)   — or —   http-storage server (
    `ComicBuilder.storage.connectWithDevice()` (the OAuth device flow, showing
    a verification URL + user code to approve on any other device; it works
    the same from a real click or an injected script, so it is the only Drive
-   connect method, no separate popup flow); the server section is a URL
-   field (prefilled from whatever was remembered in `localStorage`, never
-   auto-submitted) plus a Connect button that calls
-   `ComicBuilder.storage.connectWithServer(url)`. Every page load lands on
-   this screen: neither backend reconnects on its own.
+   connect method, no separate popup flow); the S3 section has fields for
+   the endpoint, bucket and credentials plus a Connect button that calls
+   `ComicBuilder.storage.connectWithS3(connectionString)`. Every page load
+   lands on this screen: neither backend reconnects on its own.
 2. **Tiles** (`tiles`) — one Bootstrap card per project folder plus a
    dashed "New project" tile. The new-project name and page size (preset:
    US Comic, US Trade, Manga B5, A4, Square, Portrait 4:5, Landscape 16:9)
@@ -334,9 +333,9 @@ Semantics:
   approve on any device, and the caller polls `storage.status()` until
   connected. It works headless (no popup, no user gesture), so the same
   button and the same call serve a human click and an AI assistant alike;
-  there is no separate popup flow. `storage.connectWithServer(url)` is the
-  other option, connecting to a self-hosted HTTP storage server instead
-  (§6a) — no OAuth at all, just a reachability check.
+  there is no separate popup flow. `storage.connectWithS3(connectionString)`
+  is the other option, connecting to an S3-compatible bucket instead (§6a)
+  — no OAuth at all, just a `HeadBucket` reachability check.
 
 ## 5. Runtime docs generation (the LLM skill)
 
@@ -419,23 +418,25 @@ they cannot drift from the code.
   uses); it only identifies the client, scope stays `drive.file`, and
   access tokens remain memory-only.
 
-## 6a. The HTTP storage server (the other backend)
+## 6a. The S3 backend (the other backend)
 
-`http-storage/` is a standalone Node server (`server.ts` + `store.ts` +
-`start.ts`) that plays Drive's role over plain CORS-enabled REST instead of
-OAuth: one folder per project under a configurable root, `project.json` with
-the same optimistic-concurrency versioning (an `If-Match` header instead of
-Drive's file `version`, a 412 response instead of `ProjectChangedError`), and
-media files alongside it, as plain files under their real names (a project
-folder holds `project.json`, the images and a `.trash/`, nothing else: no
-index, no metadata file, no cache). A file is addressed by project and name
-(`GET|HEAD|DELETE /projects/:name/files/:file`), its MIME type comes from its
-extension, its version is its modification time, and an upload that would
-reuse a name is refused with a 409. `scripts/migrate-http-storage.mjs`
-converts a root from the earlier UUID-blob layout. `scripts/build-http-storage.mjs` bundles it (esbuild, no
-dependencies) to `http-storage/dist/http-storage.mjs`; `npm run http-storage`
-runs it locally (default `0.0.0.0:8081`; `npm run dev` is fixed to
-`0.0.0.0:8080`, both bound to every interface).
+`src/s3/` plays Drive's role against any S3-compatible bucket — any
+self-hosted S3-compatible server, or real AWS S3 / Cloudflare R2 /
+Backblaze B2, by connection string alone (no code change, since they all
+speak the identical wire protocol): one key prefix per project (`<project>/`), `project.json`
+with the same optimistic-concurrency versioning (a native conditional
+`PutObject` — `IfMatch: <etag>` — instead of Drive's file `version`, a
+`PreconditionFailed` response mapped to `ProjectChangedError` instead of a
+412 from a bespoke server), and media files alongside it as plain keys under
+their real names. S3 has no real folders or atomic rename, so an empty
+project is kept visible by a zero-byte `<project>/.vibecomics-keep` marker
+(`ensureProjectFolder`), "no overwrite on upload" is a conditional
+`PutObject` with `IfNoneMatch: '*'`, and trashing a file is
+`CopyObject`-then-`DeleteObject` to `<project>/.trash/<file>` (S3 has no
+move). `src/s3/s3Rest.ts` implements the calls (`@aws-sdk/client-s3`),
+`src/s3/s3Client.ts` builds the one `S3Client` constructor call (nothing
+provider-specific), `src/s3/s3Config.ts` parses/builds the connection string
+(`s3://accessKeyId:secretAccessKey@host/bucket[?region=...&tls=1&pathStyle=0]`).
 
 **Pluggable backends.** `src/storage/backend.ts` defines `StorageBackendImpl`:
 the shape any project store must implement (`listProjectFolders`,
@@ -443,19 +444,23 @@ the shape any project store must implement (`listProjectFolders`,
 `findFileByName`, `saveProjectJson`, `loadProjectFile`, `hasAccess`,
 `disconnect`, plus a display `label`). Each backend's own module builds and
 exports one: `driveClient.ts`'s `driveBackend` binds it to Drive's REST calls
-and the page's in-memory token; `serverClient.ts`'s `serverBackend` binds it
-to `serverRest.ts`'s calls and a base URL checked once against `GET /health`
-(remembered in `localStorage` since it is not a secret, but only to prefill
-the connect screen's field next time; the app never reconnects on its own).
-`src/storage/activeBackend.ts` holds a `REGISTRY: Record<StorageBackend,
-StorageBackendImpl>`, a module-level flag for which key is active, and one
-function per storage call that looks up `REGISTRY[active]` and delegates.
-That registry is the only place that knows both backends exist: everything
-else (`App.tsx`, `useProjectSaver`, `mediaImages.ts`, `storage/projectStore.ts`)
-imports `activeBackend.ts`'s functions instead of a backend directly, so
-adding a third backend means writing a new module that implements
-`StorageBackendImpl`, adding one line to `REGISTRY` and to the `StorageBackend`
-union, and giving the splash screen a way to connect it. Nothing else changes.
+and the page's in-memory token; `s3Backend.ts`'s `createS3Backend` binds it
+to `s3Rest.ts`'s calls and an `S3Client` checked once against `HeadBucket`.
+An S3 connection's full config, credentials included, is remembered in
+`localStorage` (plaintext — fine on a trusted network, not a secrets vault),
+so `App.tsx`'s startup effect reconnects every remembered bucket
+automatically (`reconnectRememberedS3Connections`), the same as Drive's own
+persisted refresh token; one that fails (server unreachable) just shows as
+"offline" in Settings until reconnected by hand. `src/storage/connections.ts`
+holds the live
+`Connection[]` (Drive, plus any number of S3 buckets) and
+`src/storage/activeBackend.ts` tracks which one backs the open project,
+resolving every storage call to it. Everything else (`App.tsx`,
+`useProjectSaver`, `mediaImages.ts`, `storage/projectStore.ts`) imports
+`activeBackend.ts`'s functions instead of a backend directly, so adding a
+third backend means writing a new module that implements
+`StorageBackendImpl`, registering it in `connections.ts`, and giving the
+splash screen a way to connect it. Nothing else changes.
 
 **Addressing images by name, not URL.** A `MediaItem`'s `fileName` (and
 `thumbnailFileName`) is the stable, backend-portable name it is stored under
@@ -463,8 +468,8 @@ in the project's storage folder, assigned once at upload
 (`src/ai/storageDeps.ts`) from the item's name and never changed — never a raw
 URL or a backend's own opaque file id. To read the bytes, the active
 backend's `downloadFile(folderId, name)` and `trashFile(folderId, name)` take
-the name itself (Drive looks up its own file id internally; the server uses
-the name as the file's name on disk), and `findFileByName` checks a name is
+the name itself (Drive looks up its own file id internally; S3 uses the name
+as the object key's last segment), and `findFileByName` checks a name is
 free before an upload, since a name must be unique within a project
 (`src/components/mediaImages.ts`, `src/ai/storageDeps.ts`). `project.json`
 itself never stores a backend id, so moving a project's files between
@@ -472,18 +477,20 @@ backends needs no rewriting of the file: copy the bytes under matching names
 to the other backend and the same `fileName` values resolve there too. Stored names follow one rule
 (`src/utils/fileName.ts`): lowercase letters and digits joined by dashes, then
 an image extension (`ashwini-running.png`, `ashwini-running.thumb.png`). Uploads
-reword their name to fit (`toFileName`), the HTTP server refuses any other
-name, and a name is never reused within a project. Files are never shown by
-name: the UI shows a `MediaItem`'s `name` label, which for an uploaded file
-starts as its file name with dashes as spaces and a capital first letter
-(`displayName`). `scripts/normalize-http-storage.mjs` renames an existing root
-to the rule. A
+reword their name to fit (`toFileName`), the S3 backend refuses any other
+name via its `IfNoneMatch` conditional write, and a name is never reused
+within a project. Files are never shown by name: the UI shows a `MediaItem`'s
+`name` label, which for an uploaded file starts as its file name with dashes
+as spaces and a capital first letter (`displayName`). A
 layer holds no image reference of its own beyond `mediaId`, pointing at the
 `MediaItem`; `Layer.src` and any backend-specific id on a `MediaItem` are
 gone.
 
-The CLI does not support the server backend (`connectStorageWithServer` is a
-stub there that points at `vibecomics auth login`): it stays Drive-only.
+The CLI supports the S3 backend too (`storage connectWithS3
+<connectionString>`): the non-secret endpoint/bucket/region persist in its
+state file between runs, but the connection string's credentials never do —
+every run reads them fresh from `VIBECOMICS_S3_ACCESS_KEY_ID` /
+`VIBECOMICS_S3_SECRET_ACCESS_KEY` (`src/cli/nodeSession.ts`).
 
 ## 7. Autosave
 
@@ -614,8 +621,8 @@ it's drawn comic content, it's custom CSS.
   only connect method — no popup flow exists) is headless-friendly, but no
   throwaway credentials exist, so completing it for real still needs the
   agent to relay the URL + code to the user, who approves on any device.
-  `storage.connectWithServer(url)` (§6a) needs no OAuth at all — it works
-  headless outright against a storage server the agent can start itself.
+  `storage.connectWithS3(connectionString)` (§6a) needs no OAuth at all — it
+  works headless outright against a bucket the agent can start itself.
 - Static checks (tsc, vite build, prettier, extractor) are the automated
   gate. Live-browser verification — visual inspection and console
   injection of `window.ComicBuilder` — needs a real browser session and is
@@ -694,9 +701,10 @@ generated from the JSDoc.
 - **Login** is the OAuth device flow (`deviceOAuth.ts`), split in two so it fits
   an agent's tool calls: `auth login` prints the URL and code and returns;
   `auth status` finishes it (one poll) once the user has approved. Later runs
-  refresh the access token from the refresh token. `storage.connectWithServer`
-  (the HTTP storage server backend) is unavailable in the CLI, which only
-  supports Drive.
+  refresh the access token from the refresh token. `storage.connectWithS3`
+  (the S3 backend, §6a) works from the CLI too: its non-secret config
+  persists in the state file between runs, but credentials are read fresh
+  from `VIBECOMICS_S3_ACCESS_KEY_ID`/`VIBECOMICS_S3_SECRET_ACCESS_KEY` every run.
 - **Per command** (`src/cli/nodeSession.ts`): refresh the login, load the open
   project from Drive (skipped for commands that do not need it), call the API,
   and save `project.json` back if anything changed (`savedAt`/`updatedAt`

@@ -1,10 +1,10 @@
 /**
- * One-off rename of every image in an http-storage root to the storage naming rule
- * (src/utils/fileName.ts: lowercase, dashes, no spaces, an extension), and of the names
- * project.json refers to.
+ * One-off rename of every image in a disk root (one subdirectory per project, project.json +
+ * image files, as src/s3/ expects) to the storage naming rule (src/utils/fileName.ts: lowercase,
+ * dashes, no spaces, an extension), and of the names project.json refers to.
  *
- *   node scripts/normalize-http-storage.mjs <root>            report what would change
- *   node scripts/normalize-http-storage.mjs <root> --apply    do it
+ *   node scripts/normalize-media-filenames.mjs <root>            report what would change
+ *   node scripts/normalize-media-filenames.mjs <root> --apply    do it
  *
  * A file with no image extension gets one from its own bytes. Names that end up equal get a
  * -2, -3 ... suffix. project.json's media fileName / thumbnailFileName are rewritten to match; a
@@ -17,7 +17,7 @@ import { isValidFileName, toFileName } from '../src/utils/fileName.ts';
 const [root, ...flags] = process.argv.slice(2);
 const apply = flags.includes('--apply');
 if (!root) {
-  console.error('usage: node scripts/normalize-http-storage.mjs <root> [--apply]');
+  console.error('usage: node scripts/normalize-media-filenames.mjs <root> [--apply]');
   process.exit(1);
 }
 

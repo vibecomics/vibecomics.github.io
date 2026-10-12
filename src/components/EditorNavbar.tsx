@@ -20,7 +20,7 @@ interface Props {
   saveState: SaveState;
   dirty: boolean;
   /** The open project's own storage connection: picks Save's icon and Backup's direction. */
-  backendKind: 'drive' | 'server' | null;
+  backendKind: 'drive' | 's3' | null;
   deviceCode: DeviceCodeInfo | null;
   /** Tabs that hold a conflict with changes made elsewhere. */
   conflictTabs: Set<EditorTab>;

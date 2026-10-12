@@ -1,7 +1,9 @@
 /**
  * What the CLI remembers between runs, in one JSON file (mode 0600, in a 0700
  * folder): the Google login (a refresh token and the current access token),
- * any self-hosted HTTP storage servers connected, the open project (and which
+ * any S3-compatible buckets connected (endpoint/bucket/region only — never
+ * credentials, which the CLI instead reads fresh from VIBECOMICS_S3_ACCESS_KEY_ID /
+ * VIBECOMICS_S3_SECRET_ACCESS_KEY on every run), the open project (and which
  * connection it came from), and the current page. Each CLI run is a separate
  * process, so this is the only thing that carries a login and an "open
  * project" from one command to the next. `VIBECOMICS_HOME` picks the folder
@@ -12,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { DeviceCodeInfo } from '../drive/deviceOAuth';
 import type { GeneratorConfig } from '../generators/types';
+import type { S3TargetConfig } from '../s3/s3Config';
 
 /** A device login the user has been asked to approve but has not yet. */
 export interface PendingLogin {
@@ -32,12 +35,13 @@ export interface AuthState {
 
 export interface CliState {
   auth?: AuthState;
-  /** Self-hosted HTTP storage server base URLs connected this way (no login, so just remembered). */
-  servers?: string[];
+  /** S3-compatible bucket targets connected this way: endpoint/bucket/region only, never credentials. */
+  s3?: S3TargetConfig[];
   /**
-   * The open project's folder, and which connection it came from: `"drive"` or `` `server:<url>` ``
-   * (matching the browser's connection id scheme in storage/connections.ts). Absent `connectionId`
-   * (a state file from before multi-backend support) means `"drive"`.
+   * The open project's folder, and which connection it came from: `"drive"` or
+   * `` `s3:<endpoint>/<bucket>` `` (matching the browser's connection id scheme in
+   * storage/connections.ts). Absent `connectionId` (a state file from before multi-backend
+   * support) means `"drive"`.
    */
   project?: { id: string; name: string; connectionId?: string };
   /** The current page of the open project (0-based). */

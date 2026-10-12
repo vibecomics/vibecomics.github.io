@@ -195,7 +195,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
   /**
    * Top-level command API for VibeComics: every UI control calls these same
    * functions (one code path, no drift). Namespaces: storage (connect to
-   * Google Drive or a self-hosted HTTP server, project folders, project.json
+   * Google Drive or an S3-compatible bucket, project folders, project.json
    * IO), project (whole-project replace), page (navigation, preview, adding
    * pages), panels (page layout), layers, bubbles, metadata (story bible),
    * characters, scenes, objects, media. Reads return deep-cloned snapshots.
@@ -213,15 +213,15 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     help: (): string => HELP_TEXT,
 
     /**
-     * Project storage: either Google Drive or a self-hosted HTTP server (see
-     * http-storage/), picked once per session on the connect screen. Whichever
-     * is active, the app only sees folders and files it created there;
-     * listProjects() is the complete list.
+     * Project storage: either Google Drive or an S3-compatible bucket (any
+     * self-hosted server, or real AWS S3/R2/B2), picked once per session on
+     * the connect screen. Whichever is active, the app only sees folders and
+     * files it created there; listProjects() is the complete list.
      */
     storage: {
       /**
        * Connect Google Drive via the OAuth device flow, as an additional
-       * connection (it does not replace Drive or any server already
+       * connection (it does not replace Drive or any bucket already
        * connected). Resolves promptly with { url, code, expiresInSeconds }:
        * show the user the URL and code (they open the URL on any device, a
        * phone works, enter the code, and approve). Then poll
@@ -239,16 +239,20 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       connectWithDevice: (): Promise<DeviceCodeInfo> => deps.connectStorageWithDevice(),
 
       /**
-       * Connect a self-hosted HTTP storage server at this base URL (see
-       * http-storage/), as an additional connection alongside any others
-       * already connected (Drive, or other servers). The server has no
-       * login: this just checks it answers GET /health, then adds it. Its
-       * URL is remembered and reconnected automatically on the next page
-       * load (no secret is involved, unlike Drive).
-       * @param url - The server's base URL, e.g. "http://localhost:8081".
+       * Connect an S3-compatible bucket (any self-hosted server, or real
+       * AWS S3/R2/B2) as an additional connection alongside any others already
+       * connected (Drive, or other buckets). This just checks the bucket is
+       * reachable with these credentials (HeadBucket), then adds it. In the
+       * browser, the whole connection string (credentials included) is
+       * remembered, so it reconnects automatically next page load — this
+       * only needs calling once per bucket. The command line instead reads
+       * credentials fresh from the environment on every run; only the
+       * endpoint and bucket are remembered in its state file.
+       * @param connectionString - `s3://accessKeyId[:secretAccessKey]@host[:port]/bucket[?region=...&tls=1&pathStyle=0]`.
        * @returns A promise that resolves once connected.
        */
-      connectWithServer: (url: string): Promise<void> => deps.connectStorageWithServer(url),
+      connectWithS3: (connectionString: string): Promise<void> =>
+        deps.connectStorageWithS3(connectionString),
 
       /**
        * Disconnect every connection: save any unsaved changes, then drop
@@ -260,8 +264,9 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * List every known connection: Google Drive when connected this
-       * session, and every HTTP storage server (connected now, or remembered
-       * from a previous session but not yet reconnected).
+       * session, and every S3-compatible bucket (connected now, including
+       * ones auto-reconnected from a previous session, or still "offline"
+       * when that auto-reconnect failed, e.g. the server is unreachable).
        * @returns A promise resolving to [{ id, kind, label, connected }].
        */
       listConnections: async (): Promise<StorageConnectionInfo[]> =>
@@ -271,7 +276,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * Disconnect one connection by id (from storage.listConnections()). If
        * it is currently backing the open project, unsaved changes are saved
        * first and the project is closed. Removes a remembered-but-not-yet-
-       * reconnected server the same way.
+       * reconnected bucket the same way.
        * @param id - A connection id from storage.listConnections().
        * @returns A promise that resolves once it is disconnected.
        */
@@ -281,7 +286,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
       /**
        * Report the storage connection state.
-       * @returns { connected, configured }: connected means at least one connection is live; configured means Drive's device OAuth client is set (irrelevant once a server is connected).
+       * @returns { connected, configured }: connected means at least one connection is live; configured means Drive's device OAuth client is set (irrelevant once a bucket is connected).
        */
       status: (): { connected: boolean; configured: boolean } => deps.getStorageStatus(),
 
@@ -290,8 +295,8 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * (on Drive: files.list under the drive.file scope, so the app is
        * blind to everything else on the user's Drive), sorted by name. When
        * a project of the same name exists in more than one connection, only
-       * one is listed (a self-hosted server's copy is preferred over
-       * Drive's) — each entry's connectionId/connectionLabel says where it
+       * one is listed (an S3 bucket's copy is preferred over Drive's) —
+       * each entry's connectionId/connectionLabel says where it
        * came from.
        * @returns A promise resolving to [{ id, name, connectionId, connectionLabel }] of project folders.
        */
@@ -1373,7 +1378,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
 
     /**
      * The project's media registry: image files in the project's storage
-     * folder (Drive, or a self-hosted server). Layers (via mediaId) and
+     * folder (Drive, or an S3-compatible bucket). Layers (via mediaId) and
      * characters/scenes/objects (via imageIds) refer to these entries instead
      * of raw URLs.
      */

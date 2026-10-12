@@ -17,7 +17,7 @@ export default function NewProjectModal({
   onClose: () => void;
 }) {
   const live = connections.filter((c) => c.connected);
-  const defaultConnectionId = live.find((c) => c.kind === 'server')?.id ?? live[0]?.id ?? '';
+  const defaultConnectionId = live.find((c) => c.kind === 's3')?.id ?? live[0]?.id ?? '';
   const [name, setName] = useState('');
   const [sizeIndex, setSizeIndex] = useState(0);
   const [connectionId, setConnectionId] = useState(defaultConnectionId);

@@ -5,10 +5,10 @@ import type { DeviceCodeInfo } from '../drive/driveClient';
 import { getBackupStatus, setBackupStatus, subscribeBackupStatus } from '../storage/backupStatus';
 import { errorMessage } from '../utils/errors';
 import BackupStatusModal from './BackupStatusModal';
-import { ConnectDriveModal, ConnectServerModal } from './ConnectModals';
+import { ConnectDriveModal, ConnectS3Modal } from './ConnectModals';
 import { CloudUploadIcon, FloppyDiskIcon } from './Icons';
 
-type Kind = 'drive' | 'server';
+type Kind = 'drive' | 's3';
 
 interface Props {
   /** The open project's own storage connection; there is nothing to back up to without one. */
@@ -31,12 +31,12 @@ export interface Backup {
 
 /** The other kind of storage from the one backing the open project right now. */
 function otherKind(backendKind: Kind): Kind {
-  return backendKind === 'drive' ? 'server' : 'drive';
+  return backendKind === 'drive' ? 's3' : 'drive';
 }
 
 /**
- * Backs up the open project to the *other* kind of storage: Drive when the project lives on an HTTP
- * storage server, or a server when it lives on Drive. One-way, manual only. If that other storage is
+ * Backs up the open project to the *other* kind of storage: Drive when the project lives on an S3
+ * bucket, or an S3 bucket when it lives on Drive. One-way, manual only. If that other storage is
  * not connected yet, selecting it shows the same connect dialog Settings uses, then backs up as soon
  * as that connection is live.
  *
@@ -54,7 +54,7 @@ export function useBackup({ backendKind, deviceCode, disabled }: Props): Backup 
   const target = backendKind ? otherKind(backendKind) : null;
   const status = useSyncExternalStore(subscribeBackupStatus, getBackupStatus);
   const [showDriveModal, setShowDriveModal] = useState(false);
-  const [showServerModal, setShowServerModal] = useState(false);
+  const [showS3Modal, setShowS3Modal] = useState(false);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [connectingDrive, setConnectingDrive] = useState(false);
   const [error, setError] = useState('');
@@ -78,7 +78,7 @@ export function useBackup({ backendKind, deviceCode, disabled }: Props): Backup 
       const live = connections.find((c) => c.kind === kind && c.connected);
       if (!live) {
         setError(
-          `Could not back up: ${kind === 'drive' ? 'Google Drive' : 'the storage server'} is not connected.`
+          `Could not back up: ${kind === 'drive' ? 'Google Drive' : 'the S3 bucket'} is not connected.`
         );
         return;
       }
@@ -108,14 +108,14 @@ export function useBackup({ backendKind, deviceCode, disabled }: Props): Backup 
           setShowDriveModal(false);
         });
     } else {
-      setShowServerModal(true);
+      setShowS3Modal(true);
     }
   }
 
-  async function connectServer(url: string) {
-    await cb().storage.connectWithServer(url);
-    setShowServerModal(false);
-    void runBackup('server');
+  async function connectS3(connectionString: string) {
+    await cb().storage.connectWithS3(connectionString);
+    setShowS3Modal(false);
+    void runBackup('s3');
   }
 
   function closeStatusModal() {
@@ -143,7 +143,7 @@ export function useBackup({ backendKind, deviceCode, disabled }: Props): Backup 
           ? 'Backup failed — click for details'
           : target === 'drive'
             ? 'Back up to Google Drive'
-            : 'Back up to HTTP storage';
+            : 'Back up to S3 bucket';
 
   return {
     label,
@@ -174,8 +174,8 @@ export function useBackup({ backendKind, deviceCode, disabled }: Props): Backup 
             }}
           />
         )}
-        {showServerModal && (
-          <ConnectServerModal onConnect={connectServer} onClose={() => setShowServerModal(false)} />
+        {showS3Modal && (
+          <ConnectS3Modal onConnect={connectS3} onClose={() => setShowS3Modal(false)} />
         )}
         {showStatusModal && status && (
           <BackupStatusModal status={status} onClose={closeStatusModal} onRunAgain={runAgain} />
