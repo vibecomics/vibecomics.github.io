@@ -5,7 +5,7 @@
  * Google client values are baked in from the dotenv files, like the web build
  * (the device client's secret ships by design; see src/drive/deviceOAuth.ts).
  *
- * Run after scripts/extract-docs.mjs, which generates the command table.
+ * Run after scripts/build/extract-docs.mjs, which generates the command table.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { googleDefines } from './read-env.mjs';
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT = path.join(ROOT, 'public', 'vibecomics.mjs');
 const esbuild = createRequire(path.join(ROOT, 'package.json'))('esbuild');
 

@@ -4,10 +4,10 @@
  * Every UI control calls these same functions, so a human's clicks and an AI
  * agent's calls share one code path. The JSDoc on every node of the
  * `ComicBuilder` literal below is the single source of truth for the docs:
- * scripts/extract-docs.mjs turns it into src/ai/actions.docs.gen.ts (attached
+ * scripts/build/extract-docs.mjs turns it into src/ai/actions.docs.gen.ts (attached
  * as each node's toString() and rendered by ComicBuilder.help()) and
  * public/api.txt (the static API reference; public/llms.txt is the separate
- * how-to-build-a-comic guide, scripts/llms-guide.md).
+ * how-to-build-a-comic guide, scripts/build/llms-guide.md).
  */
 
 import type { DeviceCodeInfo } from '../drive/deviceOAuth';

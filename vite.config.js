@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react';
-import { googleDefines } from './scripts/read-env.mjs';
+import { googleDefines } from './scripts/build/read-env.mjs';
 
 export default () => {
   return {

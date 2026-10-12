@@ -138,5 +138,5 @@ That prints the API reference: every action is documented via JSDoc-derived
 `.toString()` docs on the runtime API. A static copy is generated to
 `public/api.txt` and deployed with the site, next to `public/llms.txt`, the
 step-by-step guide an agent follows to build a comic (workflow, visual style,
-image formats, continuity), which is written by hand in `scripts/llms-guide.md`. The engineering design — architecture, data model,
+image formats, continuity), which is written by hand in `scripts/build/llms-guide.md`. The engineering design — architecture, data model,
 Drive scope, autosave, service worker, build pipeline — is in `spec.md`.

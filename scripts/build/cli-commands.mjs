@@ -1,8 +1,8 @@
 /**
  * Builds the CLI's command table (src/cli/commands.gen.ts): for every callable
  * node of the ComicBuilder API, its docs and how each parameter is typed on the
- * command line. The JSDoc (collected by scripts/extract-docs.mjs) supplies the
- * descriptions and the parameter names and text; scripts/cli-inputs.mjs says
+ * command line. The JSDoc (collected by scripts/build/extract-docs.mjs) supplies the
+ * descriptions and the parameter names and text; scripts/build/cli-inputs.mjs says
  * what kind of value each parameter is. The build fails when the two disagree
  * about a function's parameters, so the CLI cannot drift from the API.
  */
@@ -41,12 +41,13 @@ function checkInputs(functionPaths, details, prefix) {
     if (documented.join() !== spec.join()) {
       problems.push(
         `${short}: JSDoc parameters (${documented.join(', ') || 'none'}) differ from ` +
-          `scripts/cli-inputs.mjs (${spec.join(', ') || 'none'})`
+          `scripts/build/cli-inputs.mjs (${spec.join(', ') || 'none'})`
       );
     }
   }
   for (const short of Object.keys(INPUTS)) {
-    if (!known.has(short)) problems.push(`${short}: in scripts/cli-inputs.mjs but not in the API`);
+    if (!known.has(short))
+      problems.push(`${short}: in scripts/build/cli-inputs.mjs but not in the API`);
   }
   const checkKinds = (where, fields) => {
     for (const [name, field] of Object.entries(fields)) {

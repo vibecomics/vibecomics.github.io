@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const esbuild = createRequire(path.join(ROOT, 'package.json'))('esbuild');
 
 function findTests(dir) {
@@ -32,7 +32,7 @@ try {
     outExtension: { '.js': '.mjs' },
     logLevel: 'warning',
     // @aws-sdk/client-s3's dependencies require() Node built-ins deep inside functions, which
-    // esbuild can't hoist into static ESM imports; see scripts/build-cli.mjs for the full story.
+    // esbuild can't hoist into static ESM imports; see scripts/build/build-cli.mjs for the full story.
     banner: {
       js: "import { createRequire as __vcCreateRequire } from 'node:module';\nconst require = __vcCreateRequire(import.meta.url);",
     },

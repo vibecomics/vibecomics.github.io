@@ -1,6 +1,6 @@
 /**
  * How each parameter of every ComicBuilder function is typed on the command
- * line, used by scripts/cli-commands.mjs to generate src/cli/commands.gen.ts.
+ * line, used by scripts/build/cli-commands.mjs to generate src/cli/commands.gen.ts.
  * The JSDoc in src/ai/actions.ts supplies each function's description and the
  * name and text of each parameter; this file adds what the JSDoc does not say:
  * how to enter it. Keyed by dotted path without the `ComicBuilder.` prefix.

@@ -6,7 +6,7 @@ declare const self: ServiceWorkerGlobalScope;
 // navigation checks buildinfo.js in the background, and when its commit differs
 // from the cached one every file is re-fetched and clients are told an update
 // is ready. The file list comes from buildinfo.js (written by
-// scripts/build-meta.mjs), so hashed Vite asset names never go stale.
+// scripts/build/build-meta.mjs), so hashed Vite asset names never go stale.
 
 // One cache per registration scope: every GitHub Pages project of a user shares
 // one origin, so a fixed name (and deleting other caches) would clash with them.

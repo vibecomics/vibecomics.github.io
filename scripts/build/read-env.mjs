@@ -2,7 +2,7 @@
  * The Google client config, read only from the dotenv files (.env, then
  * .env.local which wins). Shell / process environment variables are
  * deliberately ignored. Shared by vite.config.js (the web build) and
- * scripts/build-cli.mjs (the CLI bundle), so both bake in the same values.
+ * scripts/build/build-cli.mjs (the CLI bundle), so both bake in the same values.
  */
 import dotenv from 'dotenv';
 import { existsSync, readFileSync } from 'node:fs';

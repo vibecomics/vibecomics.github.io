@@ -339,7 +339,7 @@ Semantics:
 
 ## 5. Runtime docs generation (the LLM skill)
 
-`scripts/extract-docs.mjs` (run by both `npm run dev` and `npm run build`)
+`scripts/build/extract-docs.mjs` (run by both `npm run dev` and `npm run build`)
 parses `src/ai/actions.ts` with the TypeScript compiler API, extracting the
 JSDoc above the `ComicBuilder` literal and every namespace and method (object
 properties, shorthand properties and methods are all handled; `@returns` text
@@ -351,15 +351,15 @@ that starts with `{ … }` is kept verbatim). It emits four artifacts:
    namespace/function with description, parameters and return value) plus the
    data model: the **API reference**. It is **deployed with the site**, next to
    `index.html`.
-3. `public/llms.txt` — `scripts/llms-guide.md`, printed verbatim: the
+3. `public/llms.txt` — `scripts/build/llms-guide.md`, printed verbatim: the
    **how-to-build-a-comic guide**. It deliberately contains no function
    names, signatures or code; it points to `api.txt` for those (the JSDoc,
    including its layout examples, is where API usage lives) and tells the
    agent to drive the app with the CLI (section 13), not a browser.
 4. `src/cli/commands.gen.ts` — the CLI's command table (section 13): the same
-   JSDoc plus `scripts/cli-inputs.mjs`, which says what kind of value each
+   JSDoc plus `scripts/build/cli-inputs.mjs`, which says what kind of value each
    parameter is (text, number, choice, JSON, file, or an object given as one
-   flag per field). `scripts/cli-commands.mjs` builds it and **fails the build**
+   flag per field). `scripts/build/cli-commands.mjs` builds it and **fails the build**
    if `cli-inputs.mjs` and the JSDoc disagree about any function's parameters
    (gitignored; generated before `tsc`).
 
@@ -410,8 +410,8 @@ they cannot drift from the code.
 - **Client IDs:** `GOOGLE_DEVICE_CLIENT_ID` + `GOOGLE_DEVICE_CLIENT_SECRET`
   ("TVs and Limited Input devices", device flow) at build time — the only
   Google client the app needs. Read only from the dotenv files (`.env`,
-  `.env.local`) by `scripts/read-env.mjs` (used by `vite.config.js` and
-  `scripts/build-cli.mjs`); shell env vars are ignored. CI writes
+  `.env.local`) by `scripts/build/read-env.mjs` (used by `vite.config.js` and
+  `scripts/build/build-cli.mjs`); shell env vars are ignored. CI writes
   `.env.local` from the repo secrets of the same names before building. The
   secret ships in the bundle by design: Google's device-client model
   assumes distributed apps cannot keep secrets (the same model rclone
@@ -554,7 +554,7 @@ mutation marks the project dirty (`markDirty`, called from `updateProject` and
 
 Pattern: cache-first with commit-based update detection.
 
-- `src/sw.ts` is bundled to `dist/sw.js` by `scripts/build-meta.mjs`
+- `src/sw.ts` is bundled to `dist/sw.js` by `scripts/build/build-meta.mjs`
   (esbuild, minified IIFE) after `vite build`.
 - `build-meta.mjs` also writes `dist/buildinfo.js` as
   `self.BUILD_INFO = { commit, builtAt, files }`, where `commit` is the
@@ -578,18 +578,18 @@ Pattern: cache-first with commit-based update detection.
 `npm run build`:
 
 ```
-node scripts/extract-docs.mjs   # actions.ts -> actions.docs.gen.ts + public/api.txt + src/cli/commands.gen.ts; guide -> public/llms.txt
-node scripts/build-cli.mjs      # src/cli/bin.ts -> public/vibecomics.mjs (esbuild, Node 20)
+node scripts/build/extract-docs.mjs   # actions.ts -> actions.docs.gen.ts + public/api.txt + src/cli/commands.gen.ts; guide -> public/llms.txt
+node scripts/build/build-cli.mjs      # src/cli/bin.ts -> public/vibecomics.mjs (esbuild, Node 20)
 tsc -b                          # TypeScript (project references)
 vite build                      # -> dist/
-node scripts/build-meta.mjs     # bundle src/sw.ts -> dist/sw.js; write dist/buildinfo.js
+node scripts/build/build-meta.mjs     # bundle src/sw.ts -> dist/sw.js; write dist/buildinfo.js
 ```
 
 `npm run dev` runs the extractor and the CLI bundle first for the same reason
 (vite then serves `public/vibecomics.mjs`). `npm run cli -- <args>` rebuilds and
 runs the CLI. Other scripts:
 `npm run lint` (oxlint) and `npm test` (runs the extractor, then
-`scripts/run-tests.mjs`, which bundles every `src/**/*.test.ts` with esbuild and
+`scripts/build/run-tests.mjs`, which bundles every `src/**/*.test.ts` with esbuild and
 runs it with Node's built-in test runner; the tests cover the pure code: panel
 layout geometry, and project validation and normalization,
 plus the CLI end to end against an in-memory fake of Google's OAuth and Drive

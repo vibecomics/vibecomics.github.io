@@ -1,4 +1,4 @@
-/** How a parameter is typed on the command line (see scripts/cli-inputs.mjs). */
+/** How a parameter is typed on the command line (see scripts/build/cli-inputs.mjs). */
 export type ParamKind =
   'string' | 'multiline' | 'number' | 'stringOrNumber' | 'enum' | 'json' | 'file' | 'object';
 
