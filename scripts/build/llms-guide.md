@@ -565,19 +565,22 @@ Two stitching rules that apply to every recipe:
 
 Generate in this order. Do not skip ahead.
 
-**Phase 0 — check a generator exists.** Before generating anything,
-check whether an image generator is configured for the CLI (search the
-API documentation for the generation-configuration functions, and test
-the connection if it provides a test). Three outcomes:
+**Phase 0 — check the image service.** Before generating anything, read
+the image service configuration (`generate.config()`). It holds a `url`,
+a `prompt`, or both. Outcomes:
 
-- A generator is configured and reachable: proceed, and let it do the
-  stitching (section 9).
-- None is configured: **stop and tell the human.** Either they configure
-  one (the configuration lives with the CLI, and the documentation for
-  it is in api.txt), or they agree that you will generate with a tool of
-  your own and register the results. Do not discover this at the first
-  failed generation — "no generator configured" is a setup problem, not
-  a generation failure, and it will reject every generation call alike.
+- A `url` is set: the project calls it for you. Test it (`generate.test()`)
+  and proceed, letting it do the stitching (section 9).
+- Only a `prompt` is set: it tells you where and how to generate images
+  yourself (a URL to call, a tool to use). Follow it, using prompts from
+  `generate.inspect` (its result repeats the instructions as
+  `imageServicePrompt`), and register the results.
+- Nothing is configured (`generate.config()` returns null): **stop and ask
+  the human what the image service is** — a URL the project can POST to,
+  or instructions for how you should generate images. Save their answer
+  with `generate.config({ provider: "service", url?, prompt? })`. Do not
+  discover this at the first failed generation: "no image service" is a
+  setup problem, and it will reject every generation call alike.
 - You are generating externally by agreement: follow the standing rule
   directly below — every prompt is fetched from the API, assembled by
   the project, never stitched by hand.

@@ -1,5 +1,6 @@
 import type { GenerationStatus } from '../ai/generation';
 import IconButton from './IconButton';
+import { hasServiceUrl } from '../generators/types';
 import { useGeneratorConfig, useGeneratorConfigProblem } from './useGeneratorConfig';
 
 interface Props {
@@ -17,7 +18,7 @@ interface Props {
  * every item's own button reflect its place in the queue, not just the one currently executing, and
  * doubles as a cancel button while active. */
 export default function GenerateIconButton({ status, title, all, onClick, onCancel }: Props) {
-  const configured = Boolean(useGeneratorConfig());
+  const configured = hasServiceUrl(useGeneratorConfig());
   const configProblem = useGeneratorConfigProblem();
   const active = status === 'running' || status === 'queued';
   const blockedReason = configured

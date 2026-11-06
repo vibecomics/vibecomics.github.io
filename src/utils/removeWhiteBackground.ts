@@ -10,7 +10,7 @@
  * that, pixels near the flood-filled region get a soft alpha instead (FEATHER_THRESHOLD) and are
  * "decontaminated" — the white contribution is unmixed out of their RGB — rather than left as-is.
  *
- * Some providers (e.g. a ComfyUI workflow with a background-removal node wired in) already return
+ * Some providers (e.g. an image service with a background-removal step) already return
  * a real cutout. Re-running this heuristic on top of that would be redundant at best and, since it
  * reads RGB rather than trusting existing alpha, could clip a legitimate near-white detail that
  * touches the image border. So an image that already has a meaningful share of non-opaque pixels

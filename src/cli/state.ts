@@ -46,7 +46,7 @@ export interface CliState {
   project?: { id: string; name: string; connectionId?: string };
   /** The current page of the open project (0-based). */
   pageIndex?: number;
-  /** The image generator config (see ComicBuilder.generate). ComfyUI has no login, so it's plain. */
+  /** The image generator config (see ComicBuilder.generate). The service url/prompt are stored plain. */
   generator?: GeneratorConfig;
 }
 

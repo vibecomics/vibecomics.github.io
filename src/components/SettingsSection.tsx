@@ -10,15 +10,13 @@ function GeneratorSettingsCard() {
   const [editing, setEditing] = useState(false);
   const config = useGeneratorConfig();
   const problem = useGeneratorConfigProblem();
-  const summary = config
-    ? `${config.comfy.baseUrl}${config.comfy.workflowName ? ` · ${config.comfy.workflowName}` : ''}`
-    : (problem ?? 'Not set up');
+  const summary = config ? (config.url ?? 'Agent instructions only') : (problem ?? 'Not set up');
 
   return (
     <div className="col-12 col-sm-6 col-md-4">
       <div className="card h-100 shadow-sm">
         <div className="card-body d-flex flex-column">
-          <h3 className="card-title h6">Image generator</h3>
+          <h3 className="card-title h6">Image service</h3>
           <p className={`small text-truncate${config ? '' : ' text-muted'}`} title={summary}>
             {summary}
           </p>

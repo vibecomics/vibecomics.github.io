@@ -1194,14 +1194,14 @@ test('variations: default seeding, CRUD, layer pinning, and generate() through t
   // Actually generating needs a configured image generator, same as every other generate.* call.
   const noGenerator = await run('generate', 'run', target);
   assert.equal(noGenerator.code, 1);
-  assert.match(noGenerator.err, /No image generator is configured/);
+  assert.match(noGenerator.err, /No image service is configured/);
 
   // allVariations, like generate.dirty, never fails the whole call: a failure on one variation
   // (here, all of them, for lack of a configured generator) is reported per item instead.
   const outcomes = (await run('generate', 'batch', `reference:characters/${mira.id}/*`)).json();
   assert.equal(outcomes.length, 3);
   assert.ok(outcomes.every((o: { ok: boolean }) => o.ok === false));
-  assert.match(outcomes[0].error, /No image generator is configured/);
+  assert.match(outcomes[0].error, /No image service is configured/);
 });
 
 test('panel images: a brief for the LLM, saving the image, and going out of date', async () => {

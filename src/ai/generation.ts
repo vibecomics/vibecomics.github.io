@@ -12,7 +12,8 @@
  * The dirty-batch path is the exception: it has no one to show a preview to, so it commits each result
  * itself as it goes.
  */
-import { createProvider, GenerationCancelledError } from '../generators/types';
+import { createProvider } from '../generators/service';
+import { GenerationCancelledError, hasServiceUrl } from '../generators/types';
 import type { ImageProvider } from '../generators/types';
 import { artPixels } from '../state/layout';
 import type { ComicProject, Layer, MediaItem, StoryEntry, Variation } from '../types/comic';
@@ -118,7 +119,7 @@ const abortControllers = new Map<string, AbortController>();
 let requestCount = 0;
 
 /** Cancels one request (a queue item's id), if it's still outstanding. A queued one is skipped when
- * its turn comes; a running one has its network request aborted (see comfy.ts). */
+ * its turn comes; a running one has its network request aborted (see generators/service.ts). */
 function cancelRequest(id: string): boolean {
   const controller = abortControllers.get(id);
   if (!controller) return false;
@@ -252,7 +253,8 @@ function enqueue<T>(
 
 function requireProvider(deps: ComicBuilderDeps): ImageProvider {
   const config = deps.getGeneratorConfig();
-  if (!config) throw new Error('No image generator is configured. Set one up first.');
+  if (!config)
+    throw new Error('No image service is configured. Set one up first (generate.config).');
   return createProvider(config, deps.generatorFetch);
 }
 
@@ -323,6 +325,7 @@ async function runLayerGeneration(
   // currently happens to have — the layer's aspect ratio is set from the actual result instead.
   const size = layer.kind === 'background' ? layerArtSize(project, panelId, layerId) : null;
   const rawDataUrl = await provider.generate({
+    kind: layer.kind === 'background' ? 'background' : 'foreground',
     prompt,
     referenceImages,
     width: size?.pixels.width,
@@ -382,6 +385,7 @@ async function runReferenceGeneration(
   const finalPrompt = appendReferenceNotes(prompt, used);
   const referenceImages = await downloadReferences(deps, used);
   const rawDataUrl = await provider.generate({
+    kind: kind === 'scenes' ? 'scene' : kind === 'objects' ? 'object' : 'character',
     prompt: finalPrompt,
     referenceImages,
     ...(kind === 'scenes' && {
@@ -621,7 +625,9 @@ export function defaultEntryReferences(
 /** How many reference images the configured generator uses (0 when none is configured). */
 export function maxReferenceImages(deps: ComicBuilderDeps): number {
   const config = deps.getGeneratorConfig();
-  return config ? createProvider(config, deps.generatorFetch).maxReferenceImages : 0;
+  return hasServiceUrl(config)
+    ? createProvider(config!, deps.generatorFetch).maxReferenceImages
+    : 0;
 }
 
 function describeLayer(deps: ComicBuilderDeps, panelId: string, layerId: string): string {

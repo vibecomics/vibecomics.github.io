@@ -435,8 +435,8 @@ export const INPUTS = {
     config: {
       type: 'json',
       optional: true,
-      example: '@comfy-config.json',
-      help: 'The generator config, usually kept in a file: { "provider": "comfy", "comfy": { "baseUrl": "http://localhost:8188", "workflow": { ... }, "nodes": { "positivePromptNodeId": "6", "outputNodeId": "9" } } }. Leave out to read the current one.',
+      example: '@image-service.json',
+      help: 'The image service: { "provider": "service", "url": "http://localhost:8188/vibecomic/generate", "prompt": "optional instructions for an agent" } (url, prompt or both). Leave out to read the current one.',
     },
   },
   'generate.test': {},

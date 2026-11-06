@@ -13,7 +13,8 @@
 import type { DeviceCodeInfo } from '../drive/deviceOAuth';
 import type { StorageConnectionInfo } from '../storage/connections';
 import type { ProjectFolder } from '../storage/types';
-import { assertValidGeneratorConfig, createProvider } from '../generators/types';
+import { createProvider } from '../generators/service';
+import { assertValidGeneratorConfig, hasServiceUrl } from '../generators/types';
 import type { GeneratorConfig } from '../generators/types';
 import { createPanel, defaultPointer } from '../state/layout';
 import { lintProject } from '../state/lint';
@@ -116,6 +117,8 @@ export interface PromptInspection {
   parts: PromptPart[];
   references: GenerationReference[];
   maxReferenceImages: number;
+  /** The image service prompt (see generate.config), when one is set. */
+  imageServicePrompt?: string;
 }
 
 declare global {
@@ -255,12 +258,15 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     const t = parseTarget(target);
     const project = requireProject(deps);
     const max = maxReferenceImages(deps);
+    const servicePrompt = deps.getGeneratorConfig()?.prompt?.trim();
+    const extra = servicePrompt ? { imageServicePrompt: servicePrompt } : {};
     if (t.type === 'layer') {
       return {
         prompt: buildLayerPrompt(project, t.panelId, t.layerId),
         parts: buildLayerPromptParts(project, t.panelId, t.layerId),
         references: defaultLayerReferences(deps, t.panelId, t.layerId),
         maxReferenceImages: max,
+        ...extra,
       };
     }
     if (t.type === 'reference') {
@@ -269,6 +275,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         parts: buildReferencePromptParts(project, t.kind, t.entryId, t.variationId),
         references: defaultEntryReferences(deps, t.kind, t.entryId, t.variationId),
         maxReferenceImages: max,
+        ...extra,
       };
     }
     if (t.type === 'panel') return panelBrief(deps, t.panelId, includeImages);
@@ -1349,8 +1356,8 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
     },
 
     /**
-     * Generate art with the configured image generator (a self-hosted ComfyUI
-     * instance; see config): stitches a layer's prompt the same way the
+     * Generate art with the configured image service (an HTTP URL the app
+     * POSTs to, or an agent-run service described by its prompt; see config): stitches a layer's prompt the same way the
      * layers namespace describes and pulls in its linked character's or
      * scene's reference images. Everything is aimed at a TARGET, one string:
      *
@@ -1528,7 +1535,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * instructions (how to use all this and how to save the result).
        * @param target - A layer, reference or panel target (see the generate namespace).
        * @param includeImages - Panel targets only: whether to fetch the reference images and include them (the default, true). Pass false for the same brief without the images.
-       * @returns For a layer or reference: { prompt, parts: [{ label, text }] in stitching order, references: [{ mediaId, note? }] in the order they're sent, maxReferenceImages } (maxReferenceImages is how many the configured generator uses, 0 if none is configured). For a panel: the panel brief. Throws when the target is not found.
+       * @returns For a layer or reference: { prompt, parts: [{ label, text }] in stitching order, references: [{ mediaId, note? }] in the order they're sent, maxReferenceImages, imageServicePrompt? } (maxReferenceImages is how many the configured image service uses, 0 if it has no url; imageServicePrompt is the image service instructions, when set). For a panel: the panel brief. Throws when the target is not found.
        */
       inspect: inspect,
 
@@ -1576,23 +1583,27 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       },
 
       /**
-       * Read or set the image generator configuration. Per-machine, not part of the project. Currently
-       * a self-hosted ComfyUI instance (provider: "comfy"): its base URL, a workflow exported from it in
-       * "API format", and which node ids hold the positive prompt, reference image(s), output and,
-       * optionally, size, seed, and a second ("transparent") output fed by a background-removal node,
-       * used for character/object layers.
-       * @param config - Optional { provider: "comfy", comfy: { baseUrl, workflow, nodes: { positivePromptNodeId, outputNodeId, transparentOutputNodeId?, referenceImageNodeIds?, sizeNodeId?, seedNodeId?, seedField? } } } to set. Omit to read the current one.
+       * Read or set the image service configuration. Per-machine, not part of the project. Holds a
+       * url, a prompt, or both. The url is an endpoint the app POSTs generation requests to (JSON
+       * { kind, prompt, referenceImages, width?, height?, transparent? }; it answers with the image),
+       * used by the web UI and this CLI. The prompt is free text telling an LLM agent where and how
+       * to generate images itself (a URL to call, a tool to use). With a url, generate.run does the
+       * work; with only a prompt, generate.run fails and repeats the prompt so the agent can generate
+       * the image itself and upload it. If no service is configured, ask the human what it is.
+       * @param config - Optional { provider: "service", url?, prompt? } (at least one of url or prompt) to set. Omit to read the current one.
        * @returns With no config: the current config, or null when none is set. With one: { ok, error? }.
        */
       config: configure,
 
       /**
-       * Check that the configured image generator is reachable.
+       * Check that the configured image service url is reachable.
        * @returns A promise resolving to { ok, error? }.
        */
       test: async (): Promise<ActionResult> => {
         const config = deps.getGeneratorConfig();
-        if (!config) return { ok: false, error: 'No image generator is configured.' };
+        if (!config) return { ok: false, error: 'No image service is configured.' };
+        if (!hasServiceUrl(config))
+          return { ok: false, error: 'The image service has no url to test (prompt only).' };
         try {
           await createProvider(config, deps.generatorFetch).test();
           return { ok: true };

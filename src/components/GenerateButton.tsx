@@ -1,6 +1,7 @@
 import type { GenerationStatus } from '../ai/generation';
 import { SparklesIcon } from './Icons';
 import Spinner from './Spinner';
+import { hasServiceUrl } from '../generators/types';
 import { useGeneratorConfig, useGeneratorConfigProblem } from './useGeneratorConfig';
 
 interface Props {
@@ -21,7 +22,7 @@ interface Props {
  * `blockedReason` is given — alongside a red × button to cancel that queued/running generation, when
  * `onCancel` is given. */
 export default function GenerateButton({ status, blockedReason, title, onClick, onCancel }: Props) {
-  const configured = Boolean(useGeneratorConfig());
+  const configured = hasServiceUrl(useGeneratorConfig());
   const configProblem = useGeneratorConfigProblem();
   const active = status === 'running' || status === 'queued';
   const reason =
