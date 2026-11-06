@@ -408,15 +408,23 @@ export function artSize(widthIn: number, heightIn: number) {
   };
 }
 
+/** The size a panel's own image should be generated at: its full physical size on the page (same
+ * size a background layer fills — see layerArtSize). */
+export function panelArtSize(project: ComicProject, panelId: string) {
+  const panel = findPanel(project, panelId);
+  if (!panel) return null;
+  const { widthIn, heightIn } = project.metadata.pageSize;
+  return artSize((widthIn * panel.width) / 100, (heightIn * panel.height) / 100);
+}
+
 /** The size a layer's art should be generated at (see layers.get). */
 export function layerArtSize(project: ComicProject, panelId: string, layerId: string) {
   const panel = findPanel(project, panelId);
   const layer = panel?.layers.find((l) => l.id === layerId);
   if (!panel || !layer) return null;
-  const { widthIn, heightIn } = project.metadata.pageSize;
-  const panelWidth = (widthIn * panel.width) / 100;
-  if (layer.kind === 'background') return artSize(panelWidth, (heightIn * panel.height) / 100);
-  const width = (panelWidth * layer.width) / 100;
+  if (layer.kind === 'background') return panelArtSize(project, panelId);
+  const { widthIn } = project.metadata.pageSize;
+  const width = ((widthIn * panel.width) / 100) * (layer.width / 100);
   return artSize(width, width / (layer.aspectRatio ?? 1));
 }
 

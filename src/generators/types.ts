@@ -10,7 +10,8 @@ export type GenerationKind =
   | 'foreground' // a transparent layer cutout
   | 'character' // character reference art
   | 'object' // prop/object reference art
-  | 'scene'; // scene (location) reference art
+  | 'scene' // scene (location) reference art
+  | 'panel'; // one cohesive image of a whole panel (background, layers and lighting together)
 
 export interface GenerationRequest {
   kind: GenerationKind;

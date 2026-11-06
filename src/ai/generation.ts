@@ -24,10 +24,12 @@ import {
   dirtyVariationRefs,
   findPanel,
   layerArtSize,
+  panelArtSize,
   requireProject,
 } from './builders';
 import type { LayerKind, LayerRef, StoryKind, VariationRef } from './builders';
 import type { ComicBuilderDeps } from './deps';
+import { buildPanelImagePrompt, defaultPanelReferences } from './panelBrief';
 import {
   allEntryImageIds,
   appendReferenceNotes,
@@ -69,6 +71,7 @@ export type GenerationStatus = 'queued' | 'running' | undefined;
 const requestsByKey = new Map<string, Map<string, 'queued' | 'running'>>();
 const generatingListeners = new Set<() => void>();
 const layerKey = (panelId: string, layerId: string) => `layer:${panelId}:${layerId}`;
+const panelKey = (panelId: string) => `panel:${panelId}`;
 const referenceKey = (kind: ReferenceKind, id: string) => `ref:${kind}:${id}`;
 const variationKey = (kind: ReferenceKind, id: string, variationId: string) =>
   `ref:${kind}:${id}:${variationId}`;
@@ -81,6 +84,10 @@ function statusOf(key: string): GenerationStatus {
 
 export function layerGenerationStatus(panelId: string, layerId: string): GenerationStatus {
   return statusOf(layerKey(panelId, layerId));
+}
+
+export function panelGenerationStatus(panelId: string): GenerationStatus {
+  return statusOf(panelKey(panelId));
 }
 
 export function referenceGenerationStatus(kind: ReferenceKind, id: string): GenerationStatus {
@@ -139,6 +146,11 @@ export function cancelLayerGeneration(panelId: string, layerId: string): boolean
   return cancelKey(layerKey(panelId, layerId));
 }
 
+/** Cancels a panel's outstanding panel-image generation requests, if any. */
+export function cancelPanelGeneration(panelId: string): boolean {
+  return cancelKey(panelKey(panelId));
+}
+
 /** Cancels a reference entry's outstanding reference-image generation requests, if any. */
 export function cancelReferenceGeneration(kind: ReferenceKind, id: string): boolean {
   return cancelKey(referenceKey(kind, id));
@@ -173,10 +185,11 @@ export function cancelAllGenerations(): number {
   return ids.length;
 }
 
-/** What a generation is for, so the queue can take you back to it: a layer (a background is one too),
- * or a reference entry, or one of its variations. */
+/** What a generation is for, so the queue can take you back to it: a layer (a background is one
+ * too), a whole panel image, or a reference entry, or one of its variations. */
 export type GenerationTarget =
   | { type: 'layer'; panelId: string; layerId: string }
+  | { type: 'panel'; panelId: string }
   | { type: 'reference'; kind: ReferenceKind; entryId: string; variationId?: string };
 
 /** One request in the generation queue: what it's for, and how far it's gotten. Unlike the old
@@ -354,6 +367,48 @@ async function runLayerGeneration(
   return { ...media, aspectRatio: dims ? dims.width / dims.height : undefined };
 }
 
+/** Generates and registers an image for a whole panel (background, layers and lighting drawn
+ * together as one picture), without setting it as the panel's image. */
+async function runPanelGeneration(
+  deps: ComicBuilderDeps,
+  panelId: string,
+  promptOverride?: string,
+  references?: GenerationReference[],
+  signal?: AbortSignal
+): Promise<GeneratedImage> {
+  const provider = requireProvider(deps);
+  const project = requireProject(deps);
+  const panel = findPanel(project, panelId);
+  if (!panel) throw new Error(`Panel "${panelId}" not found.`);
+
+  const used = (references ?? defaultPanelReferences(project, panelId)).slice(
+    0,
+    provider.maxReferenceImages
+  );
+  const prompt = appendReferenceNotes(
+    promptOverride?.trim() || buildPanelImagePrompt(project, panelId),
+    used
+  );
+  const referenceImages = await downloadReferences(deps, used);
+  const size = panelArtSize(project, panelId);
+  const rawDataUrl = await provider.generate({
+    kind: 'panel',
+    prompt,
+    referenceImages,
+    width: size?.pixels.width,
+    height: size?.pixels.height,
+    transparent: false,
+    signal,
+  });
+  const media = await deps.uploadStorageMedia(
+    `${panel.title || 'Panel'} image.png`,
+    rawDataUrl,
+    'image/png'
+  );
+  const dims = pngDimensions(rawDataUrl);
+  return { ...media, aspectRatio: dims ? dims.width / dims.height : undefined };
+}
+
 /** Generates one reference image from an already-final prompt string (no further building): gathers
  * reference images (variation-aware when `variationId` is given), calls the provider, strips the
  * background for a character/object, and registers the result. Shared by generateReferenceOne (a
@@ -430,6 +485,22 @@ export function generateLayerImage(
     describeLayer(deps, panelId, layerId),
     { type: 'layer', panelId, layerId },
     (signal) => runLayerGeneration(deps, panelId, layerId, prompt, references, signal)
+  );
+}
+
+/** Generates and registers a new whole-panel image; does not set it as the panel's image (see the
+ * module doc) — generate.run does that only when the panel has none yet. */
+export function generatePanelImage(
+  deps: ComicBuilderDeps,
+  panelId: string,
+  prompt?: string,
+  references?: GenerationReference[]
+): Promise<GeneratedImage> {
+  return trackedGeneration(
+    panelKey(panelId),
+    describePanel(deps, panelId),
+    { type: 'panel', panelId },
+    (signal) => runPanelGeneration(deps, panelId, prompt, references, signal)
   );
 }
 
@@ -636,6 +707,15 @@ function describeLayer(deps: ComicBuilderDeps, panelId: string, layerId: string)
     return `Layer: ${layer?.name || layerId}`;
   } catch {
     return `Layer: ${layerId}`;
+  }
+}
+
+function describePanel(deps: ComicBuilderDeps, panelId: string): string {
+  try {
+    const panel = findPanel(requireProject(deps), panelId);
+    return `Panel: ${panel?.title || panelId}`;
+  } catch {
+    return `Panel: ${panelId}`;
   }
 }
 

@@ -172,6 +172,17 @@ export default function App() {
       setSelection({ panelId: target.panelId, layerId: target.layerId });
       return;
     }
+    if (target.type === 'panel') {
+      const index = pageIndexOfPanel(current, target.panelId);
+      if (index < 0) {
+        setStatus('That panel no longer exists.', true);
+        return;
+      }
+      selectPage(index);
+      setTab('pages');
+      setSelection({ panelId: target.panelId });
+      return;
+    }
     if (!current.metadata[target.kind].some((entry) => entry.id === target.entryId)) {
       setStatus('That entry no longer exists.', true);
       return;

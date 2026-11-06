@@ -82,12 +82,14 @@ import {
   cancelQueueItem as cancelGenerationQueueItem,
   cancelReferenceGeneration,
   cancelVariationGeneration,
+  cancelPanelGeneration,
   defaultEntryReferences,
   defaultLayerReferences,
   generateAllDirty,
   generateAllDirtyVariations,
   generateAllVariations,
   generateLayerImage,
+  generatePanelImage,
   generateReferenceImage,
   generateVariationImage,
   getQueue,
@@ -246,7 +248,13 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
   ): Layer =>
     updateLayer(panelId, layerId, { mediaId, ...(aspectRatio !== undefined && { aspectRatio }) });
 
-  function inspect(target: GenerationTarget): PromptInspection;
+  // Only layer/reference targets get this overload's plain, synchronous PromptInspection: a panel
+  // target is always the heavier async PanelBrief (see the implementation's own t.type === 'panel'
+  // branch), so it must NOT match here even though GenerationTarget now includes it (for the
+  // queue/focus machinery, which treats every kind of generation target alike).
+  function inspect(
+    target: Extract<GenerationTarget, { type: 'layer' } | { type: 'reference' }>
+  ): PromptInspection;
   function inspect(
     target: string | AnyTarget,
     includeImages?: boolean
@@ -702,10 +710,12 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * PANEL IMAGE. Besides its layers, a panel can have one cohesive image of
      * the whole panel (background, characters and lighting drawn together, so
      * they share light, color and perspective). Do this last, once the layers
-     * are final. `generate.inspect("panel:<panelId>")` gives you everything to
-     * generate it (prompt parts, where each layer sits, the reference images);
-     * upload the result with media.upload and attach it with
-     * `update(panelId, { mediaId })`. While it is visible, the editor draws only
+     * are final. `generate.run("panel:<panelId>")` generates and, if the panel
+     * has no image yet, attaches it automatically (else review and attach it
+     * yourself with `update(panelId, { mediaId })`); `generate.inspect("panel:<panelId>")`
+     * instead gives you the full brief (prompt parts, where each layer sits, the
+     * reference images) to write the prompt and generate it some other way.
+     * While it is visible, the editor draws only
      * this image in place of the layers (bubbles still draw above it);
      * `imageVisible` hides or shows it and `mediaId: null` removes it. It is
      * optional, and goes out of date, listed by `generate.status("panels")`,
@@ -770,8 +780,9 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * Update a panel's title, panel prompt or panel image. Only the given fields change.
        *
        * The panel image is one cohesive picture of the whole panel (background, layers and lighting
-       * drawn together), made from generate.inspect("panel:<panelId>"). Upload it first with
-       * media.upload, then set mediaId. While it is visible it takes precedence over the layers: the
+       * drawn together) — generate.run("panel:<panelId>") makes and attaches one directly; to make
+       * it some other way, generate.inspect("panel:<panelId>") gives the full brief, then upload the
+       * result with media.upload and set mediaId here. While it is visible it takes precedence over the layers: the
        * editor shows only this image (bubbles still draw above it) and the layers are not drawn. The
        * previous panel image, if any, goes to mediaHistory. The image remembers what it was made from:
        * editing a layer's image, place, size, rotation, flip, opacity, visibility or order, or the panel
@@ -1365,12 +1376,15 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      *   reference:<kind>/<entryId>                a character, scene or object's own reference image
      *   reference:<kind>/<entryId>/<variationId>  one variation (pose/state) of it
      *   reference:<kind>/<entryId>/*              every variation of it (batch only)
-     *   panel:<panelId>                           a panel image (inspect only: you make it yourself)
+     *   panel:<panelId>                           a whole-panel image (background, layers and lighting together)
      *
      * where <kind> is characters, scenes or objects. The same target works for run, cancel and
-     * inspect: inspect shows what run would send. run only registers the result, for you to preview
-     * and commit yourself; batch (no one to preview a batch for) commits each result as it goes. Only
-     * one generation request runs at a time, even across overlapping calls (see status).
+     * inspect: inspect shows what run would send (for a panel, generate.inspect("panel:<panelId>")
+     * instead gives the fuller brief an LLM agent writes its own prompt from — run's own stitched
+     * prompt is a mechanical version of that, editable in the UI's dialog before sending). run only
+     * registers the result, for you to preview and commit yourself; batch (no one to preview a batch
+     * for) commits each result as it goes. Only one generation request runs at a time, even across
+     * overlapping calls (see status).
      */
     generate: {
       /**
@@ -1382,6 +1396,13 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * layers.update(panelId, layerId, { mediaId, aspectRatio }) (the previous image, if any, is kept in
        * the layer's history rather than discarded when you do; see mediaHistory in the data model).
        *
+       * A panel target: same "first image is automatic, a later one waits for you to commit it"
+       * rule as a layer, via panels.update(panelId, { mediaId }) (the previous panel image, if any,
+       * goes to its mediaHistory). Unless a prompt is given, one is auto-stitched from the panel's
+       * background, each visible layer (with its place in the panel) and its own prompt — a
+       * mechanical version of what generate.inspect("panel:<panelId>") hands an LLM agent to write
+       * by hand; read generate.inspect for the full brief, or edit the UI's dialog before sending.
+       *
        * A reference target: the image is built from the STYLE paragraph, the entry's description and,
        * unless a prompt is given, a default prompt for a single, isolated view on a plain white
        * background (a character or object) or an establishing shot of the location with no characters (a
@@ -1391,10 +1412,10 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        * orientation). The image is registered but not linked — review it, then commit it yourself with
        * reference.update(kind, id, { imageIds: [...] }) or variations.update(kind, entryId, variationId,
        * { imageIds: [...] }), the same "register, then link" split as media.upload.
-       * @param target - A layer or reference target (see the generate namespace).
+       * @param target - A layer, panel or reference target (see the generate namespace).
        * @param prompt - Optional prompt to use instead of the default (e.g. edited by a user before generating; read the default with generate.inspect).
        * @param references - Optional reference images to send instead of the defaults (see generate.inspect), each { mediaId, note? }; a note says how to use that image and is added to the prompt. Extras beyond the generator's maximum (inspect's maxReferenceImages) are ignored.
-       * @returns A promise resolving to the new MediaItem (for a layer, plus the aspect ratio the image actually came out at). Rejects when no generator is configured, or generation fails.
+       * @returns A promise resolving to the new MediaItem (for a layer or panel, plus the aspect ratio the image actually came out at). Rejects when no generator is configured, or generation fails.
        */
       run: async (
         target: string | AnyTarget,
@@ -1417,13 +1438,16 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
             ? generateVariationImage(deps, t.kind, t.entryId, t.variationId, prompt, references)
             : generateReferenceImage(deps, t.kind, t.entryId, prompt, references);
         }
-        if (t.type === 'variations') {
-          throw new Error('That target is every variation: use generate.batch for it.');
+        if (t.type === 'panel') {
+          const image = await generatePanelImage(deps, t.panelId, prompt, references);
+          // A panel with no image yet takes its first generated one; once it has one, a new
+          // generation waits for an explicit choice so the current image isn't swapped out from
+          // under the user (same as a layer — see the branch above).
+          const panel = panels.get(t.panelId);
+          if (panel && !panel.image) panels.update(t.panelId, { mediaId: image.id });
+          return image;
         }
-        throw new Error(
-          'A panel image is made outside the CLI: read generate.inspect("panel:<panelId>"), generate it ' +
-            'yourself, then save it with panels.update(panelId, { mediaId }).'
-        );
+        throw new Error('That target is every variation: use generate.batch for it.');
       },
 
       /**
@@ -1485,6 +1509,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
         }
         const t = parseTarget(target);
         if (t.type === 'layer') return cancelLayerGeneration(t.panelId, t.layerId) ? 1 : 0;
+        if (t.type === 'panel') return cancelPanelGeneration(t.panelId) ? 1 : 0;
         if (t.type === 'reference') {
           return (
             t.variationId
@@ -1495,7 +1520,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
             : 0;
         }
         throw new Error(
-          'Only a layer or reference target (or a queue id, or "all") can be cancelled.'
+          'Only a layer, panel or reference target (or a queue id, or "all") can be cancelled.'
         );
       },
 
@@ -1554,7 +1579,7 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        *     prompt, or its entry's description, changes (see reference.update and variations.add/update).
        *   - "panels": the panels whose panel image is out of date: its layers or prompt changed since
        *     it was set (see panels.update). A panel with no panel image is not listed; panel images are
-       *     optional, call generate.inspect("panel:<panelId>") for any panel to make one.
+       *     optional, call generate.run("panel:<panelId>") for any panel to make one.
        * @param scope - "queue", "layers", "references" or "panels". Defaults to "queue".
        * @returns For "queue": [{ id, label, target, status: "queued" | "running" | "done" | "error", error? }] (target is a target string; id works with generate.cancel). For "layers": one { pageId, panelId, layerId, page, panelTitle?, panelNumber, name, kind, prompt?, hasImage } per dirty item (hasImage is false for a layer with no image yet). For "references": one { kind, entryId, variationId, entryName, variationName, prompt?, hasImage } per dirty item. For "panels": one { pageId, panelId, page, panelTitle?, panelNumber, prompt? } per out-of-date panel image.
        */
@@ -1581,6 +1606,15 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
             );
         }
       },
+
+      /**
+       * How many reference images the configured image service accepts per request (0 if none is
+       * configured). generate.inspect already includes this for a layer or reference target; a
+       * panel target's defaults are built directly from panelBrief.ts in the UI, which has no
+       * synchronous inspect of its own, so it reads this separately.
+       * @returns The generator's maxReferenceImages.
+       */
+      maxReferenceImages: (): number => maxReferenceImages(deps),
 
       /**
        * Read or set the image service configuration. Per-machine, not part of the project. Holds a

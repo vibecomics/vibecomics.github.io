@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import {
   getQueue,
   layerGenerationStatus,
+  panelGenerationStatus,
   referenceGenerationStatus,
   subscribeGenerating,
   subscribeQueue,
@@ -13,6 +14,11 @@ import type { GenerationStatus, QueueItem, ReferenceKind } from '../ai/generatio
  * collapsing and reopening the layer, or a batch generate started elsewhere). */
 export function useLayerGenerationStatus(panelId: string, layerId: string): GenerationStatus {
   return useSyncExternalStore(subscribeGenerating, () => layerGenerationStatus(panelId, layerId));
+}
+
+/** Whether this panel has a panel-image generation queued or running. */
+export function usePanelGenerationStatus(panelId: string): GenerationStatus {
+  return useSyncExternalStore(subscribeGenerating, () => panelGenerationStatus(panelId));
 }
 
 /** Whether this reference entry has a reference-image generation queued or running. */

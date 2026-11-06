@@ -1,5 +1,5 @@
 import { cb } from '../ai/actions';
-import type { LayerKind, MediaItem } from '../types/comic';
+import type { MediaItem } from '../types/comic';
 import { displayName } from '../utils/fileName';
 import { readFileAsDataUrl } from '../utils/files';
 import { loadBlobUrl } from './mediaImages';
@@ -20,21 +20,6 @@ export async function uploadImage(
   return cb().media.upload(displayName(file.name), await readFileAsDataUrl(file), {
     mimeType: file.type,
     ...links,
-  });
-}
-
-/** Add a media item to a panel as a new layer; a new foreground layer starts centred at half the panel's width. */
-export async function addMediaLayer(
-  panelId: string,
-  item: MediaItem,
-  kind: LayerKind
-): Promise<void> {
-  const aspectRatio = await imageAspect(item);
-  cb().layers.add(panelId, {
-    kind,
-    mediaId: item.id,
-    aspectRatio,
-    ...(kind === 'foreground' && { x: 25, y: 25, width: 50 }),
   });
 }
 

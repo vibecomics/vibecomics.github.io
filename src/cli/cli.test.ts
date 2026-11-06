@@ -772,14 +772,15 @@ test('generate: status, cancel, batch and config are validated', async () => {
   assert.match((await run('generate', 'status', 'nope')).err, /must be one of/);
   assert.equal((await run('generate', 'cancel', 'all')).json(), 0);
   assert.equal((await run('generate', 'cancel', '99')).json(), 0);
-  assert.match((await run('generate', 'cancel', 'panel:p')).err, /Only a layer or reference/);
+  // cancel doesn't validate the target exists, only whether something outstanding matches its key.
+  assert.equal((await run('generate', 'cancel', 'panel:p')).json(), 0);
   assert.match(
     (await run('generate', 'batch', 'layers', '--kinds', '["sideways"]')).err,
     /Layer kind/
   );
   assert.match((await run('generate', 'batch', 'layer:a/b')).err, /batch needs/);
   assert.match((await run('generate', 'run', 'reference:characters/x/*')).err, /generate.batch/);
-  assert.match((await run('generate', 'run', 'panel:p')).err, /outside the CLI/);
+  assert.match((await run('generate', 'run', 'panel:p')).err, /No image service is configured/);
   assert.equal((await run('generate', 'config')).json(), null);
   assert.equal((await run('generate', 'test')).json().ok, false);
 });

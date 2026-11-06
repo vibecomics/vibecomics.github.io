@@ -6,9 +6,10 @@ import {
   allEntryImageIds,
   buildPanelPromptParts,
   defaultReferenceNote,
+  joinPromptParts,
   layerSubject,
 } from './prompt';
-import type { PromptPart } from './prompt';
+import type { GenerationReference, PromptPart } from './prompt';
 
 const round = (n: number) => Math.round(n * 10) / 10;
 
@@ -392,4 +393,81 @@ export async function panelBrief(
     })
   );
   return brief;
+}
+
+/**
+ * The panel image's prompt, auto-stitched from its brief into the labeled parts the UI's Generate
+ * dialog shows and lets you edit or drop (see GenerateImageModal): Style, the style addenda, the
+ * setting, each visible layer back to front with its place in the panel, the panel's own prompt,
+ * then technical requirements. This is a mechanical version of what buildPanelBrief's own
+ * `instructions` ask an LLM agent to write by hand — good enough for a one-click Generate button;
+ * every part stays editable before sending either way.
+ */
+export function buildPanelImagePromptParts(project: ComicProject, panelId: string): PromptPart[] {
+  const brief = buildPanelBrief(project, panelId);
+  const parts: PromptPart[] = [{ label: 'Style', text: brief.style.style }];
+  if (brief.style.characterStyle) {
+    parts.push({ label: 'Character style', text: brief.style.characterStyle });
+  }
+  if (brief.style.sceneStyle) parts.push({ label: 'Scene style', text: brief.style.sceneStyle });
+
+  if (brief.background) {
+    const bg = brief.background;
+    const text = [
+      bg.scene && `${bg.scene.name}: ${bg.scene.description}`,
+      bg.variation?.prompt,
+      bg.prompt,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    if (text) {
+      parts.push({
+        label: 'Setting',
+        text: `${text} Fills the whole panel; keep it exactly as placed.`,
+      });
+    }
+  }
+
+  for (const layer of brief.layers) {
+    const text = [
+      layer.subject && `${layer.subject.name}: ${layer.subject.description}`,
+      layer.variation?.prompt,
+      layer.prompt,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    if (text) {
+      parts.push({
+        label: layer.name || `Layer ${layer.order}`,
+        text: `${text} Placed ${layer.placement.description}.`,
+      });
+    }
+  }
+
+  const panelPrompt = brief.promptParts.find((p) => p.label === 'Panel prompt');
+  if (panelPrompt) parts.push(panelPrompt);
+  const technical = brief.promptParts.find((p) => p.label === 'Technical requirements');
+  if (technical) parts.push(technical);
+  return parts;
+}
+
+/** Stitches buildPanelImagePromptParts into one prompt string (see buildLayerPrompt). */
+export function buildPanelImagePrompt(project: ComicProject, panelId: string): string {
+  return joinPromptParts(buildPanelImagePromptParts(project, panelId));
+}
+
+/**
+ * The reference images a panel image's generation sends by default: the same ordered,
+ * deduplicated list buildPanelBrief computes for the agent brief (the background and each visible
+ * layer as placed, then each subject's/scene's own clean reference art) — see buildPanelBrief's
+ * `references`. The generator caps how many it actually uses; this returns them all, in priority
+ * order, same as defaultLayerReferences.
+ */
+export function defaultPanelReferences(
+  project: ComicProject,
+  panelId: string
+): GenerationReference[] {
+  return buildPanelBrief(project, panelId).references.map((r) =>
+    r.note ? { mediaId: r.mediaId, note: r.note } : { mediaId: r.mediaId }
+  );
 }

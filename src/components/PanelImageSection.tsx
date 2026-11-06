@@ -1,14 +1,20 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
 import { isPanelImageDirty } from '../ai/panelImage';
+import { buildPanelImagePromptParts, defaultPanelReferences } from '../ai/panelBrief';
+import { joinPromptParts } from '../ai/prompt';
 import type { MediaItem, Panel } from '../types/comic';
 import AccordionItem from './AccordionItem';
+import GenerateButton from './GenerateButton';
+import GenerateImageModal from './GenerateImageModal';
 import HelpSection from './HelpSection';
 import MediaPicker from './MediaPicker';
 import MediaThumb from './MediaThumb';
 import Spinner from './Spinner';
 import StyleField from './StyleField';
 import { uploadImage } from './panelActions';
+import { useProject } from './ProjectContext';
+import { usePanelGenerationStatus } from './useGenerationStatus';
 import { useTask } from './useTask';
 
 interface Props {
@@ -25,7 +31,10 @@ interface Props {
  */
 export default function PanelImageSection({ panel, media, open, onToggleOpen }: Props) {
   const task = useTask();
+  const project = useProject();
+  const status = usePanelGenerationStatus(panel.id);
   const [picking, setPicking] = useState(false);
+  const [generatingModal, setGeneratingModal] = useState(false);
   const image = panel.image;
   const item = image && media.find((m) => m.id === image.mediaId);
   const dirty = isPanelImageDirty(panel);
@@ -39,10 +48,16 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
       title="Panel image"
       open={open}
       onToggle={onToggleOpen}
-      // Collapsed, the body (and its warning) is hidden, so keep the state visible.
       badge={
-        !open && image && dirty ? (
-          <span className="badge text-bg-warning fw-normal">Out of date</span>
+        image && dirty ? (
+          <span
+            className="text-warning"
+            style={{ fontSize: '0.55rem', lineHeight: 1 }}
+            title="Out of date: the layers or panel prompt changed since this image was made"
+            aria-label="Out of date: the layers or panel prompt changed since this image was made"
+          >
+            ●
+          </span>
         ) : undefined
       }
     >
@@ -66,17 +81,11 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
           <p className="mb-0">
             One picture of the whole panel, made after the background and layers are final so they
             share lighting and style. When it is shown it replaces the layers on the page; hide it
-            to edit the layers again. Ask your AI assistant to make one, or set your own image.
+            to edit the layers again. Generate one, or set your own image.
           </p>
         </HelpSection>
       )}
 
-      {image && dirty && (
-        <div className="alert alert-warning py-1 px-2 small my-2" role="status">
-          Out of date: the layers or panel prompt changed since this image was made. Ask your AI
-          assistant for a new one{image.visible ? '' : ', or show the layers again'}.
-        </div>
-      )}
       {image && item && (
         <div className="my-2">
           <MediaThumb
@@ -100,14 +109,46 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
         </div>
       )}
 
-      <button
-        className="btn btn-outline-secondary btn-sm"
-        disabled={task.busy}
-        onClick={() => setPicking(true)}
-      >
-        {task.busy && <Spinner />}
-        {image ? 'Replace image' : 'Set panel image'}
-      </button>
+      <div className="d-flex align-items-center gap-2">
+        <GenerateButton
+          status={status}
+          title="Generate a new panel image"
+          onClick={() => setGeneratingModal(true)}
+        />
+        <button
+          className="btn btn-outline-secondary btn-sm"
+          disabled={task.busy}
+          onClick={() => setPicking(true)}
+        >
+          {task.busy && <Spinner />}
+          {image ? 'Replace image' : 'Set panel image'}
+        </button>
+      </div>
+      {generatingModal && (
+        <GenerateImageModal
+          title="Generate panel image"
+          project={project}
+          getDefaults={() => {
+            const parts = buildPanelImagePromptParts(project, panel.id);
+            return {
+              prompt: joinPromptParts(parts),
+              parts,
+              references: defaultPanelReferences(project, panel.id),
+              maxReferenceImages: cb().generate.maxReferenceImages(),
+            };
+          }}
+          media={media}
+          onGenerate={(prompt, references) =>
+            cb().generate.run({ type: 'panel', panelId: panel.id }, prompt, references)
+          }
+          onUse={(result, { primary }) => {
+            // generate.run already attaches the first image automatically; a later one (not yet
+            // the panel's own image) waits for this explicit "Use this image" click, same as a layer.
+            if (primary) void cb().panels.update(panel.id, { mediaId: result.id });
+          }}
+          onClose={() => setGeneratingModal(false)}
+        />
+      )}
       {picking && (
         <MediaPicker
           title="Choose the panel image"

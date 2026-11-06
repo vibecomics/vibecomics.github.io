@@ -5,7 +5,7 @@
  *   reference:<kind>/<entryId>                     a character/scene/object's own reference image
  *   reference:<kind>/<entryId>/<variationId>       one variation of it
  *   reference:<kind>/<entryId>/*                   every variation of it (batch calls only)
- *   panel:<panelId>                                a panel image (generate.inspect only)
+ *   panel:<panelId>                                a whole-panel image
  *
  * `<kind>` is characters, scenes or objects. The UI passes the equivalent GenerationTarget object.
  */

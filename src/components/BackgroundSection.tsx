@@ -1,14 +1,9 @@
-import { useState } from 'react';
 import { cb } from '../ai/actions';
 import type { MediaItem, Panel } from '../types/comic';
 import AccordionItem from './AccordionItem';
 import HelpSection from './HelpSection';
 import LayerRow from './LayerRow';
-import MediaPicker from './MediaPicker';
-import Spinner from './Spinner';
-import { addMediaLayer, uploadImage } from './panelActions';
 import type { Selection } from './selection';
-import { useTask } from './useTask';
 
 interface Props {
   panel: Panel;
@@ -29,18 +24,22 @@ export default function BackgroundSection({
   open,
   onToggleOpen,
 }: Props) {
-  const task = useTask();
-  const [picking, setPicking] = useState(false);
   const background = panel.layers.find((layer) => layer.kind === 'background');
-  const set = (getItem: () => Promise<MediaItem> | MediaItem) =>
-    void task.run(async () => addMediaLayer(panel.id, await getItem(), 'background'));
+
+  /** Add an empty background, open it, and let the user type its prompt or pick an image; unlike a
+   * foreground layer there's only ever one, so this replaces the whole "set a background" step. */
+  function addBackground() {
+    const layer = cb().layers.add(panel.id, { kind: 'background', prompt: '' });
+    onSelect({ panelId: panel.id, layerId: layer.id });
+  }
 
   return (
     <AccordionItem title="Background" open={open} onToggle={onToggleOpen}>
       {!background && (
         <HelpSection title="What is the background?" open>
           <p className="mb-0">
-            The setting behind everything else in the panel. Set one from a scene or an image.
+            The setting behind everything else in the panel. Write a prompt and generate one, or set
+            an existing image.
           </p>
         </HelpSection>
       )}
@@ -59,31 +58,10 @@ export default function BackgroundSection({
           }
         />
       ) : (
-        <>
-          <button
-            className="btn btn-outline-secondary btn-sm"
-            disabled={task.busy}
-            onClick={() => setPicking(true)}
-          >
-            {task.busy && <Spinner />}
-            Set background
-          </button>
-          {picking && (
-            <MediaPicker
-              title="Choose a background image"
-              media={media}
-              prefer={{
-                kind: 'background',
-                aspectRatio: cb().panels.get(panel.id)?.size.aspectRatio,
-              }}
-              onUpload={(file) => set(() => uploadImage(file))}
-              onPick={(item) => set(() => item)}
-              onClose={() => setPicking(false)}
-            />
-          )}
-        </>
+        <button className="btn btn-outline-secondary btn-sm" onClick={addBackground}>
+          Set background
+        </button>
       )}
-      {task.error && <div className="text-danger small mt-2">{task.error}</div>}
     </AccordionItem>
   );
 }
