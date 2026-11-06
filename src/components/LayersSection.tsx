@@ -72,7 +72,7 @@ export default function LayersSection({
       const from = topFirst.findIndex((layer) => layer.id === drag.id);
       if (drag.over !== from) {
         const slot = foreground[foreground.length - 1 - drag.over];
-        cb().layers.move(panel.id, drag.id, panel.layers.indexOf(slot));
+        cb().layers.update(panel.id, drag.id, { order: panel.layers.indexOf(slot) });
       }
     }
     cancel();

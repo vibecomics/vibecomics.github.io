@@ -1,14 +1,14 @@
 /**
- * Orchestrates image generation for a layer, the whole project's dirty layers, or a story-bible
+ * Orchestrates image generation for a layer, the whole project's dirty layers, or a reference
  * entry's reference art: stitches the prompt, gathers reference images, calls the configured
  * ImageProvider, and uploads the result. Knows nothing about any specific provider (see ../generators).
  * Every generation call is serialized through one labeled queue (see enqueue/getQueue), so only one
  * request runs at a time and its progress is visible regardless of which entry point started it.
  *
  * A single layer or reference-image generation only registers the result (like media.upload) — it
- * does not add it to a story-bible entry's imageIds, and it sets it as a layer's image only when the
- * layer has none yet (see the generate.layer action). The caller previews it and commits with
- * layers.update(..., { mediaId }) or characters.update(..., { imageIds }).
+ * does not add it to a reference entry's imageIds, and it sets it as a layer's image only when the
+ * layer has none yet (see generate.run). The caller previews it and commits with
+ * layers.update(..., { mediaId }) or reference.update(..., { imageIds }).
  * The dirty-batch path is the exception: it has no one to show a preview to, so it commits each result
  * itself as it goes.
  */
@@ -60,7 +60,7 @@ type CommitLayerImage = (
  * actively running right now. Undefined means neither: nothing outstanding for it. */
 export type GenerationStatus = 'queued' | 'running' | undefined;
 
-// Which layer, story-bible entry or variation has a generation queued or running, so any component
+// Which layer, reference entry or variation has a generation queued or running, so any component
 // showing it can reflect that, even one that mounted after the request started (see
 // useGenerationStatus). Every request gets its own id (`key#n`), so each one is its own queue row and
 // its own abort controller; a key's status follows all of its outstanding requests together: running
@@ -138,7 +138,7 @@ export function cancelLayerGeneration(panelId: string, layerId: string): boolean
   return cancelKey(layerKey(panelId, layerId));
 }
 
-/** Cancels a story-bible entry's outstanding reference-image generation requests, if any. */
+/** Cancels a reference entry's outstanding reference-image generation requests, if any. */
 export function cancelReferenceGeneration(kind: ReferenceKind, id: string): boolean {
   return cancelKey(referenceKey(kind, id));
 }
@@ -152,7 +152,7 @@ export function cancelVariationGeneration(
   return cancelKey(variationKey(kind, id, variationId));
 }
 
-/** Cancels one queue item straight from generate.queue()'s list, by its `id` (round-trip whatever
+/** Cancels one queue item straight from generate.status("queue")'s list, by its `id` (round-trip whatever
  * queue() gave you). */
 export function cancelQueueItem(id: string): boolean {
   return cancelRequest(id);
@@ -160,7 +160,7 @@ export function cancelQueueItem(id: string): boolean {
 
 /**
  * Cancels every outstanding generation at once — everything still queued or running, across layers,
- * reference art and variations alike. A batch call (generate.dirty(), generate.dirtyReferences()) has
+ * reference art and variations alike. A batch call (generate.batch) has
  * already enqueued every one of its items up front (see trackedGeneration): aborting each one here
  * makes its turn, when it comes, throw immediately instead of actually generating, so the batch's own
  * loop unwinds on its own almost at once rather than needing a separate "stop" flag threaded through
@@ -173,7 +173,7 @@ export function cancelAllGenerations(): number {
 }
 
 /** What a generation is for, so the queue can take you back to it: a layer (a background is one too),
- * or a story-bible entry, or one of its variations. */
+ * or a reference entry, or one of its variations. */
 export type GenerationTarget =
   | { type: 'layer'; panelId: string; layerId: string }
   | { type: 'reference'; kind: ReferenceKind; entryId: string; variationId?: string };
@@ -413,7 +413,7 @@ async function generateReferenceOne(
 }
 
 /** Generates and registers a new image for a layer (or background); does not set it as the layer's
- * image (see the module doc) — the generate.layer action does that only when the layer has none yet. */
+ * image (see the module doc) — generate.run does that only when the layer has none yet. */
 export function generateLayerImage(
   deps: ComicBuilderDeps,
   panelId: string,
@@ -444,7 +444,7 @@ export function generateReferenceImage(
   );
 }
 
-/** Generates and registers a new image for one variation (pose/state) of a story-bible entry; does
+/** Generates and registers a new image for one variation (pose/state) of a reference entry; does
  * not add it to the variation's imageIds (see the module doc) — commit it yourself with
  * variations.update(kind, id, variationId, { imageIds }). */
 export function generateVariationImage(
@@ -487,7 +487,7 @@ function commitVariationImage(
   });
 }
 
-/** Generates one image for every variation of a story-bible entry, one request at a time, committing
+/** Generates one image for every variation of a reference entry, one request at a time, committing
  * each result into that variation's imageIds as it goes (like generateAllDirty, there's no one to
  * preview a batch for). `promptOverride`, when given, replaces the shared Style/description/technical
  * base that's normally built from the entry alone (see buildReferencePrompt with no variationId) —
@@ -601,7 +601,7 @@ export function defaultLayerReferences(
   return ids.map((mediaId) => referenceTo(project, mediaId, subject?.id));
 }
 
-/** The images a story-bible entry's reference generation sends by default: with `variationId`, that
+/** The images a reference entry's reference generation sends by default: with `variationId`, that
  * variation's own images (or, with none yet, every image the entry has); without one, every image the
  * entry has — see referenceIdsFor. */
 export function defaultEntryReferences(
@@ -721,10 +721,10 @@ export interface VariationRefOutcome extends VariationRef {
 
 /**
  * Generates images for every dirty variation (reference art for a character, object or scene) across
- * the whole story bible, one request at a time, committing each result into that variation's imageIds
+ * the whole set of reference entries, one request at a time, committing each result into that variation's imageIds
  * as it goes (like generateAllDirty, there's no one to preview a batch for). Mirrors generateAllDirty,
- * but for story-bible reference art instead of layers. `kinds`, when given, restricts this to only
- * those story-bible lists (e.g. ['characters'] regenerates dirty cast reference art only).
+ * but for reference art instead of layers. `kinds`, when given, restricts this to only
+ * those reference kinds (e.g. ['characters'] regenerates dirty cast reference art only).
  */
 export async function generateAllDirtyVariations(
   deps: ComicBuilderDeps,

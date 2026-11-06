@@ -62,7 +62,11 @@ interface EntryCardProps {
 
 function EntryCard({ kind, entry, media, highlighted }: EntryCardProps) {
   const { singular, placeholder, referenceImages } = STORY_TABS[kind];
-  const entries = cb()[kind];
+  const entries = {
+    update: (id: string, patch: { name?: string; description?: string }) =>
+      cb().reference.update(kind, id, patch),
+    delete: (id: string) => cb().reference.delete(kind, id),
+  };
 
   return (
     <div
@@ -128,7 +132,7 @@ interface StoryTabProps {
   onFocusApplied: () => void;
 }
 
-/** The characters, props or scenes of the story bible: add, rename, describe, delete. */
+/** The characters, props or scenes of the project: add, rename, describe, delete. */
 export default function StoryTab({ project, kind, focus, onFocusApplied }: StoryTabProps) {
   const { title, singular, style } = STORY_TABS[kind];
   const entries = project.metadata[kind];
@@ -151,7 +155,7 @@ export default function StoryTab({ project, kind, focus, onFocusApplied }: Story
   }, [highlighted]);
 
   function add() {
-    cb()[kind].create({ name: `New ${capitalize(singular)}` });
+    cb().reference.create(kind, { name: `New ${capitalize(singular)}` });
   }
 
   return (
@@ -192,8 +196,8 @@ export default function StoryTab({ project, kind, focus, onFocusApplied }: Story
           autoSave
           onSave={(text) =>
             kind === 'characters'
-              ? cb().metadata.setCharacterStyle(text)
-              : cb().metadata.setSceneStyle(text)
+              ? cb().metadata.update({ characterStyle: text })
+              : cb().metadata.update({ sceneStyle: text })
           }
         />
       )}

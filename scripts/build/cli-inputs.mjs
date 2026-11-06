@@ -43,35 +43,21 @@ export const POSITIONAL = {
 const PANEL_ID = { type: 'string', example: 'panel_ab12cd' };
 const LAYER_ID = { type: 'string', example: 'layer_ab12cd' };
 const BUBBLE_ID = { type: 'string', example: 'bubble_ab12cd' };
-const AXIS = { type: 'enum', options: ['horizontal', 'vertical'] };
 const IMAGE = { type: 'file', help: 'Path of the image file (PNG, JPEG, WebP or GIF).' };
-const KIND = { type: 'enum', options: ['characters', 'scenes', 'objects'] };
+const KIND = {
+  type: 'enum',
+  options: ['characters', 'scenes', 'objects'],
+  help: 'Which kind of reference entry.',
+};
+const ENTRY_ID = { type: 'string', example: 'char_ab12cd' };
 const VARIATION_ID = { type: 'string', example: 'var_ab12cd' };
 const REFERENCE_LIST = {
   type: 'json',
   optional: true,
   example: '[{ "mediaId": "media_ab12cd", "note": "use this outfit" }]',
 };
-
-/** Story bible entries (characters, scenes, objects) share one shape. */
-const STORY_ENTRY = {
-  get: { id: { type: 'string', example: 'character_ab12cd' } },
-  create: {
-    input: {
-      type: 'json',
-      example:
-        '{ "name": "Mira", "description": "Teenage girl, short red hair, green raincoat.", "imageIds": [], "linkIds": [] }',
-    },
-  },
-  update: {
-    id: { type: 'string', example: 'character_ab12cd' },
-    patch: {
-      type: 'json',
-      example: '{ "description": "New description", "imageIds": ["media_ab12cd"] }',
-    },
-  },
-  delete: { id: { type: 'string', example: 'character_ab12cd' } },
-};
+const PROMPT = { type: 'multiline', optional: true, allowEmpty: true };
+const CONNECTION_ID = { type: 'string', example: 's3:http://localhost:9000/my-bucket' };
 
 const PAGE_SIZE = {
   type: 'json',
@@ -79,31 +65,58 @@ const PAGE_SIZE = {
 };
 
 export const INPUTS = {
+  'storage.connect': {
+    target: {
+      type: 'string',
+      example: 's3://accessKey:secretKey@localhost:9000/my-bucket',
+      help: '"drive" for Google Drive (it prints a URL and a code for the user), or an s3:// connection string.',
+    },
+  },
+  'storage.disconnect': { id: { ...CONNECTION_ID, optional: true } },
+  'storage.listProjects': {
+    show: { type: 'json', optional: true, example: 'true' },
+  },
   'storage.createProject': {
     name: { type: 'string', example: 'My first comic' },
     pageSize: { ...PAGE_SIZE, optional: true },
-    connectionId: { type: 'string', optional: true, example: 's3:http://localhost:9000/my-bucket' },
+    connectionId: { ...CONNECTION_ID, optional: true },
   },
   'storage.openProject': { idOrName: { type: 'string', example: 'My first comic' } },
-  'storage.connectWithS3': {
-    connectionString: {
-      type: 'string',
-      example: 's3://accessKey:secretKey@localhost:9000/my-bucket',
-    },
-  },
-  'storage.disconnectConnection': {
-    id: { type: 'string', example: 's3:http://localhost:9000/my-bucket' },
-  },
-  'storage.backupTo': {
-    connectionId: { type: 'string', example: 's3:http://localhost:9000/my-bucket' },
-  },
+  'storage.backupTo': { connectionId: CONNECTION_ID },
 
   'project.lint': {},
   'project.load': {
     data: { type: 'multiline', example: '{ "id": "…", "title": "…", "pages": [] }' },
   },
 
-  'page.select': { i: { type: 'number', example: '0' } },
+  'metadata.update': {
+    patch: {
+      type: 'object',
+      fields: {
+        style: {
+          type: 'multiline',
+          optional: true,
+          allowEmpty: true,
+          help: 'The STYLE paragraph, stitched into every image prompt.',
+        },
+        characterStyle: {
+          type: 'multiline',
+          optional: true,
+          allowEmpty: true,
+          help: 'The CHARACTER STYLE addendum, stitched into character prompts only.',
+        },
+        sceneStyle: {
+          type: 'multiline',
+          optional: true,
+          allowEmpty: true,
+          help: 'The SCENE STYLE addendum, stitched into scene prompts only.',
+        },
+        pageSize: { ...PAGE_SIZE, optional: true },
+      },
+    },
+  },
+
+  'page.select': { i: { type: 'number', optional: true, example: '0' } },
   'page.add': {
     input: {
       type: 'object',
@@ -122,26 +135,57 @@ export const INPUTS = {
     },
     pageIndex: { type: 'number', optional: true, example: '2' },
   },
-
   'page.move': {
     from: { type: 'number', example: '3' },
     to: { type: 'number', example: '1' },
   },
+  'page.preview': {
+    open: {
+      type: 'json',
+      optional: true,
+      example: 'false',
+      help: 'true (the default) opens, false closes.',
+    },
+  },
 
   'panels.list': { pageIndex: { type: 'number', optional: true, example: '0' } },
   'panels.get': { panelId: PANEL_ID },
-  'panels.size': { panelId: PANEL_ID },
   'panels.split': {
-    panelId: PANEL_ID,
-    axis: AXIS,
-    position: { type: 'number', optional: true, example: '50' },
+    opts: {
+      type: 'object',
+      fields: {
+        axis: {
+          type: 'enum',
+          options: ['horizontal', 'vertical'],
+          help: 'horizontal: a horizontal line (rows); vertical: a vertical line (columns).',
+        },
+        panelId: {
+          type: 'string',
+          optional: true,
+          example: 'panel_ab12cd',
+          help: 'The panel to cut. Leave out to cut every panel along a line across the whole page.',
+        },
+        position: {
+          type: 'number',
+          optional: true,
+          example: '50',
+          help: 'Where the line falls, 0-100 (% of the panel, or of the page without --panelId). Default 50 for one panel; required across the page.',
+        },
+        count: {
+          type: 'number',
+          optional: true,
+          example: '3',
+          help: 'Cut the panel into this many equal parts (needs --panelId; not with --position).',
+        },
+        pageIndex: {
+          type: 'number',
+          optional: true,
+          example: '0',
+          help: 'Only for a line across the page: which page (default the current one).',
+        },
+      },
+    },
   },
-  'panels.splitAcross': {
-    axis: AXIS,
-    position: { type: 'number', example: '50' },
-    pageIndex: { type: 'number', optional: true, example: '0' },
-  },
-  'panels.splitEvenly': { panelId: PANEL_ID, axis: AXIS, count: { type: 'number', example: '3' } },
   'panels.resize': {
     panelId: PANEL_ID,
     edge: { type: 'enum', options: ['top', 'bottom', 'left', 'right'] },
@@ -158,26 +202,21 @@ export const INPUTS = {
           optional: true,
           help: 'Direction for the whole panel (action, mood, lighting, time of day), used for the panel image. A blank value clears it.',
         },
+        mediaId: {
+          type: 'string',
+          optional: true,
+          example: 'media_ab12cd',
+          help: 'Set the panel image to this media id (from "media upload" or "media list"). To remove it, pass JSON: --patch \'{"mediaId":null}\'.',
+        },
+        imageVisible: {
+          type: 'json',
+          optional: true,
+          example: 'true',
+          help: 'true shows the panel image, false hides it (the layers show again).',
+        },
       },
     },
   },
-  'panels.setImage': {
-    panelId: PANEL_ID,
-    mediaId: {
-      type: 'string',
-      example: 'media_ab12cd',
-      help: 'A media id from "media upload" or "media list".',
-    },
-  },
-  'panels.setImageVisible': {
-    panelId: PANEL_ID,
-    visible: {
-      type: 'json',
-      example: 'true',
-      help: 'true shows the panel image, false hides it (the layers show again).',
-    },
-  },
-  'panels.clearImage': { panelId: PANEL_ID },
   'panels.delete': { panelId: PANEL_ID },
 
   'layers.list': { panelId: PANEL_ID },
@@ -196,21 +235,11 @@ export const INPUTS = {
     patch: {
       type: 'json',
       example:
-        '{ "mediaId": "media_ab12cd", "subjectId": "char-ab12cd", "sceneId": "scene-ab12cd", "x": 10, "y": 20, "width": 60, "opacity": 1 }',
+        '{ "mediaId": "media_ab12cd", "subjectId": "char-ab12cd", "sceneId": "scene-ab12cd", "x": 10, "y": 20, "width": 60, "opacity": 1, "flipX": true, "order": "top" }',
+      help: 'order is "top", "bottom", "up", "down", or a 0-based position from the bottom.',
     },
   },
-  'layers.flip': { panelId: PANEL_ID, layerId: LAYER_ID },
   'layers.delete': { panelId: PANEL_ID, layerId: LAYER_ID },
-  'layers.size': { panelId: PANEL_ID, layerId: LAYER_ID },
-  'layers.move': {
-    panelId: PANEL_ID,
-    layerId: LAYER_ID,
-    to: {
-      type: 'stringOrNumber',
-      example: 'top',
-      help: 'One of top, bottom, up, down, or a 0-based position from the bottom (digits).',
-    },
-  },
 
   'bubbles.list': { panelId: PANEL_ID },
   'bubbles.get': { panelId: PANEL_ID, bubbleId: BUBBLE_ID },
@@ -229,60 +258,29 @@ export const INPUTS = {
   },
   'bubbles.delete': { panelId: PANEL_ID, bubbleId: BUBBLE_ID },
 
-  'metadata.setStyle': { text: { type: 'multiline', allowEmpty: true } },
-  'metadata.setCharacterStyle': { text: { type: 'multiline', allowEmpty: true } },
-  'metadata.setSceneStyle': { text: { type: 'multiline', allowEmpty: true } },
-  'metadata.setPageSize': { pageSize: PAGE_SIZE },
-
-  'characters.get': STORY_ENTRY.get,
-  'characters.create': STORY_ENTRY.create,
-  'characters.update': STORY_ENTRY.update,
-  'characters.delete': STORY_ENTRY.delete,
-  'characters.generateImage': {
-    id: { type: 'string', example: 'character_ab12cd' },
-    prompt: { type: 'multiline', optional: true, allowEmpty: true },
-    references: {
-      type: 'json',
-      optional: true,
-      example: '[{ "mediaId": "media_ab12cd", "note": "use this outfit" }]',
-    },
-  },
-  'scenes.get': { id: { type: 'string', example: 'scene_ab12cd' } },
-  'scenes.create': STORY_ENTRY.create,
-  'scenes.update': { ...STORY_ENTRY.update, id: { type: 'string', example: 'scene_ab12cd' } },
-  'scenes.delete': { id: { type: 'string', example: 'scene_ab12cd' } },
-  'scenes.generateImage': {
-    id: { type: 'string', example: 'scene_ab12cd' },
-    prompt: { type: 'multiline', optional: true, allowEmpty: true },
-    references: {
-      type: 'json',
-      optional: true,
-      example: '[{ "mediaId": "media_ab12cd", "note": "use this outfit" }]',
-    },
-  },
-  'objects.get': { id: { type: 'string', example: 'object_ab12cd' } },
-  'objects.create': STORY_ENTRY.create,
-  'objects.update': { ...STORY_ENTRY.update, id: { type: 'string', example: 'object_ab12cd' } },
-  'objects.delete': { id: { type: 'string', example: 'object_ab12cd' } },
-  'objects.generateImage': {
-    id: { type: 'string', example: 'object_ab12cd' },
-    prompt: { type: 'multiline', optional: true, allowEmpty: true },
-    references: {
-      type: 'json',
-      optional: true,
-      example: '[{ "mediaId": "media_ab12cd", "note": "use this outfit" }]',
-    },
-  },
-
-  'variations.list': { kind: KIND, entryId: { type: 'string', example: 'character_ab12cd' } },
-  'variations.get': {
+  'reference.list': { kind: { ...KIND, optional: true } },
+  'reference.get': { kind: KIND, id: ENTRY_ID },
+  'reference.create': {
     kind: KIND,
-    entryId: { type: 'string', example: 'character_ab12cd' },
-    variationId: VARIATION_ID,
+    input: {
+      type: 'json',
+      example:
+        '{ "name": "Mira", "description": "Teenage girl, short red hair, green raincoat.", "imageIds": [], "linkIds": [] }',
+    },
   },
+  'reference.update': {
+    kind: KIND,
+    id: ENTRY_ID,
+    patch: {
+      type: 'json',
+      example: '{ "description": "New description", "imageIds": ["media_ab12cd"] }',
+    },
+  },
+  'reference.delete': { kind: KIND, id: ENTRY_ID },
+
   'variations.add': {
     kind: KIND,
-    entryId: { type: 'string', example: 'character_ab12cd' },
+    entryId: ENTRY_ID,
     input: {
       type: 'json',
       example: '{ "name": "Front view", "prompt": "Front view, facing the camera directly." }',
@@ -290,18 +288,14 @@ export const INPUTS = {
   },
   'variations.update': {
     kind: KIND,
-    entryId: { type: 'string', example: 'character_ab12cd' },
+    entryId: ENTRY_ID,
     variationId: VARIATION_ID,
     patch: {
       type: 'json',
       example: '{ "prompt": "New prompt text", "imageIds": ["media_ab12cd"] }',
     },
   },
-  'variations.delete': {
-    kind: KIND,
-    entryId: { type: 'string', example: 'character_ab12cd' },
-    variationId: VARIATION_ID,
-  },
+  'variations.delete': { kind: KIND, entryId: ENTRY_ID, variationId: VARIATION_ID },
 
   'media.get': { id: { type: 'string', example: 'media_ab12cd' } },
   'media.download': { id: { type: 'string', example: 'media_ab12cd' } },
@@ -351,114 +345,99 @@ export const INPUTS = {
   'media.update': {
     id: { type: 'string', example: 'media_ab12cd' },
     patch: {
-      type: 'json',
-      example: '{ "name": "mara-running.png", "subjectId": "char-ab12cd", "sceneId": null }',
+      type: 'object',
+      fields: {
+        name: { type: 'string', optional: true, example: 'mara-running.png' },
+        subjectId: {
+          type: 'string',
+          optional: true,
+          flag: 'subject',
+          example: 'char-ab12cd',
+          help: 'Id of the character or object this image is art of. To clear it, pass JSON: --patch \'{"subjectId":null}\'.',
+        },
+        sceneId: {
+          type: 'string',
+          optional: true,
+          flag: 'scene',
+          example: 'scene-ab12cd',
+          help: 'Id of the scene this image is art of. To clear it, pass JSON: --patch \'{"sceneId":null}\'.',
+        },
+        thumbnailDataUrl: {
+          ...IMAGE,
+          optional: true,
+          flag: 'thumbnail',
+          help: 'Path of a new thumbnail: the image resized to about 256px on its long side (PNG if it has transparency, else JPEG).',
+        },
+      },
     },
   },
-  'media.uploadThumbnail': { id: { type: 'string', example: 'media_ab12cd' }, dataUrl: IMAGE },
   'media.delete': { id: { type: 'string', example: 'media_ab12cd' } },
 
-  'generate.layer': {
-    panelId: PANEL_ID,
-    layerId: LAYER_ID,
-    prompt: { type: 'multiline', optional: true, allowEmpty: true },
-    references: {
-      type: 'json',
+  'generate.run': {
+    target: {
+      type: 'string',
+      example: 'layer:panel_ab12cd/layer_ab12cd',
+      help: 'layer:<panelId>/<layerId>, reference:<kind>/<entryId> or reference:<kind>/<entryId>/<variationId>.',
+    },
+    prompt: PROMPT,
+    references: REFERENCE_LIST,
+  },
+  'generate.batch': {
+    scope: {
+      type: 'string',
+      example: 'layers',
+      help: '"layers" (every dirty layer), "references" (every dirty variation) or reference:<kind>/<entryId>/* (every variation of one entry).',
+    },
+    options: {
+      type: 'object',
       optional: true,
-      example: '[{ "mediaId": "media_ab12cd", "note": "use this outfit" }]',
+      fields: {
+        kinds: {
+          type: 'json',
+          optional: true,
+          example: '["background"]',
+          help: 'Restrict "layers" to these layer kinds ("background", "foreground") or "references" to these lists ("characters", "scenes", "objects"). Omit for all.',
+        },
+        prompt: { type: 'multiline', optional: true, allowEmpty: true },
+        references: REFERENCE_LIST,
+      },
     },
   },
-  'generate.cancelLayer': { panelId: PANEL_ID, layerId: LAYER_ID },
-  'generate.layerReferences': { panelId: PANEL_ID, layerId: LAYER_ID },
-  'generate.entryReferences': {
-    kind: { type: 'enum', options: ['characters', 'scenes', 'objects'] },
-    id: { type: 'string', example: 'character_ab12cd' },
+  'generate.cancel': {
+    target: {
+      type: 'string',
+      example: 'all',
+      help: 'A layer or reference target, a queue item id (from "generate status"), or "all".',
+    },
   },
-  'generate.cancelReference': {
-    kind: { type: 'enum', options: ['characters', 'scenes', 'objects'] },
-    id: { type: 'string', example: 'character_ab12cd' },
-  },
-  'generate.maxReferenceImages': {},
-  'generate.layerPrompt': { panelId: PANEL_ID, layerId: LAYER_ID },
-  'generate.layerPromptParts': { panelId: PANEL_ID, layerId: LAYER_ID },
-  'generate.pending': {},
-  'generate.panelBrief': {
-    panelId: PANEL_ID,
+  'generate.inspect': {
+    target: {
+      type: 'string',
+      example: 'layer:panel_ab12cd/layer_ab12cd',
+      help: 'layer:<panelId>/<layerId>, reference:<kind>/<entryId>[/<variationId>] or panel:<panelId>.',
+    },
     includeImages: {
       type: 'json',
       optional: true,
       example: 'false',
-      help: 'false returns the brief without fetching the reference images. By default each image is saved to a file (see --out) and its path is given as "file".',
+      help: 'Panel targets only. false returns the brief without fetching the reference images. By default each image is saved to a file (see --out) and its path is given as "file".',
     },
   },
-  'generate.pendingPanels': {},
-  'generate.dirty': {
-    kinds: {
-      type: 'json',
+  'generate.status': {
+    scope: {
+      type: 'enum',
       optional: true,
-      example: '["background"]',
-      help: 'Restrict to these layer kinds: "background", "foreground". Omit to regenerate every dirty layer.',
+      options: ['queue', 'layers', 'references', 'panels'],
+      help: 'Default queue.',
     },
   },
-  'generate.pendingReferences': {},
-  'generate.dirtyReferences': {
-    kinds: {
-      type: 'json',
-      optional: true,
-      example: '["characters"]',
-      help: 'Restrict to these story-bible lists: "characters", "scenes", "objects". Omit to regenerate every dirty variation.',
-    },
-  },
-  'generate.getConfig': {},
-  'generate.setConfig': {
+  'generate.config': {
     config: {
       type: 'json',
+      optional: true,
       example: '@comfy-config.json',
-      help: 'The generator config, usually kept in a file: { "provider": "comfy", "comfy": { "baseUrl": "http://localhost:8188", "workflow": { ... }, "nodes": { "positivePromptNodeId": "6", "outputNodeId": "9" } } }.',
+      help: 'The generator config, usually kept in a file: { "provider": "comfy", "comfy": { "baseUrl": "http://localhost:8188", "workflow": { ... }, "nodes": { "positivePromptNodeId": "6", "outputNodeId": "9" } } }. Leave out to read the current one.',
     },
   },
-  'generate.testConnection': {},
-  'generate.referencePrompt': {
-    kind: { type: 'enum', options: ['characters', 'scenes', 'objects'] },
-    id: { type: 'string', example: 'character_ab12cd' },
-  },
-  'generate.referencePromptParts': {
-    kind: { type: 'enum', options: ['characters', 'scenes', 'objects'] },
-    id: { type: 'string', example: 'character_ab12cd' },
-  },
-  'generate.variationImage': {
-    kind: KIND,
-    entryId: { type: 'string', example: 'character_ab12cd' },
-    variationId: VARIATION_ID,
-    prompt: { type: 'multiline', optional: true, allowEmpty: true },
-    references: REFERENCE_LIST,
-  },
-  'generate.cancelVariation': {
-    kind: KIND,
-    entryId: { type: 'string', example: 'character_ab12cd' },
-    variationId: VARIATION_ID,
-  },
-  'generate.variationReferences': {
-    kind: KIND,
-    entryId: { type: 'string', example: 'character_ab12cd' },
-    variationId: VARIATION_ID,
-  },
-  'generate.variationPrompt': {
-    kind: KIND,
-    entryId: { type: 'string', example: 'character_ab12cd' },
-    variationId: VARIATION_ID,
-  },
-  'generate.variationPromptParts': {
-    kind: KIND,
-    entryId: { type: 'string', example: 'character_ab12cd' },
-    variationId: VARIATION_ID,
-  },
-  'generate.allVariations': {
-    kind: KIND,
-    entryId: { type: 'string', example: 'character_ab12cd' },
-    prompt: { type: 'multiline', optional: true, allowEmpty: true },
-    references: REFERENCE_LIST,
-  },
-  'generate.queue': {},
-  'generate.cancelQueueItem': { id: { type: 'string', example: '1' } },
+  'generate.test': {},
 };

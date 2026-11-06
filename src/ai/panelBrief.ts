@@ -168,7 +168,7 @@ const INSTRUCTIONS =
   "object's design exactly as in its reference. Images with role background/layer are the art as " +
   'placed in the layout; role subject are the clean design references. ' +
   '3) Generate at the aspect ratio in `panel.size` (`panel.size.pixels` if it allows). ' +
-  '4) Save it: `media upload <file> --thumbnail <thumbnail file>`, then `panels setImage <panel.id> <media id>`. ' +
+  '4) Save it: `media upload <file> --thumbnail <thumbnail file>`, then `panels update <panel.id> --mediaId <media id>`. ' +
   '`warnings` are advice only: a panel with no background or no layers can still be generated from ' +
   'its prompt alone, layers and a background only make the result stronger.';
 
@@ -181,7 +181,7 @@ function subjectReferenceId(entry: StoryEntry, variationId?: string): string | u
 /**
  * The panel brief, without any image data: the parts to write the prompt from, every visible layer
  * with its place in the panel, the numbered reference images (ids only), and warnings. See
- * generate.panelBrief for the version that also fetches the images.
+ * generate.inspect("panel:<panelId>") for the version that also fetches the images.
  */
 export function buildPanelBrief(project: ComicProject, panelId: string): PanelBrief {
   const panel = findPanel(project, panelId);

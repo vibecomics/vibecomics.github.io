@@ -25,7 +25,7 @@ export function createBlankProject(
 export function normalizeProject(p: ComicProject): void {
   // style replaced outline (a synopsis stitched into every image's prompt was drowning it out): an
   // old project.json only has outline, so carry it over rather than lose it or fail to load. It's
-  // likely far more than a STYLE paragraph should be; trim it down with metadata.setStyle.
+  // likely far more than a STYLE paragraph should be; trim it down with metadata.update.
   const legacy = p.metadata as unknown as { outline?: string };
   if (p.metadata.style === undefined && typeof legacy.outline === 'string') {
     p.metadata.style = legacy.outline;

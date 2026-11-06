@@ -125,10 +125,19 @@ test('a project persists on Drive and is picked up by the next command', async (
   // Separate runs share the open project through the state file, and each saves before it exits.
   const page = await run('page', 'add', '--title', 'Chapter 1');
   assert.equal(page.json().title, 'Chapter 1');
-  assert.equal((await run('page', 'count')).json(), 2);
+  assert.equal((await run('page', 'list')).json().length, 2);
   assert.equal(google.projectIn(folder.id).pages.length, 2);
 
-  const split = await run('panels', 'splitEvenly', page.json().panels[0].id, 'vertical', '2');
+  const split = await run(
+    'panels',
+    'split',
+    '--axis',
+    'vertical',
+    '--panelId',
+    page.json().panels[0].id,
+    '--count',
+    '2'
+  );
   assert.equal(split.json().length, 2);
 
   const layer = await run(
@@ -143,9 +152,11 @@ test('a project persists on Drive and is picked up by the next command', async (
 
   const panelId = split.json()[0].id;
   const layerId = layer.json().id;
-  assert.equal((await run('layers', 'flip', panelId, layerId)).json().flipX, true);
+  const flip = (flipX: boolean) =>
+    run('layers', 'update', panelId, layerId, JSON.stringify({ flipX }));
+  assert.equal((await flip(true)).json().flipX, true);
   assert.equal(google.projectIn(folder.id).pages[1].panels[0].layers[0].flipX, true);
-  assert.equal((await run('layers', 'flip', panelId, layerId)).json().flipX, false);
+  assert.equal((await flip(false)).json().flipX, false);
 
   // The current page is remembered: with none given, panels list shows page 1.
   assert.equal((await run('panels', 'list')).json().length, 2);
@@ -203,7 +214,7 @@ test('a layer is dirty while its prompt has no matching image, and clean once on
 
   // Unrelated edits (geometry, flip) never touch dirty.
   await run('layers', 'update', panelId, layerId, '{"prompt":"Back to leaping"}');
-  const flipped = await run('layers', 'flip', panelId, layerId);
+  const flipped = await run('layers', 'update', panelId, layerId, '{"flipX":true}');
   assert.equal(flipped.json().dirty, true);
 });
 
@@ -245,7 +256,7 @@ test('--project opens another project first, and other projects are listed', asy
   await login();
   await run('storage', 'createProject', 'One');
   await run('storage', 'createProject', 'Two');
-  await run('metadata', 'setStyle', 'Style of two');
+  await run('metadata', 'update', '--style', 'Style of two');
 
   const listed = await run('storage', 'listProjects');
   assert.deepEqual(
@@ -284,7 +295,7 @@ test('media: upload a file with a thumbnail, look at it, delete it', async () =>
   const named = await run('media', 'upload', 'hero.png', '--name', 'hero-front.png');
   assert.equal(named.json().name, 'hero-front.png');
   assert.equal(named.json().thumbnailFileName, undefined);
-  assert.match(named.err, /note: this image has no thumbnail.*media uploadThumbnail/);
+  assert.match(named.err, /note: this image has no thumbnail.*media update/);
 
   const removed = await run('media', 'delete', item.id);
   assert.deepEqual(removed.json(), { layers: 0, entries: 0 });
@@ -296,10 +307,10 @@ test('JSON can come from a file with @', async () => {
   await login();
   const { id } = (await run('storage', 'createProject', 'Files')).json();
   fs.writeFileSync(path.join(work, 'outline.txt'), 'Premise: a cat. Twist: it is a dog.');
-  await run('metadata', 'setStyle', '@outline.txt');
+  await run('metadata', 'update', '--style', '@outline.txt');
   assert.equal(google.projectIn(id).metadata.style, 'Premise: a cat. Twist: it is a dog.');
 
-  const panelId = (await run('page', 'current')).json().panels[0].id;
+  const panelId = (await run('page', 'select')).json().panels[0].id;
   fs.writeFileSync(path.join(work, 'bubble.json'), '{"text":"Hi!","kind":"speech"}');
   const bubble = await run('bubbles', 'add', panelId, '@bubble.json');
   assert.equal(bubble.json().text, 'Hi!');
@@ -325,13 +336,13 @@ test('mistakes are reported clearly and change nothing', async () => {
 
   assert.match((await run('panels', 'get')).err, /Missing panelId/);
   assert.match(
-    (await run('panels', 'split', 'p', 'sideways')).err,
+    (await run('panels', 'split', '--axis', 'sideways', '--panelId', 'p')).err,
     /axis must be one of: horizontal, vertical/
   );
   assert.match((await run('page', 'select', 'two')).err, /"two" is not a number/);
   assert.match((await run('layers', 'add', 'p', '{oops')).err, /not valid JSON/);
-  assert.match((await run('page', 'count', '--wat')).err, /Unknown option --wat/);
-  assert.match((await run('page', 'count', 'extra')).err, /Too many arguments/);
+  assert.match((await run('page', 'list', '--wat')).err, /Unknown option --wat/);
+  assert.match((await run('page', 'list', 'extra')).err, /Too many arguments/);
   assert.match(
     (await run('media', 'upload', 'missing.png')).err,
     /Cannot read the file "missing.png"/
@@ -343,24 +354,24 @@ test('mistakes are reported clearly and change nothing', async () => {
   const thrown = await run('panels', 'delete', 'no-such-panel');
   assert.equal(thrown.json(), false);
 
-  const preview = await run('page', 'openPreview');
+  const preview = await run('page', 'preview');
   assert.equal(preview.code, 1);
   assert.match(preview.err, /no preview in the CLI/);
 
   assert.equal(content(), before);
 });
 
-test('storage connectWithS3 reports a malformed connection string clearly', async () => {
+test('storage connect reports a malformed connection string clearly', async () => {
   const { run } = setup();
-  const result = await run('storage', 'connectWithS3', 'http://localhost:1');
+  const result = await run('storage', 'connect', 'http://localhost:1');
   assert.equal(result.code, 1);
   assert.match(result.err, /must start with s3:\/\//);
 });
 
-test('storage connectWithS3 reports an unreachable endpoint clearly', async () => {
+test('storage connect reports an unreachable endpoint clearly', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'vibecomics-home-'));
   let err = '';
-  const code = await runCli(['storage', 'connectWithS3', 's3://key:secret@127.0.0.1:1/my-bucket'], {
+  const code = await runCli(['storage', 'connect', 's3://key:secret@127.0.0.1:1/my-bucket'], {
     env: { VIBECOMICS_HOME: home },
     cwd: fs.mkdtempSync(path.join(os.tmpdir(), 'vibecomics-work-')),
     stdout: () => undefined,
@@ -413,11 +424,11 @@ test('a project persists on an S3 bucket and is picked up by the next command', 
     return { code, out, err, json: () => JSON.parse(out) };
   }
 
-  const connected = await run('storage', 'connectWithS3', connectionString);
+  const connected = await run('storage', 'connect', connectionString);
   assert.equal(connected.code, 0, connected.err);
   const connectionId = `s3:${endpoint}/${bucket}`;
 
-  const connections = (await run('storage', 'listConnections')).json();
+  const connections = (await run('storage', 'status')).json().connections;
   assert.deepEqual(
     connections.find((c: { id: string }) => c.id === connectionId),
     {
@@ -442,16 +453,16 @@ test('a project persists on an S3 bucket and is picked up by the next command', 
   // A separate command picks the open project back up from the state file, same as with Drive.
   const page = await run('page', 'add', '--title', 'Chapter 1');
   assert.equal(page.json().title, 'Chapter 1');
-  assert.equal((await run('page', 'count')).json(), 2);
+  assert.equal((await run('page', 'list')).json().length, 2);
 
-  const disconnected = await run('storage', 'disconnectConnection', connectionId);
+  const disconnected = await run('storage', 'disconnect', connectionId);
   assert.equal(disconnected.code, 0, disconnected.err);
   assert.equal((await run('storage', 'listProjects')).code, 1);
 });
 
 test('every command has help that starts with its own usage line', async () => {
   const { run } = setup();
-  assert.ok(COMMAND_TABLE.commands.length >= 60);
+  assert.ok(COMMAND_TABLE.commands.length >= 50);
   for (const command of COMMAND_TABLE.commands) {
     const [namespace, name] = command.path.split('.');
     const help = await run('help', namespace, name);
@@ -533,7 +544,7 @@ test('--project with an unknown name fails and keeps the current project', async
   const result = await run('metadata', 'get', '--project', 'Missing');
   assert.equal(result.code, 1);
   assert.match(result.err, /No project folder "Missing"/);
-  assert.equal((await run('page', 'count')).json(), 1);
+  assert.equal((await run('page', 'list')).json().length, 1);
 });
 
 test('the rest of the API works through the command line', async () => {
@@ -542,28 +553,45 @@ test('the rest of the API works through the command line', async () => {
   const { id: folderId } = (await run('storage', 'createProject', 'Everything')).json();
   const saved = () => google.projectIn(folderId);
 
-  // Story bible
+  // Reference entries
   const hero = (
-    await run('characters', 'create', '{"name":"Mira","description":"Red hair","linkIds":[]}')
+    await run(
+      'reference',
+      'create',
+      'characters',
+      '{"name":"Mira","description":"Red hair","linkIds":[]}'
+    )
   ).json();
   assert.equal(hero.name, 'Mira');
-  await run('characters', 'update', hero.id, '{"description":"Short red hair"}');
-  assert.equal((await run('characters', 'get', hero.id)).json().description, 'Short red hair');
-  const scene = (await run('scenes', 'create', '{"name":"Roof"}')).json();
-  const prop = (await run('objects', 'create', '{"name":"Satchel"}')).json();
-  assert.equal((await run('scenes', 'list')).json()[0].id, scene.id);
-  assert.equal((await run('objects', 'list')).json()[0].id, prop.id);
-  assert.equal((await run('objects', 'delete', prop.id)).json(), true);
+  await run('reference', 'update', 'characters', hero.id, '{"description":"Short red hair"}');
+  assert.equal(
+    (await run('reference', 'get', 'characters', hero.id)).json().description,
+    'Short red hair'
+  );
+  const scene = (await run('reference', 'create', 'scenes', '{"name":"Roof"}')).json();
+  const prop = (await run('reference', 'create', 'objects', '{"name":"Satchel"}')).json();
+  assert.equal((await run('reference', 'list', 'scenes')).json()[0].id, scene.id);
+  assert.equal((await run('reference', 'list', 'objects')).json()[0].id, prop.id);
+  assert.equal((await run('reference', 'delete', 'objects', prop.id)).json(), true);
   assert.equal(saved().metadata.characters[0].description, 'Short red hair');
 
   // Page size, outline, page and panel edits (object flags)
-  await run('metadata', 'setPageSize', '{"label":"Square","widthIn":8,"heightIn":8}');
+  await run('metadata', 'update', '--pageSize', '{"label":"Square","widthIn":8,"heightIn":8}');
   assert.equal(saved().metadata.pageSize.label, 'Square');
-  await run('metadata', 'setStyle', '');
+  await run('metadata', 'update', '--style', '');
   const page = (await run('page', 'add')).json();
   assert.equal(page.title, '');
   const [top, bottom] = (
-    await run('panels', 'split', page.panels[0].id, 'horizontal', '40')
+    await run(
+      'panels',
+      'split',
+      '--axis',
+      'horizontal',
+      '--panelId',
+      page.panels[0].id,
+      '--position',
+      '40'
+    )
   ).json();
   assert.equal(bottom.y, 40);
   assert.equal(
@@ -571,25 +599,27 @@ test('the rest of the API works through the command line', async () => {
     'Establishing'
   );
   assert.equal((await run('panels', 'resize', top.id, 'bottom', '45')).json().length, 2);
-  assert.equal((await run('panels', 'size', top.id)).json().pixels.width > 0, true);
-  assert.equal((await run('panels', 'splitAcross', 'vertical', '50')).json().length, 4);
+  assert.equal((await run('panels', 'get', top.id)).json().size.pixels.width > 0, true);
+  assert.equal(
+    (await run('panels', 'split', '--axis', 'vertical', '--position', '50')).json().length,
+    4
+  );
 
   // Layers: numbers and words for "move"
   const a = (await run('layers', 'add', top.id, '{"prompt":"one"}')).json();
   const b = (await run('layers', 'add', top.id, '{"prompt":"two"}')).json();
-  assert.deepEqual(
-    (await run('layers', 'move', top.id, a.id, 'top')).json().map((l: { id: string }) => l.id),
-    [b.id, a.id]
-  );
-  assert.deepEqual(
-    (await run('layers', 'move', top.id, a.id, '0')).json().map((l: { id: string }) => l.id),
-    [a.id, b.id]
-  );
+  const order = async () =>
+    (await run('layers', 'list', top.id)).json().map((l: { id: string }) => l.id);
+  await run('layers', 'update', top.id, a.id, '{"order":"top"}');
+  assert.deepEqual(await order(), [b.id, a.id]);
+  await run('layers', 'update', top.id, a.id, '{"order":0}');
+  assert.deepEqual(await order(), [a.id, b.id]);
+  assert.match((await run('layers', 'update', top.id, a.id, '{"order":"sideways"}')).err, /Order/);
   assert.equal(
     (await run('layers', 'update', top.id, a.id, '{"opacity":0.5}')).json().opacity,
     0.5
   );
-  assert.equal((await run('layers', 'size', top.id, a.id)).json().pixels.width > 0, true);
+  assert.equal((await run('layers', 'get', top.id, a.id)).json().size.pixels.width > 0, true);
   assert.equal((await run('layers', 'delete', top.id, b.id)).json(), true);
 
   // Bubbles
@@ -609,7 +639,7 @@ test('the rest of the API works through the command line', async () => {
   fs.writeFileSync(path.join(work, 'art.png'), PNG);
   const media = (await run('media', 'upload', 'art.png')).json();
   assert.equal(media.thumbnailFileName, undefined);
-  const fixed = (await run('media', 'uploadThumbnail', media.id, 'art.png')).json();
+  const fixed = (await run('media', 'update', media.id, '--thumbnail', 'art.png')).json();
   assert.ok(fixed.thumbnailFileName);
   assert.equal((await run('media', 'get', media.id)).json().id, media.id);
 
@@ -618,12 +648,12 @@ test('the rest of the API works through the command line', async () => {
   fs.writeFileSync(path.join(work, 'project.json'), JSON.stringify(snapshot));
   assert.equal((await run('project', 'load', '@project.json')).json().ok, true);
   assert.equal(saved().title, 'Loaded from a file');
-  assert.equal((await run('page', 'current')).json().number, 0);
+  assert.equal((await run('page', 'select')).json().number, 0);
 
   // Save, close, disconnect
   assert.equal((await run('storage', 'save')).json().ok, true);
   assert.equal((await run('storage', 'closeProject')).code, 0);
-  assert.equal((await run('page', 'count')).json(), 0);
+  assert.equal((await run('page', 'list')).json().length, 0);
   assert.equal((await run('page', 'add')).code, 1);
   assert.equal((await run('storage', 'status')).json().connected, true);
   await run('storage', 'disconnect');
@@ -666,13 +696,92 @@ test('pages and panels have titles, and layers have prompts, through the CLI', a
   assert.equal((await run('panels', 'update', 'no-such-panel', '--title', 'x')).code, 1);
 
   // A layer's prompt is what its own image shows, and reads back next to it
-  const [, fresh] = (await run('panels', 'split', panelId, 'vertical', '50')).json();
+  const [, fresh] = (
+    await run('panels', 'split', '--axis', 'vertical', '--panelId', panelId, '--position', '50')
+  ).json();
   const layer = (
     await run('layers', 'add', fresh.id, '{"kind":"background","prompt":"Rooftop"}')
   ).json();
   const read = (await run('page', 'select', '1')).json();
   assert.equal(read.panels[1].layers[0].id, layer.id);
   assert.equal(read.panels[1].layers[0].prompt, 'Rooftop');
+});
+
+test('panels split: one panel in two, equal parts, or a line across the page; bad mixes are refused', async () => {
+  const { run, login } = setup();
+  await login();
+  await run('storage', 'createProject', 'Splits');
+  const panelId = (await run('panels', 'list')).json()[0].id;
+
+  const both = await run(
+    'panels',
+    'split',
+    '--axis',
+    'vertical',
+    '--panelId',
+    panelId,
+    '--count',
+    '2',
+    '--position',
+    '30'
+  );
+  assert.match(both.err, /either count or position/);
+  assert.match(
+    (await run('panels', 'split', '--axis', 'vertical', '--count', '2')).err,
+    /count needs a panelId/
+  );
+  assert.match(
+    (await run('panels', 'split', '--axis', 'vertical')).err,
+    /Give a panelId to cut one panel, or a position/
+  );
+  assert.equal((await run('panels', 'list')).json().length, 1, 'refused splits change nothing');
+
+  const parts = await run('panels', 'split', '--axis', 'horizontal', '--panelId', panelId);
+  assert.equal(parts.json().length, 2);
+  assert.equal(parts.json()[1].height, 50, 'position defaults to 50');
+});
+
+test('panel image: set, hide, show and remove through panels update', async () => {
+  const { run, login, work } = setup();
+  await login();
+  fs.writeFileSync(path.join(work, 'bg.png'), PNG);
+  await run('storage', 'createProject', 'PanelImage');
+  const panelId = (await run('panels', 'list')).json()[0].id;
+  assert.match(
+    (await run('panels', 'update', panelId, '--imageVisible', 'false')).err,
+    /no panel image/
+  );
+  const media = (await run('media', 'upload', 'bg.png')).json();
+  const set = (await run('panels', 'update', panelId, '--mediaId', media.id)).json();
+  assert.equal(set.image.mediaId, media.id);
+  assert.equal(
+    (await run('panels', 'update', panelId, '--imageVisible', 'false')).json().image.visible,
+    false
+  );
+  const removed = (await run('panels', 'update', panelId, '{"mediaId":null}')).json();
+  assert.equal('image' in removed, false);
+});
+
+test('generate: status, cancel, batch and config are validated', async () => {
+  const { run, login } = setup();
+  await login();
+  await run('storage', 'createProject', 'Generate');
+  assert.deepEqual((await run('generate', 'status')).json(), []);
+  assert.deepEqual((await run('generate', 'status', 'layers')).json(), []);
+  assert.deepEqual((await run('generate', 'status', 'references')).json(), []);
+  assert.match((await run('generate', 'status', 'nope')).err, /must be one of/);
+  assert.equal((await run('generate', 'cancel', 'all')).json(), 0);
+  assert.equal((await run('generate', 'cancel', '99')).json(), 0);
+  assert.match((await run('generate', 'cancel', 'panel:p')).err, /Only a layer or reference/);
+  assert.match(
+    (await run('generate', 'batch', 'layers', '--kinds', '["sideways"]')).err,
+    /Layer kind/
+  );
+  assert.match((await run('generate', 'batch', 'layer:a/b')).err, /batch needs/);
+  assert.match((await run('generate', 'run', 'reference:characters/x/*')).err, /generate.batch/);
+  assert.match((await run('generate', 'run', 'panel:p')).err, /outside the CLI/);
+  assert.equal((await run('generate', 'config')).json(), null);
+  assert.equal((await run('generate', 'test')).json().ok, false);
 });
 
 test('pages can be reordered from the CLI, and the cover stays first', async () => {
@@ -693,7 +802,7 @@ test('pages can be reordered from the CLI, and the cover stays first', async () 
   assert.equal(moved.json().title, 'C');
   assert.equal(moved.json().number, 1);
   assert.equal(await order(), '0:Cover 1:C 2:A 3:B');
-  const shown = (await run('page', 'current')).json();
+  const shown = (await run('page', 'select')).json();
   assert.equal(shown.title, 'B');
   assert.equal(shown.number, 3);
 
@@ -701,8 +810,8 @@ test('pages can be reordered from the CLI, and the cover stays first', async () 
   await run('page', 'select', '1');
   await run('page', 'move', '1', '3');
   assert.equal(await order(), '0:Cover 1:A 2:B 3:C');
-  assert.equal((await run('page', 'current')).json().title, 'C');
-  assert.equal((await run('page', 'current')).json().number, 3);
+  assert.equal((await run('page', 'select')).json().title, 'C');
+  assert.equal((await run('page', 'select')).json().number, 3);
 
   // A neighbour swap, and a move to the same place changes nothing
   await run('page', 'move', '1', '2');
@@ -844,13 +953,13 @@ test('reading and writing keep the Drive version in step, so a lone CLI never co
   const before = google.versionOf(folderId)!;
   for (let i = 0; i < 4; i++) {
     assert.equal((await run('page', 'add', '--title', `P${i}`)).code, 0);
-    assert.equal((await run('metadata', 'setStyle', `outline ${i}`)).code, 0);
+    assert.equal((await run('metadata', 'update', '--style', `outline ${i}`)).code, 0);
   }
   assert.equal(google.versionOf(folderId), before + 8); // exactly one write per changing command
   assert.equal(google.projectIn(folderId).pages.length, 5);
   // A command that changes nothing writes nothing.
-  await run('page', 'count');
-  await run('page', 'current');
+  await run('page', 'list');
+  await run('page', 'select');
   assert.equal(google.versionOf(folderId), before + 8);
 });
 
@@ -859,8 +968,8 @@ test('layers and images can say what they show, and names can be changed', async
   await login();
   const { id: folderId } = (await run('storage', 'createProject', 'Cast')).json();
   const saved = () => google.projectIn(folderId);
-  const mara = (await run('characters', 'create', '{"name":"Mara"}')).json();
-  const scooter = (await run('objects', 'create', '{"name":"Red scooter"}')).json();
+  const mara = (await run('reference', 'create', 'characters', '{"name":"Mara"}')).json();
+  const scooter = (await run('reference', 'create', 'objects', '{"name":"Red scooter"}')).json();
   const panelId = saved().pages[0].panels[0].id;
 
   // A layer's subject: set, change, clear, and never an id that does not exist
@@ -900,7 +1009,7 @@ test('layers and images can say what they show, and names can be changed', async
 
   // Deleting a character or object lets go of everything it was the subject of
   await run('layers', 'update', panelId, layer.id, JSON.stringify({ subjectId: scooter.id }));
-  await run('objects', 'delete', scooter.id);
+  await run('reference', 'delete', 'objects', scooter.id);
   assert.equal('subjectId' in saved().pages[0].panels[0].layers[0], false);
   assert.equal('subjectId' in saved().metadata.media[0], false);
   assert.equal(saved().metadata.media[0].name, 'mara-running.png');
@@ -911,8 +1020,8 @@ test('a background says which scene it is set in, and images can be art of a sce
   await login();
   const { id: folderId } = (await run('storage', 'createProject', 'Scenes')).json();
   const saved = () => google.projectIn(folderId);
-  const roof = (await run('scenes', 'create', '{"name":"Rooftop"}')).json();
-  const mara = (await run('characters', 'create', '{"name":"Mara"}')).json();
+  const roof = (await run('reference', 'create', 'scenes', '{"name":"Rooftop"}')).json();
+  const mara = (await run('reference', 'create', 'characters', '{"name":"Mara"}')).json();
   const panelId = saved().pages[0].panels[0].id;
 
   const bg = (
@@ -938,7 +1047,7 @@ test('a background says which scene it is set in, and images can be art of a sce
   await run('media', 'update', art.id, JSON.stringify({ sceneId: roof.id }));
 
   // Deleting the scene lets go of the background and the image
-  await run('scenes', 'delete', roof.id);
+  await run('reference', 'delete', 'scenes', roof.id);
   assert.equal('sceneId' in saved().pages[0].panels[0].layers[0], false);
   assert.equal('sceneId' in saved().metadata.media[0], false);
 });
@@ -956,7 +1065,7 @@ test('lint reports problems with fixes, exits non-zero on errors, and a fix clea
 
   // A layer that shows a character, which is then deleted through a project reload (a stale link)
   const mara = (
-    await run('characters', 'create', '{"name":"Mara","description":"Red hair"}')
+    await run('reference', 'create', 'characters', '{"name":"Mara","description":"Red hair"}')
   ).json();
   const layer = (
     await run(
@@ -993,25 +1102,20 @@ test('variations: default seeding, CRUD, layer pinning, and generate() through t
   const { run, login } = setup();
   await login();
   await run('storage', 'createProject', 'Variations');
-  const panelId = (await run('page', 'current')).json().panels[0].id;
+  const panelId = (await run('page', 'select')).json().panels[0].id;
 
   // characters.create seeds Front/Back/Side view by default; objects/scenes start with none.
-  const mira = (await run('characters', 'create', '{"name":"Mira"}')).json();
+  const mira = (await run('reference', 'create', 'characters', '{"name":"Mira"}')).json();
   assert.deepEqual(
     mira.variations.map((v: { name: string }) => v.name),
     ['Front view', 'Back view', 'Side view']
   );
-  const locker = (await run('objects', 'create', '{"name":"Locker"}')).json();
+  const locker = (await run('reference', 'create', 'objects', '{"name":"Locker"}')).json();
   assert.deepEqual(locker.variations, []);
 
-  // variations list/get
-  const [front, back] = (await run('variations', 'list', 'characters', mira.id)).json();
+  // An entry carries its variations, so reference get is how to read them.
+  const [front, back] = mira.variations;
   assert.equal(front.name, 'Front view');
-  assert.equal(
-    (await run('variations', 'get', 'characters', mira.id, front.id)).json().name,
-    'Front view'
-  );
-  assert.equal((await run('variations', 'get', 'characters', mira.id, 'nope')).json(), null);
 
   // variations add/update/delete, scoped to an object this time
   const open = (
@@ -1032,11 +1136,11 @@ test('variations: default seeding, CRUD, layer pinning, and generate() through t
     'media_ab12cd'
   );
   assert.equal(
-    (await run('objects', 'get', locker.id)).json().variations[0].imageIds[0],
+    (await run('reference', 'get', 'objects', locker.id)).json().variations[0].imageIds[0],
     'media_ab12cd'
   );
   assert.equal((await run('variations', 'delete', 'objects', locker.id, open.id)).json(), true);
-  assert.deepEqual((await run('objects', 'get', locker.id)).json().variations, []);
+  assert.deepEqual((await run('reference', 'get', 'objects', locker.id)).json().variations, []);
 
   // A layer can pin itself to one of its subject's variations; the id must belong to that subject,
   // and switching subjects clears the pin.
@@ -1058,37 +1162,43 @@ test('variations: default seeding, CRUD, layer pinning, and generate() through t
   );
   assert.equal(badVariation.code, 1);
   assert.match(badVariation.err, /Variation "nope" not found/);
-  const scooter = (await run('objects', 'create', '{"name":"Scooter"}')).json();
+  const scooter = (await run('reference', 'create', 'objects', '{"name":"Scooter"}')).json();
   const switched = (
     await run('layers', 'update', panelId, layer.id, JSON.stringify({ subjectId: scooter.id }))
   ).json();
   assert.equal('variationId' in switched, false);
 
   // generate.variation* pure helpers (prompt/reference building) need no configured generator.
-  await run('metadata', 'setStyle', 'STYLE: watercolor comic.');
-  await run('characters', 'update', mira.id, '{"description":"Red hair, green coat."}');
-  const refs = (
-    await run('generate', 'variationReferences', 'characters', mira.id, front.id)
-  ).json();
-  assert.deepEqual(refs, []);
-  const prompt = (await run('generate', 'variationPrompt', 'characters', mira.id, front.id)).json();
-  assert.match(prompt, /Front view, facing the camera directly/);
-  const parts = (
-    await run('generate', 'variationPromptParts', 'characters', mira.id, front.id)
-  ).json();
+  await run('metadata', 'update', '--style', 'STYLE: watercolor comic.');
+  await run(
+    'reference',
+    'update',
+    'characters',
+    mira.id,
+    '{"description":"Red hair, green coat."}'
+  );
+  const target = `reference:characters/${mira.id}/${front.id}`;
+  const inspected = (await run('generate', 'inspect', target)).json();
+  assert.deepEqual(inspected.references, []);
+  assert.match(inspected.prompt, /Front view, facing the camera directly/);
   assert.deepEqual(
-    parts.map((p: { label: string }) => p.label),
+    inspected.parts.map((p: { label: string }) => p.label),
     ['Style', 'Character', 'Technical requirements', 'Variation']
   );
+  // The whole entry (no variation) has its own prompt without the variation's text.
+  const entry = (await run('generate', 'inspect', `reference:characters/${mira.id}`)).json();
+  assert.doesNotMatch(entry.prompt, /Front view, facing the camera directly/);
+  assert.match((await run('generate', 'inspect', 'layer:nope')).err, /Bad target/);
+  assert.match((await run('generate', 'inspect', 'cat:1/2')).err, /Bad target/);
 
   // Actually generating needs a configured image generator, same as every other generate.* call.
-  const noGenerator = await run('generate', 'variationImage', 'characters', mira.id, front.id);
+  const noGenerator = await run('generate', 'run', target);
   assert.equal(noGenerator.code, 1);
   assert.match(noGenerator.err, /No image generator is configured/);
 
   // allVariations, like generate.dirty, never fails the whole call: a failure on one variation
   // (here, all of them, for lack of a configured generator) is reported per item instead.
-  const outcomes = (await run('generate', 'allVariations', 'characters', mira.id)).json();
+  const outcomes = (await run('generate', 'batch', `reference:characters/${mira.id}/*`)).json();
   assert.equal(outcomes.length, 3);
   assert.ok(outcomes.every((o: { ok: boolean }) => o.ok === false));
   assert.match(outcomes[0].error, /No image generator is configured/);
@@ -1100,11 +1210,11 @@ test('panel images: a brief for the LLM, saving the image, and going out of date
   const { id: folderId } = (await run('storage', 'createProject', 'Panels')).json();
   const saved = () => google.projectIn(folderId);
   const panelId = saved().pages[0].panels[0].id;
-  await run('metadata', 'setStyle', 'STYLE: watercolor comic.');
+  await run('metadata', 'update', '--style', 'STYLE: watercolor comic.');
   const labels = (parts: Array<{ label: string }>) => parts.map((p) => p.label);
 
   // With no layers and no prompt the brief still works; it only warns.
-  const bare = await run('generate', 'panelBrief', panelId, 'false');
+  const bare = await run('generate', 'inspect', `panel:${panelId}`, 'false');
   assert.equal(bare.code, 0, bare.err);
   assert.deepEqual(labels(bare.json().promptParts), ['Style', 'Technical requirements']);
   assert.equal(bare.json().promptParts.length, 2, 'parts are returned, not a stitched prompt');
@@ -1114,11 +1224,11 @@ test('panel images: a brief for the LLM, saving the image, and going out of date
   assert.ok(warnings.some((w) => /no visible foreground layers/.test(w)));
   assert.ok(warnings.some((w) => /nothing to describe/.test(w)));
   assert.deepEqual(bare.json().references, []);
-  assert.equal((await run('generate', 'pendingPanels')).json().length, 0);
+  assert.equal((await run('generate', 'status', 'panels')).json().length, 0);
 
   // A panel prompt alone is enough: still just warnings, and the nothing-to-describe one is gone.
   await run('panels', 'update', panelId, '--prompt', 'Golden hour, low sun from the left.');
-  const prompted = (await run('generate', 'panelBrief', panelId, 'false')).json();
+  const prompted = (await run('generate', 'inspect', `panel:${panelId}`, 'false')).json();
   assert.deepEqual(labels(prompted.promptParts), [
     'Style',
     'Panel prompt',
@@ -1133,13 +1243,13 @@ test('panel images: a brief for the LLM, saving the image, and going out of date
   const bgMedia = (await run('media', 'upload', 'bg.png')).json();
   const maraMedia = (await run('media', 'upload', 'mara.png')).json();
   const roof = (
-    await run('scenes', 'create', '{"name":"Rooftop","description":"A rooftop."}')
+    await run('reference', 'create', 'scenes', '{"name":"Rooftop","description":"A rooftop."}')
   ).json();
   const mara = (
-    await run('characters', 'create', '{"name":"Mara","description":"Red hair."}')
+    await run('reference', 'create', 'characters', '{"name":"Mara","description":"Red hair."}')
   ).json();
-  await run('metadata', 'setCharacterStyle', 'CHAR: bold outlines.');
-  await run('metadata', 'setSceneStyle', 'SCENE: soft washes.');
+  await run('metadata', 'update', '--characterStyle', 'CHAR: bold outlines.');
+  await run('metadata', 'update', '--sceneStyle', 'SCENE: soft washes.');
   await run(
     'layers',
     'add',
@@ -1164,7 +1274,7 @@ test('panel images: a brief for the LLM, saving the image, and going out of date
   ).json();
 
   const outDir = path.join(work, 'brief');
-  const brief = (await run('generate', 'panelBrief', panelId, '--out', outDir)).json();
+  const brief = (await run('generate', 'inspect', `panel:${panelId}`, '--out', outDir)).json();
   assert.equal(brief.version, 1);
   assert.deepEqual(labels(brief.promptParts), [
     'Style',
@@ -1199,43 +1309,43 @@ test('panel images: a brief for the LLM, saving the image, and going out of date
 
   // Saving the panel image: it takes the layers' place and is current until a layer changes.
   const panelMedia = (await run('media', 'upload', 'bg.png', '--name', 'panel.png')).json();
-  assert.equal((await run('panels', 'setImage', panelId, 'media-nope')).code, 1);
-  const withImage = (await run('panels', 'setImage', panelId, panelMedia.id)).json();
+  assert.equal((await run('panels', 'update', panelId, '--mediaId', 'media-nope')).code, 1);
+  const withImage = (await run('panels', 'update', panelId, '--mediaId', panelMedia.id)).json();
   assert.equal(withImage.image.mediaId, panelMedia.id);
   assert.equal(withImage.image.visible, true);
-  assert.equal((await run('generate', 'pendingPanels')).json().length, 0);
+  assert.equal((await run('generate', 'status', 'panels')).json().length, 0);
   assert.equal(
-    (await run('generate', 'panelBrief', panelId, 'false')).json().currentImage.dirty,
+    (await run('generate', 'inspect', `panel:${panelId}`, 'false')).json().currentImage.dirty,
     false
   );
 
   // A bubble sits above the panel image, so it does not make it stale; moving a layer does.
   await run('bubbles', 'add', panelId, '{"kind":"speech","text":"Hi","x":5,"y":5,"width":20}');
-  assert.equal((await run('generate', 'pendingPanels')).json().length, 0);
+  assert.equal((await run('generate', 'status', 'panels')).json().length, 0);
   await run('layers', 'update', panelId, marasLayer.id, '{"x":10}');
-  const pending = (await run('generate', 'pendingPanels')).json();
+  const pending = (await run('generate', 'status', 'panels')).json();
   assert.equal(pending.length, 1);
   assert.equal(pending[0].panelId, panelId);
   assert.equal(
-    (await run('generate', 'panelBrief', panelId, 'false')).json().currentImage.dirty,
+    (await run('generate', 'inspect', `panel:${panelId}`, 'false')).json().currentImage.dirty,
     true
   );
 
   // A new image replaces it, keeps the old one in history, and is current again.
   const second = (await run('media', 'upload', 'mara.png', '--name', 'panel2.png')).json();
-  const replaced = (await run('panels', 'setImage', panelId, second.id)).json();
+  const replaced = (await run('panels', 'update', panelId, '--mediaId', second.id)).json();
   assert.deepEqual(replaced.image.mediaHistory, [panelMedia.id]);
-  assert.equal((await run('generate', 'pendingPanels')).json().length, 0);
+  assert.equal((await run('generate', 'status', 'panels')).json().length, 0);
 
   // Hide it (it stays), show it again, then remove it.
-  const hidden = (await run('panels', 'setImageVisible', panelId, 'false')).json();
+  const hidden = (await run('panels', 'update', panelId, '--imageVisible', 'false')).json();
   assert.equal(hidden.image.visible, false);
   assert.equal(saved().pages[0].panels[0].image.visible, false);
   assert.equal(
-    (await run('panels', 'setImageVisible', panelId, 'true')).json().image.visible,
+    (await run('panels', 'update', panelId, '--imageVisible', 'true')).json().image.visible,
     true
   );
-  const cleared = (await run('panels', 'clearImage', panelId)).json();
+  const cleared = (await run('panels', 'update', panelId, '{"mediaId":null}')).json();
   assert.equal('image' in cleared, false);
-  assert.equal((await run('panels', 'setImageVisible', panelId, 'true')).code, 1);
+  assert.equal((await run('panels', 'update', panelId, '--imageVisible', 'true')).code, 1);
 });

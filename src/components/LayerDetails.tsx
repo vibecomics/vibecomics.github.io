@@ -161,12 +161,11 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           title={`Generate ${background ? 'background' : 'layer'} image`}
           project={project}
           currentEntryId={linkedId}
-          getDefaultPromptParts={() => cb().generate.layerPromptParts(panelId, layer.id)}
-          getDefaultReferences={() => cb().generate.layerReferences(panelId, layer.id)}
+          getDefaults={() => cb().generate.inspect({ type: 'layer', panelId, layerId: layer.id })}
           promptButtons={{ coreLabels: CORE_LAYER_PARTS }}
           media={media}
           onGenerate={(prompt, references) =>
-            cb().generate.layer(panelId, layer.id, prompt, references)
+            cb().generate.run({ type: 'layer', panelId, layerId: layer.id }, prompt, references)
           }
           onUse={(result, { primary }) =>
             update(
@@ -184,7 +183,7 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
           media={media}
           prefer={
             background
-              ? { kind: 'background', aspectRatio: cb().panels.size(panelId)?.aspectRatio }
+              ? { kind: 'background', aspectRatio: cb().panels.get(panelId)?.size.aspectRatio }
               : { kind: 'layer' }
           }
           subjectId={linkedId}

@@ -28,7 +28,7 @@ const CONVENTIONS = `How the CLI works
     "@file.json". Any text or JSON argument that starts with @ is read from that file.
   - Images are files: "media upload hero.png --thumbnail hero.thumb.png". To look
     at an image, "media download <id> --out hero.png" writes it to a file.
-  - There is no preview screen in the CLI (page openPreview is unavailable).`;
+  - There is no preview screen in the CLI (page preview is unavailable).`;
 
 export const AUTH_HELP = `vibecomics auth login [--wait]
   Start logging in to Google Drive. Prints a URL and a code: the user opens the URL on
@@ -114,13 +114,7 @@ export function namespaceHelp(name: string): string {
 }
 
 /** Commands that only make sense in the app; they stay callable but are left out of the overview. */
-const BROWSER_ONLY = new Set([
-  'storage.connectWithS3',
-  'storage.showProjects',
-  'storage.backupTo',
-  'page.openPreview',
-  'page.closePreview',
-]);
+const BROWSER_ONLY = new Set(['storage.backupTo', 'page.preview']);
 
 const shorten = (text: string, max = 68): string =>
   text.length <= max ? text : `${text.slice(0, max - 1).replace(/\s+\S*$/, '')}…`;

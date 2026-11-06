@@ -41,7 +41,7 @@ export function placedMediaIds(project: ComicProject): Set<string> {
   return placed;
 }
 
-/** How many places each image is used in: layers showing it, plus story-bible entries listing it
+/** How many places each image is used in: layers showing it, plus reference entries listing it
  * as a reference image. Images used nowhere are absent. */
 export function mediaUseCounts(project: ComicProject): Map<string, number> {
   const counts = new Map<string, number>();

@@ -29,7 +29,7 @@ export interface Layer {
   variationId?: string;
   /**
    * What this layer's art shows: its own part of the image prompt, or a plain
-   * description. The story bible (style, cast, props and scenes) supplies the
+   * description. The project's style and reference entries (cast, props and scenes) supply the
    * rest of the prompt an image model is given.
    */
   prompt?: string;
@@ -79,7 +79,7 @@ export interface Bubble {
 
 /**
  * A panel's own cohesive image: the background, layers and lighting drawn together as one picture
- * (see generate.panelBrief). While it is `visible` it takes precedence over the panel's layers, which
+ * (see generate.inspect with a panel target). While it is `visible` it takes precedence over the panel's layers, which
  * are not drawn; bubbles still draw above it.
  */
 export interface PanelImage {
@@ -103,7 +103,7 @@ export interface Panel {
   title?: string;
   /**
    * Direction for the panel as a whole (action, mood, lighting, time of day), used when generating
-   * the panel image. The story bible's style and the layers supply the rest.
+   * the panel image. The project's style and the layers supply the rest.
    */
   prompt?: string;
   /** The panel's cohesive image, if it has one; takes precedence over the layers while visible. */
@@ -179,13 +179,13 @@ export interface Variation {
   imageIds: string[];
   /** True when this variation's prompt (its own, or its entry's description) has changed since its
    * reference art was made, so that art no longer matches it. Set automatically by
-   * variations.add/update and by characters/scenes/objects.update when `description` changes (every
+   * variations.add/update and by reference.update when `description` changes (every
    * variation of that entry goes dirty, since each one's prompt is the description plus its own text).
    * Absent or false means the art is up to date. Mirrors Layer.dirty. */
   dirty?: boolean;
 }
 
-/** Shared shape of the story-bible entries: visual description plus reference art. */
+/** Shared shape of the reference entries: visual description plus reference art. */
 export interface StoryEntry {
   id: string;
   name: string;

@@ -69,10 +69,10 @@ export default function EditorNavbar({
         toggleClassName="btn btn-outline-light btn-sm"
         toggleLabel="Menu"
       >
-        <DropdownItem onClick={() => void menuTask.run(() => cb().storage.showProjects())}>
+        <DropdownItem onClick={() => void menuTask.run(() => cb().storage.listProjects(true))}>
           Open project
         </DropdownItem>
-        <DropdownItem onClick={() => cb().page.openPreview()}>Preview this page</DropdownItem>
+        <DropdownItem onClick={() => cb().page.preview()}>Preview this page</DropdownItem>
         {!wide && (
           <li>
             <button

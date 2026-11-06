@@ -237,7 +237,7 @@ export function lintProject(project: ComicProject): LintFinding[] {
     }
   }
 
-  // ---- story bible -------------------------------------------------------------------------
+  // ---- reference entries -------------------------------------------------------------------------
   const mediaIds = new Set(media.map((item) => item.id));
   const usedBySubject = new Set(layers.flatMap(({ layer }) => layer.subjectId ?? []));
   const usedByScene = new Set(layers.flatMap(({ layer }) => layer.sceneId ?? []));
@@ -260,8 +260,8 @@ export function lintProject(project: ComicProject): LintFinding[] {
           message: `${label} lists reference images that are not in the project's images: ${[...missingImages].join(', ')}.`,
           where,
           fix: {
-            call: `${kind}.update`,
-            args: [entry.id, { imageIds: withoutIds(entry.imageIds, missingImages) }],
+            call: 'reference.update',
+            args: [kind, entry.id, { imageIds: withoutIds(entry.imageIds, missingImages) }],
           },
         });
       }
@@ -274,8 +274,8 @@ export function lintProject(project: ComicProject): LintFinding[] {
           message: `${label} points at ${linkLabel} that do not exist: ${[...missingLinks].join(', ')}.`,
           where,
           fix: {
-            call: `${kind}.update`,
-            args: [entry.id, { linkIds: withoutIds(ids, missingLinks) }],
+            call: 'reference.update',
+            args: [kind, entry.id, { linkIds: withoutIds(ids, missingLinks) }],
           },
         });
       }
@@ -418,7 +418,7 @@ export function lintProject(project: ComicProject): LintFinding[] {
       add({
         code: 'missing-thumbnail',
         severity: 'warning',
-        message: `${label} has no thumbnail, so the editor downloads the full file to list it; add one with media.uploadThumbnail.`,
+        message: `${label} has no thumbnail, so the editor downloads the full file to list it; add one with media.update (thumbnailDataUrl).`,
         where,
       });
     }

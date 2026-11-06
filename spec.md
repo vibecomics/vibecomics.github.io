@@ -46,12 +46,12 @@ Google Drive API (OAuth token, page memory)   — or —   S3-compatible bucket 
 1. **Splash** (`splash`) — hard gate, kept deliberately short. Title "Pick
    where to store your comic", then one section per backend: Drive has a
    "Connect with Google Drive" button that calls
-   `ComicBuilder.storage.connectWithDevice()` (the OAuth device flow, showing
+   `ComicBuilder.storage.connect("drive")` (the OAuth device flow, showing
    a verification URL + user code to approve on any other device; it works
    the same from a real click or an injected script, so it is the only Drive
    connect method, no separate popup flow); the S3 section has fields for
    the endpoint, bucket and credentials plus a Connect button that calls
-   `ComicBuilder.storage.connectWithS3(connectionString)`. Every page load
+   `ComicBuilder.storage.connect(connectionString)`. Every page load
    lands on this screen: neither backend reconnects on its own.
 2. **Tiles** (`tiles`) — one Bootstrap card per project folder plus a
    dashed "New project" tile. The new-project name and page size (preset:
@@ -119,7 +119,7 @@ Google Drive API (OAuth token, page memory)   — or —   S3-compatible bucket 
      happens. The line snaps to 25, 33, 50, 67 and 75% of the panel, and the
      scissors and line turn red when a drop would not cut (outside the panel, or
      leaving a part under 5%). A press on the scissors that barely moves does
-     nothing. `panels.splitAcross` and `panels.splitEvenly` remain in the API
+     nothing. `panels.split` with no `panelId`, or with `count`, remains in the API
      (the UI has no controls for them). The lines between panels are draggable handles: dragging one
      previews the resize locally and commits on release through
      `panels.resize`, moving every panel on that line together so the page
@@ -194,7 +194,7 @@ Google Drive API (OAuth token, page memory)   — or —   S3-compatible bucket 
    background (the same page sheet, without editing chrome) so an agent can
    screenshot a finished page. Preview is always
    per-page, never the whole project. Entered via
-   `ComicBuilder.page.openPreview()`, exited via `closePreview()`.
+   `ComicBuilder.page.preview()`, exited via `preview(false)`.
 
 **Status toasts.** Every status message ("Loading project…", "Opened …",
 "Project closed.", errors) is a `StatusToast`: a Bootstrap toast fixed to the
@@ -233,7 +233,7 @@ prompt?, aspectRatio?, subjectId?, sceneId?, visible, x, y, width, rotation, opa
   There is **no separate background field**: the background is the layer
   whose `kind` is `"background"`; it always fills the panel (cropped, never
   stretched) and sits at the bottom, so its `x`/`y`/`width` are ignored.
-  Layers are drawn in **array order** (last on top); `layers.move` reorders.
+  Layers are drawn in **array order** (last on top); `layers.update` with `order` reorders.
   For foreground layers `x`/`y`/`width` are percentages of panel size and
   the aspect ratio is preserved. A layer's image is its `mediaId`, pointing
   at a `MediaItem` in `metadata.media`; `mediaId` is absent for a
@@ -247,7 +247,7 @@ width, height, tailX?, tailY? }`. Bubbles always render above all layers.
   the bubble's edge for speech and shout, a trail of circles for thought;
   captions have none. A shout is drawn as a spiky burst with bold capitals. `bubbles.add` aims a new pointer below the bubble.
 - `ProjectMetadata` — `{ outline, pageSize, characters[], scenes[],
-objects[], media[] }`: the story bible plus the media registry.
+objects[], media[] }`: the style, reference entries and the media registry.
   `pageSize` is `{ label, widthIn, heightIn }`, chosen at creation from
   `PAGE_SIZE_PRESETS` (old projects without it load with the US Comic
   default).
@@ -279,22 +279,25 @@ API (`layers.update`) and so through the CLI.
 Namespaces:
 
 - `help()`
-- `storage` — `connect()`, `connectWithDevice()`, `disconnect()`, `status()`, `listProjects()`,
+- `storage` — `connect(target)` (`"drive"` for the OAuth device flow, or an `s3://`
+  connection string), `disconnect(id?)` (one connection, or all), `status()`
+  (`{ connected, configured, connections }`), `listProjects(show?)`,
   `createProject(name)`, `openProject(idOrName)`, `closeProject()` (saves
-  first; stays open if saving fails), `showProjects()`, `save()`
-- `project` — `load(data)` (replace the whole project from JSON, validated)
-- `page` — `count()`, `select(i)`, `current()`, `add(input?)` (append a page
-  with one full-page panel and show it; `input` is `{ title?, prompt? }`),
-  `update(patch, pageIndex?)` (`{ title?, prompt? }` of the current or given
+  first; stays open if saving fails), `save()`, `backupTo(connectionId)`
+- `project` — `load(data)` (replace the whole project from JSON, validated), `lint()`
+- `page` — `list()`, `select(i?)` (show page `i`, or read the current one),
+  `add(input?)` (append a page with one full-page panel and show it; `input` is
+  `{ title? }`), `update(patch, pageIndex?)` (`{ title? }` of the current or given
   page), `move(from, to)` (reorder: the pages in between shift, every page is
   renumbered, the page on screen stays the same page; the cover, page 0, stays
-  first, so both positions must be 1 or more), `openPreview()`, `closePreview()`
-- `panels` — `list(pageIndex?)`, `get(panelId)`, `size(panelId)` (inches and
+  first, so both positions must be 1 or more), `preview(open?)`
+- `panels` — `list(pageIndex?)`, `get(panelId)` (the panel plus its `size`: inches,
   aspect ratio and the pixel size to generate at, for sizing artwork),
-  `splitAcross(axis, position, pageIndex?)` (a line across the whole page,
-  cutting every panel it crosses), `split(panelId, axis, position?)`,
-  `splitEvenly(panelId, axis, count)`, `resize(panelId, edge, position)`,
-  `update(panelId, { title?, prompt? })`, `delete(panelId)`. `axis` is `"horizontal"`
+  `split({ axis, panelId?, position?, count?, pageIndex? })` (one panel in two at
+  `position`, into `count` equal parts, or, with no `panelId`, a line across the
+  whole page cutting every panel it crosses), `resize(panelId, edge, position)`,
+  `update(panelId, { title?, prompt?, mediaId?, imageVisible? })` (`mediaId` sets
+  the panel image, `null` removes it), `delete(panelId)`. `axis` is `"horizontal"`
   (a horizontal line: top and bottom parts) or `"vertical"`. Splitting keeps
   the original panel's id and content as the first (top/left) part and
   inserts the new empty panel right after it. `resize` moves one edge and
@@ -304,19 +307,28 @@ Namespaces:
   neighbours that exactly cover one of its edges stretch over it, and
   refuses to delete a page's last panel. The pure geometry lives in
   `src/state/layout.ts`.
-- `layers` — `list(panelId)`, `get(panelId, layerId)`, `add(panelId, layer)`
-  (a background goes to the bottom; the image is optional, given as `mediaId`
-  from a registered `MediaItem`), `update(panelId, layerId, patch)`, `delete(panelId,
-layerId)`, `move(panelId, layerId, "top" | "bottom" | "up" | "down" |
-index)`, `size(panelId, layerId)` (the size to generate the art at: the
-  panel's for a background, `width` × `aspectRatio` for a foreground layer)
+- `layers` — `list(panelId)`, `get(panelId, layerId)` (the layer plus its `size`: the
+  size to generate the art at, the panel's for a background, `width` × `aspectRatio`
+  for a foreground layer), `add(panelId, layer)` (a background goes to the bottom;
+  the image is optional, given as `mediaId` from a registered `MediaItem`),
+  `update(panelId, layerId, patch)` (the patch also takes `flipX` and
+  `order: "top" | "bottom" | "up" | "down" | index`), `delete(panelId, layerId)`
 - `bubbles` — `list/get/add/update/delete`, addressed by panel id
-- `metadata` — `get()`, `setOutline(text)`, `setPageSize(pageSize)`
-- `characters` / `scenes` / `objects` — `list/get/create/update/delete`
-- `media` — `list()`, `get(id)`, `upload(name, dataUrl, mimeType)` (data URL
-  → File → Drive upload → registry entry) and `download(id)` (the image's
-  bytes from Drive, fetched with the app's token, as `{ name, mimeType,
+- `metadata` — `get()`, `update({ style?, characterStyle?, sceneStyle?, pageSize? })`
+- `reference` — `list(kind?)`, `get/create/update/delete(kind, …)` for characters,
+  scenes and objects alike (`kind` is `"characters"`, `"scenes"` or `"objects"`)
+- `variations` — `add/update/delete(kind, entryId, …)` for the poses/states of an
+  entry (read them with `reference.get`)
+- `media` — `list()`, `get(id)`, `upload(name, dataUrl, opts?)` (data URL
+  → File → Drive upload → registry entry), `update(id, patch)` (rename, link to a
+  subject or scene, replace the thumbnail), `delete(id)` and `download(id)` (the
+  image's bytes from Drive, fetched with the app's token, as `{ name, mimeType,
 dataUrl }`, so an agent can pass reference images to an image generator)
+- `generate` — aimed at a target string (`layer:<panelId>/<layerId>`,
+  `reference:<kind>/<entryId>[/<variationId>]`, `panel:<panelId>`; `src/ai/targets.ts`):
+  `run(target, prompt?, references?)`, `batch(scope, options?)`, `cancel(target)`,
+  `inspect(target)` (the prompt, its parts and reference images, or a panel brief),
+  `status(scope?)`, `config(config?)`, `test()`
 
 Semantics:
 
@@ -328,12 +340,12 @@ Semantics:
 - **One mutation path.** Every mutation goes through `deps.updateProject`,
   which marks the project as having unsaved changes for the autosave (§7).
   The navbar's save button calls `storage.save()`, like any agent would.
-- **One Drive connect method.** `storage.connectWithDevice()` is the OAuth
+- **One Drive connect method.** `storage.connect("drive")` is the OAuth
   device flow: it returns a verification URL + user code for the user to
   approve on any device, and the caller polls `storage.status()` until
   connected. It works headless (no popup, no user gesture), so the same
   button and the same call serve a human click and an AI assistant alike;
-  there is no separate popup flow. `storage.connectWithS3(connectionString)`
+  there is no separate popup flow. `storage.connect(connectionString)`
   is the other option, connecting to an S3-compatible bucket instead (§6a)
   — no OAuth at all, just a `HeadBucket` reachability check.
 
@@ -367,7 +379,7 @@ The guide is plain Markdown. It tells the agent that it is the
 **orchestrator** (it directs the work and writes prompts for an image
 generator it calls itself; the app never draws), then walks it through the
 build in order: agree the brief and a **visual style** (a STYLE paragraph
-that starts every prompt), build the **story bible** (outline, characters,
+that starts every prompt), build the **reference entries** (outline, characters,
 scenes, objects, reference art), plan the pages and panel layouts (pacing,
 camera, room for bubbles), **write the page, panel and layer prompts before
 any image exists**, stitch every image prompt from those stored parts in the
@@ -376,7 +388,7 @@ same order, generate to spec
 because they are stacked on other layers; backgrounds are opaque at the
 panel's exact aspect ratio; match lighting, palette and scale), attach and
 compose (reuse assets), letter with bubbles, review and correct, and keep the
-bible current. A continuity checklist closes it.
+reference entries current. A continuity checklist closes it.
 
 At runtime, `src/ai/docs.ts` (`attachDocs`) walks the API object and sets a
 non-enumerable `toString()` on every node with its docs, and
@@ -486,7 +498,7 @@ layer holds no image reference of its own beyond `mediaId`, pointing at the
 `MediaItem`; `Layer.src` and any backend-specific id on a `MediaItem` are
 gone.
 
-The CLI supports the S3 backend too (`storage connectWithS3
+The CLI supports the S3 backend too (`storage connect
 <connectionString>`): the non-secret endpoint/bucket/region persist in its
 state file between runs, but the connection string's credentials never do —
 every run reads them fresh from `VIBECOMICS_S3_ACCESS_KEY_ID` /
@@ -617,11 +629,11 @@ it's drawn comic content, it's custom CSS.
 
 ## 11. Agent testing constraints
 
-- Drive OAuth during automated testing: `storage.connectWithDevice()` (the
+- Drive OAuth during automated testing: `storage.connect("drive")` (the
   only connect method — no popup flow exists) is headless-friendly, but no
   throwaway credentials exist, so completing it for real still needs the
   agent to relay the URL + code to the user, who approves on any device.
-  `storage.connectWithS3(connectionString)` (§6a) needs no OAuth at all — it
+  `storage.connect(connectionString)` (§6a) needs no OAuth at all — it
   works headless outright against a bucket the agent can start itself.
 - Static checks (tsc, vite build, prettier, extractor) are the automated
   gate. Live-browser verification — visual inspection and console
@@ -701,7 +713,7 @@ generated from the JSDoc.
 - **Login** is the OAuth device flow (`deviceOAuth.ts`), split in two so it fits
   an agent's tool calls: `auth login` prints the URL and code and returns;
   `auth status` finishes it (one poll) once the user has approved. Later runs
-  refresh the access token from the refresh token. `storage.connectWithS3`
+  refresh the access token from the refresh token. `storage.connect`
   (the S3 backend, §6a) works from the CLI too: its non-secret config
   persists in the state file between runs, but credentials are read fresh
   from `VIBECOMICS_S3_ACCESS_KEY_ID`/`VIBECOMICS_S3_SECRET_ACCESS_KEY` every run.
@@ -709,7 +721,7 @@ generated from the JSDoc.
   project from Drive (skipped for commands that do not need it), call the API,
   and save `project.json` back if anything changed (`savedAt`/`updatedAt`
   set as `useProjectSaver` does). There is no autosave timer and no preview
-  screen (`page.openPreview` fails with an explanation). Run commands one at a
+  screen (`page.preview` fails with an explanation). Run commands one at a
   time: two at once would each save their own copy.
 - **Thumbnails:** there is no canvas in Node, so the CLI cannot make a
   thumbnail; agents pass one (`--thumbnail`), as the guide says.

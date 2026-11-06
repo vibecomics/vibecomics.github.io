@@ -45,7 +45,10 @@ export default function VariationRow({
   const currentItem = currentId ? media.find((m) => m.id === currentId) : undefined;
 
   function addImageId(id: string) {
-    const current = cb().variations.get(kind, entryId, variation.id)?.imageIds ?? [];
+    const current =
+      cb()
+        .reference.get(kind, entryId)
+        ?.variations.find((v) => v.id === variation.id)?.imageIds ?? [];
     if (current.includes(id)) return;
     cb().variations.update(kind, entryId, variation.id, { imageIds: [...current, id] });
   }
@@ -116,7 +119,9 @@ export default function VariationRow({
           status={status}
           title={`Generate a new image for "${variation.name}"`}
           onClick={() => setGeneratingModal(true)}
-          onCancel={() => cb().generate.cancelVariation(kind, entryId, variation.id)}
+          onCancel={() =>
+            cb().generate.cancel({ type: 'reference', kind, entryId, variationId: variation.id })
+          }
         />
       </div>
       {generatingModal && (
@@ -124,15 +129,16 @@ export default function VariationRow({
           title={`Generate "${variation.name}"`}
           project={project}
           currentEntryId={entryId}
-          getDefaultPromptParts={() =>
-            cb().generate.variationPromptParts(kind, entryId, variation.id)
-          }
-          getDefaultReferences={() =>
-            cb().generate.variationReferences(kind, entryId, variation.id)
+          getDefaults={() =>
+            cb().generate.inspect({ type: 'reference', kind, entryId, variationId: variation.id })
           }
           media={media}
           onGenerate={(prompt, references) =>
-            cb().generate.variationImage(kind, entryId, variation.id, prompt, references)
+            cb().generate.run(
+              { type: 'reference', kind, entryId, variationId: variation.id },
+              prompt,
+              references
+            )
           }
           onUse={(result) => addImageId(result.id)}
           onClose={() => setGeneratingModal(false)}

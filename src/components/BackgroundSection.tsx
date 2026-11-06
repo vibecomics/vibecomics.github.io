@@ -74,7 +74,7 @@ export default function BackgroundSection({
               media={media}
               prefer={{
                 kind: 'background',
-                aspectRatio: cb().panels.size(panel.id)?.aspectRatio,
+                aspectRatio: cb().panels.get(panel.id)?.size.aspectRatio,
               }}
               onUpload={(file) => set(() => uploadImage(file))}
               onPick={(item) => set(() => item)}

@@ -25,7 +25,7 @@ interface Props {
 /** Everything you can do to the highlighted panel: delete it and edit its content. */
 export default function PanelInspector({ page, panel, media, selection, onSelect, zoom }: Props) {
   const expansion = useExpansion();
-  const size = cb().panels.size(panel.id);
+  const size = cb().panels.get(panel.id)?.size ?? null;
   const hasContent = panel.layers.length > 0 || panel.bubbles.length > 0;
   const onlyPanel = page.panels.length === 1;
   // Any number of sections can be open. A shown panel image takes the layers' place on the page, so

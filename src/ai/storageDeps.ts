@@ -133,7 +133,7 @@ export function createMediaDeps(host: MediaHost): MediaDeps {
           item.thumbnailFileName = thumbnailFileName;
         }
       } catch {
-        // The image is safe; without a thumbnail the UI shows the full file (media.uploadThumbnail can add one).
+        // The image is safe; without a thumbnail the UI shows the full file (media.update can add one).
       }
       host.updateProject((p) => {
         p.metadata.media.push(item);

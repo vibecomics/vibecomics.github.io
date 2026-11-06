@@ -306,7 +306,7 @@ export default function PageSheet({
               rect={rects[page.panels.indexOf(selectedPanel)]}
               sheetRef={sheetRef}
               onCut={(position) => {
-                cb().panels.split(selectedPanel.id, axis, position);
+                cb().panels.split({ axis, panelId: selectedPanel.id, position });
                 editing.onSelect({ panelId: selectedPanel.id });
               }}
             />

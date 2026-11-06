@@ -216,7 +216,10 @@ export function buildArgs(spec: CommandSpec, { positional, flags }: ParsedArgv, 
   for (const param of spec.params) {
     if (param.kind === 'object') {
       const object = values.get(param.name) as Record<string, unknown>;
-      for (const field of param.fields!) object[field.name] ??= fromFile(field);
+      for (const field of param.fields!) {
+        // Only an absent field defaults from a file: an explicit JSON null means "clear it".
+        if (object[field.name] === undefined) object[field.name] = fromFile(field);
+      }
       for (const key of Object.keys(object)) if (object[key] === undefined) delete object[key];
     } else {
       values.set(param.name, values.get(param.name) ?? fromFile(param));

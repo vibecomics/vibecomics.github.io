@@ -4,13 +4,14 @@ import { useState } from 'react';
 import { cb } from '../ai/actions';
 import { pendingGenerations, pendingReferenceGenerations } from '../ai/builders';
 import type { LayerKind, StoryKind } from '../ai/builders';
+import { clearCompletedQueueItems } from '../ai/generation';
 import type { GenerationTarget, QueueItem } from '../ai/generation';
 import { useMediaQuery } from '../utils/useViewport';
 import { useProject } from './ProjectContext';
 import { useBusy } from './useBusy';
 import { useGenerationQueue } from './useGenerationStatus';
 
-/** One checkbox in the "Generate" split button's dropdown: a story-bible list (reference art) or a
+/** One checkbox in the "Generate" split button's dropdown: a reference kind (reference art) or a
  * layer kind, each independently selectable so "Generate" can be pointed at just cast, or just
  * backgrounds, instead of everything dirty. */
 type Category =
@@ -69,7 +70,7 @@ function QueueRow({ item, onShow }: { item: QueueItem; onShow: () => void }) {
           aria-label={`Cancel ${item.label}`}
           onClick={(e) => {
             e.stopPropagation();
-            cb().generate.cancelQueueItem(item.id);
+            cb().generate.cancel(item.id);
           }}
         >
           &times;
@@ -171,8 +172,9 @@ export default function GenerationPanel({ onClose, onShow }: Props) {
                   // those should be fresh before any layer that might use them runs, not generated
                   // after or alongside it.
                   if (selectedStoryKinds.length)
-                    await cb().generate.dirtyReferences(selectedStoryKinds);
-                  if (selectedLayerKinds.length) await cb().generate.dirty(selectedLayerKinds);
+                    await cb().generate.batch('references', { kinds: selectedStoryKinds });
+                  if (selectedLayerKinds.length)
+                    await cb().generate.batch('layers', { kinds: selectedLayerKinds });
                 })
               }
             >
@@ -261,7 +263,7 @@ export default function GenerationPanel({ onClose, onShow }: Props) {
             type="button"
             className="btn btn-outline-danger btn-sm text-nowrap"
             title="Cancel everything still queued or running, not just one row"
-            onClick={() => cb().generate.cancelAll()}
+            onClick={() => cb().generate.cancel('all')}
           >
             Stop all
           </button>
@@ -272,7 +274,7 @@ export default function GenerationPanel({ onClose, onShow }: Props) {
           disabled={completedCount === 0}
           title="Clear finished rows (done or failed) from this list"
           aria-label="Clear generated"
-          onClick={() => cb().generate.clearCompletedQueueItems()}
+          onClick={() => clearCompletedQueueItems()}
         >
           🧹
         </button>

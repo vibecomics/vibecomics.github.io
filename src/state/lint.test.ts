@@ -150,13 +150,13 @@ test('references to images and links that do not exist are errors with a fix tha
     'dangling-reference-image',
   ]);
   assert.deepEqual(find(findings, 'dangling-reference-image')[0].fix, {
-    call: 'characters.update',
-    args: ['char-mara', { imageIds: ['m-ref'] }],
+    call: 'reference.update',
+    args: ['characters', 'char-mara', { imageIds: ['m-ref'] }],
   });
   const links = find(findings, 'dangling-link').map((f) => f.fix);
   assert.deepEqual(links, [
-    { call: 'characters.update', args: ['char-mara', { linkIds: ['scene-roof'] }] },
-    { call: 'scenes.update', args: ['scene-roof', { linkIds: [] }] },
+    { call: 'reference.update', args: ['characters', 'char-mara', { linkIds: ['scene-roof'] }] },
+    { call: 'reference.update', args: ['scenes', 'scene-roof', { linkIds: [] }] },
   ]);
 });
 

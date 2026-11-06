@@ -69,7 +69,7 @@ export default function OutlineTab({ project, onTabChange }: Props) {
           onChange={(e) => {
             const preset = PAGE_SIZE_PRESETS[Number(e.target.value)];
             if (!preset) return;
-            cb().metadata.setPageSize({ ...preset });
+            cb().metadata.update({ pageSize: { ...preset } });
             setNote(`Page size set to ${preset.label}.`);
           }}
         >
@@ -92,7 +92,7 @@ export default function OutlineTab({ project, onTabChange }: Props) {
         rows={4}
         value={project.metadata.style}
         placeholder="e.g. Inked line art with flat colour, muted earth tones with one bright accent, soft light from a window, gritty 1980s noir."
-        onSave={(text) => cb().metadata.setStyle(text)}
+        onSave={(text) => cb().metadata.update({ style: text })}
       />
     </div>
   );

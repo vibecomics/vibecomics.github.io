@@ -12,7 +12,9 @@ export function useStorageConnections(
   const [connections, setConnections] = useState<StorageConnectionInfo[]>([]);
 
   const refreshConnections = useCallback(() => {
-    void cb().storage.listConnections().then(setConnections);
+    void cb()
+      .storage.status()
+      .then((status) => setConnections(status.connections));
   }, []);
 
   useEffect(() => {

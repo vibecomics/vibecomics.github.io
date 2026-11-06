@@ -315,7 +315,7 @@ test('layouts that do fit together (different tiers) merge', () => {
   assert.equal(merged.pages[1].panels.length, 4);
 });
 
-test('story bible: additions on both sides combine; the same description changed is a conflict on its tab', () => {
+test('reference entries: additions on both sides combine; the same description changed is a conflict on its tab', () => {
   const b = base();
   const mine = clone(b);
   const theirs = clone(b);

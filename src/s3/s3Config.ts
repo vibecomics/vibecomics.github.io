@@ -1,6 +1,6 @@
 /**
  * S3 target configuration and credentials, carried in one connection string so
- * storage.connectWithS3() takes a single parameter, the same shape "connect to a server" had
+ * storage.connect() takes a single parameter, the same shape "connect to a server" had
  * before. In the browser, the whole thing (credentials included) is remembered in localStorage —
  * see storage/connections.ts — so a bucket reconnects automatically next load; the CLI instead
  * reads credentials fresh from the environment each run (src/cli/nodeSession.ts).

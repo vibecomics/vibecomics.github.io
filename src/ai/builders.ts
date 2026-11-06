@@ -50,8 +50,9 @@ interface StoryTypes {
   objects: ComicObject;
 }
 
-/** Which story-bible list an entry (or a layer's variationId) belongs to. */
+/** Which reference kind an entry (or a layer's variationId) belongs to. */
 export type StoryKind = keyof StoryTypes;
+export const STORY_KIND_NAMES = ['characters', 'scenes', 'objects'] as const;
 
 /** Seeded when a character is created (front/back/side is the one fixed set that always applies);
  * objects and scenes start with none — their variations (a locker's Open/Closed, a scene's Day/
@@ -114,17 +115,9 @@ export function assertVariation(project: ComicProject, ownerId: string, variatio
   }
 }
 
-/** list/get/add/update/delete for the variations (poses/states) of a character, scene or object. */
+/** add/update/delete for the variations (poses/states) of a character, scene or object (read them via the entry). */
 export function variationsApi(deps: ComicBuilderDeps) {
   return {
-    list: (kind: StoryKind, entryId: string): Variation[] =>
-      snapshot(findEntry(requireProject(deps), kind, entryId).variations),
-    get: (kind: StoryKind, entryId: string, variationId: string): Variation | null => {
-      const variation = findEntry(requireProject(deps), kind, entryId).variations.find(
-        (v) => v.id === variationId
-      );
-      return variation ? snapshot(variation) : null;
-    },
     add: (kind: StoryKind, entryId: string, input: VariationInput): Variation => {
       const prompt = input.prompt ?? '';
       const imageIds = input.imageIds ?? [];
@@ -415,7 +408,7 @@ export function artSize(widthIn: number, heightIn: number) {
   };
 }
 
-/** The size a layer's art should be generated at (see layers.size). */
+/** The size a layer's art should be generated at (see layers.get). */
 export function layerArtSize(project: ComicProject, panelId: string, layerId: string) {
   const panel = findPanel(project, panelId);
   const layer = panel?.layers.find((l) => l.id === layerId);
@@ -497,7 +490,7 @@ export interface VariationRef {
   variationId: string;
 }
 
-/** Every variation (reference art for a character, object or scene), across the whole story bible,
+/** Every variation (reference art for a character, object or scene), across the whole set of reference entries,
  * whose art no longer matches its prompt. Mirrors dirtyLayerRefs for layers. */
 export function dirtyVariationRefs(project: ComicProject): VariationRef[] {
   const refs: VariationRef[] = [];
@@ -524,7 +517,7 @@ function layerInStyleScope(project: ComicProject, layer: Layer, scope: StyleScop
 }
 
 /**
- * Marks every layer and story-bible variation whose stitched prompt includes the given style field,
+ * Marks every layer and reference variation whose stitched prompt includes the given style field,
  * and currently has a prompt to act on, as dirty: used when that field changes, since changing it
  * makes every image generated under the old wording stale, the same way changing one layer's own
  * prompt makes that one layer stale. 'all' (the shared STYLE paragraph) reaches every layer and
@@ -577,7 +570,7 @@ export interface PendingGeneration extends LayerRef {
   hasImage: boolean;
 }
 
-/** What generate.dirty() would generate, described: dirtyLayerRefs plus where each layer sits and its prompt. */
+/** What generate.status("layers") would generate, described: dirtyLayerRefs plus where each layer sits and its prompt. */
 export function pendingGenerations(project: ComicProject): PendingGeneration[] {
   return project.pages.flatMap((page) =>
     page.panels.flatMap((panel, i) =>
@@ -607,7 +600,7 @@ export interface PendingReference extends VariationRef {
   hasImage: boolean;
 }
 
-/** What generate.dirtyReferences() would generate, described: dirtyVariationRefs plus the entry's and
+/** What generate.status("references") would generate, described: dirtyVariationRefs plus the entry's and
  * variation's names and prompt. Mirrors pendingGenerations for layers. */
 export function pendingReferenceGenerations(project: ComicProject): PendingReference[] {
   return (Object.keys(STORY_KINDS) as StoryKind[]).flatMap((kind) =>
@@ -639,7 +632,7 @@ export interface PendingPanelImage {
 }
 
 /** What needs a new panel image: every panel whose panel image no longer matches its layers or prompt.
- * A panel with no panel image is not listed; panel images are opt-in (see generate.panelBrief). */
+ * A panel with no panel image is not listed; panel images are opt-in (see generate.inspect). */
 export function pendingPanelImages(project: ComicProject): PendingPanelImage[] {
   return project.pages.flatMap((page) =>
     page.panels.flatMap((panel, i) =>
@@ -662,6 +655,24 @@ export function pendingPanelImages(project: ComicProject): PendingPanelImage[] {
 /** The index of the page that holds this panel, or -1 when no page does. */
 export function pageIndexOfPanel(project: ComicProject, panelId: string): number {
   return project.pages.findIndex((page) => page.panels.some((panel) => panel.id === panelId));
+}
+
+/** The options of panels.split. */
+export interface PanelSplit {
+  axis: Axis;
+  panelId?: string;
+  position?: number;
+  count?: number;
+  pageIndex?: number;
+}
+
+/** The fields panels.update can change. */
+export interface PanelPatch {
+  title?: string;
+  prompt?: string;
+  /** Set the panel image to this media id, or null to remove it. */
+  mediaId?: string | null;
+  imageVisible?: boolean;
 }
 
 /** Panel layout operations. The panels of a page always tile it (see state/layout.ts). */
@@ -704,34 +715,43 @@ export function panelsApi(deps: ComicBuilderDeps) {
 
   return {
     list: (pageIndex?: number): Panel[] => snapshot(pageAt(requireProject(deps), pageIndex).panels),
-    get: (panelId: string): Panel | null => {
-      const panel = findPanel(requireProject(deps), panelId);
-      return panel ? snapshot(panel) : null;
-    },
-    size: (panelId: string) => {
+    get: (panelId: string): (Panel & { size: ReturnType<typeof artSize> }) | null => {
       const project = requireProject(deps);
       const panel = findPanel(project, panelId);
       if (!panel) return null;
       const { widthIn, heightIn } = project.metadata.pageSize;
-      return artSize((widthIn * panel.width) / 100, (heightIn * panel.height) / 100);
+      return {
+        ...snapshot(panel),
+        size: artSize((widthIn * panel.width) / 100, (heightIn * panel.height) / 100),
+      };
     },
-    split: (panelId: string, axis: Axis, position = 50): Panel[] => {
+    /**
+     * Cut one panel (`panelId`: in two at `position`, or into `count` equal parts) or, with no
+     * `panelId`, draw a line across the whole page at `position`.
+     */
+    split: (opts: PanelSplit): Panel[] => {
+      const { axis, panelId, position, count, pageIndex } = opts ?? ({} as PanelSplit);
       assertKind(axis, AXES, 'Axis');
-      return cutPanel(panelId, (rect) => splitRect(rect, axis, position));
-    },
-    splitAcross: (axis: Axis, position: number, pageIndex?: number): Panel[] => {
-      assertKind(axis, AXES, 'Axis');
-      return snapshot(
-        mutate(deps, (p) => {
-          const page = pageAt(p, pageIndex);
-          applyCuts(page, cutAcross(page.panels.map(rectOf), axis, position));
-          return page.panels;
-        })
-      );
-    },
-    splitEvenly: (panelId: string, axis: Axis, count: number): Panel[] => {
-      assertKind(axis, AXES, 'Axis');
-      return cutPanel(panelId, (rect) => splitEvenly(rect, axis, count));
+      if (panelId === undefined) {
+        if (count !== undefined) throw new Error('count needs a panelId: it cuts that one panel.');
+        if (position === undefined) {
+          throw new Error(
+            'Give a panelId to cut one panel, or a position for a line across the page.'
+          );
+        }
+        return snapshot(
+          mutate(deps, (p) => {
+            const page = pageAt(p, pageIndex);
+            applyCuts(page, cutAcross(page.panels.map(rectOf), axis, position));
+            return page.panels;
+          })
+        );
+      }
+      if (count !== undefined) {
+        if (position !== undefined) throw new Error('Give either count or position, not both.');
+        return cutPanel(panelId, (rect) => splitEvenly(rect, axis, count));
+      }
+      return cutPanel(panelId, (rect) => splitRect(rect, axis, position ?? 50));
     },
     resize: (panelId: string, edge: Edge, position: number): Panel[] => {
       assertKind(edge, EDGES, 'Edge');
@@ -744,48 +764,31 @@ export function panelsApi(deps: ComicBuilderDeps) {
         })
       );
     },
-    update: (panelId: string, patch: { title?: string; prompt?: string }): Panel => {
+    update: (panelId: string, patch: PanelPatch): Panel => {
       assertOptionalText(patch.title, 'title');
       assertOptionalText(patch.prompt, 'prompt');
       return snapshot(
         mutate(deps, (p) => {
           const panel = requirePanel(p, panelId);
+          if (typeof patch.mediaId === 'string') resolveLayerImage(p, { mediaId: patch.mediaId });
+          if (patch.imageVisible !== undefined && patch.mediaId === undefined && !panel.image) {
+            throw new Error(`Panel "${panelId}" has no panel image.`);
+          }
           Object.assign(panel, definedFields({ title: patch.title }));
           // A blank prompt clears it, so the panel goes back to having none.
           if (patch.prompt !== undefined) {
             if (patch.prompt.trim()) panel.prompt = patch.prompt;
             else delete panel.prompt;
           }
+          if (typeof patch.mediaId === 'string') panel.image = swapPanelImage(panel, patch.mediaId);
+          else if (patch.mediaId === null) delete panel.image;
+          if (patch.imageVisible !== undefined && panel.image) {
+            panel.image.visible = Boolean(patch.imageVisible);
+          }
           return panel;
         })
       );
     },
-    setImage: (panelId: string, mediaId: string): Panel =>
-      snapshot(
-        mutate(deps, (p) => {
-          resolveLayerImage(p, { mediaId });
-          const panel = requirePanel(p, panelId);
-          panel.image = swapPanelImage(panel, mediaId);
-          return panel;
-        })
-      ),
-    setImageVisible: (panelId: string, visible: boolean): Panel =>
-      snapshot(
-        mutate(deps, (p) => {
-          const panel = requirePanel(p, panelId);
-          if (!panel.image) throw new Error(`Panel "${panelId}" has no panel image.`);
-          panel.image.visible = Boolean(visible);
-          return panel;
-        })
-      ),
-    clearImage: (panelId: string): Panel =>
-      snapshot(
-        mutate(deps, (p) => {
-          const panel = requirePanel(p, panelId);
-          delete panel.image;
-          return panel;
-        })
-      ),
     delete: (panelId: string): boolean =>
       mutate(deps, (p) => {
         const page = pageOfPanel(p, panelId);

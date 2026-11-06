@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
+import type { VariationOutcome } from '../ai/generation';
 import type { MediaItem, Variation } from '../types/comic';
 import GenerateIconButton from './GenerateIconButton';
 import GenerateImageModal from './GenerateImageModal';
@@ -18,7 +19,7 @@ interface Props {
   media: MediaItem[];
 }
 
-/** Reference images of a story-bible entry, organized as one tab per variation (pose/state; see the
+/** Reference images of a reference entry, organized as one tab per variation (pose/state; see the
  * Variation type) — there is no other way to add reference art, so every image belongs to one. Each
  * tab's title is the variation's name, editable in place; the last tab adds a new one. The 🪄 button
  * to the right of the tabs generates one image for every variation in one click. */
@@ -167,7 +168,7 @@ export default function ReferenceImages({ kind, entryId, imageIds, variations, m
             title="Generate one image for every variation"
             all
             onClick={() => setGeneratingModal(true)}
-            onCancel={() => cb().generate.cancelReference(kind, entryId)}
+            onCancel={() => cb().generate.cancel({ type: 'reference', kind, entryId })}
           />
         )}
       </div>
@@ -191,13 +192,15 @@ export default function ReferenceImages({ kind, entryId, imageIds, variations, m
           title="Generate reference images"
           project={project}
           currentEntryId={entryId}
-          getDefaultPromptParts={() => cb().generate.referencePromptParts(kind, entryId)}
-          getDefaultReferences={() => cb().generate.entryReferences(kind, entryId)}
+          getDefaults={() => cb().generate.inspect({ type: 'reference', kind, entryId })}
           media={media}
           bulk={{
             label: `${variations.length} variation${variations.length === 1 ? '' : 's'}`,
             onGenerateAll: async (prompt, references) => {
-              const outcomes = await cb().generate.allVariations(kind, entryId, prompt, references);
+              const outcomes = (await cb().generate.batch(
+                { type: 'variations', kind, entryId },
+                { prompt, references }
+              )) as VariationOutcome[];
               return outcomes.map((o): BulkResult => ({
                 id: o.variationId,
                 label: variations.find((v) => v.id === o.variationId)?.name ?? o.variationId,

@@ -146,7 +146,7 @@ export function createNodeSession(options: NodeSessionOptions) {
     if (!driveConnected() && (state.s3?.length ?? 0) === 0) {
       throw new Error(
         'Not connected to any storage. Run "vibecomics auth login" for Google Drive, or ' +
-          '"vibecomics storage connectWithS3 <connectionString>" for an S3-compatible bucket.'
+          '"vibecomics storage connect <connectionString>" for an S3-compatible bucket.'
       );
     }
     const found: ProjectFolder[] = [];
@@ -539,7 +539,7 @@ export function createNodeSession(options: NodeSessionOptions) {
           if (live.length === 1) return live[0];
           if (live.length === 0) {
             throw new Error(
-              `No storage connection is live. ${LOGIN_HINT} or run "storage connectWithS3 <connectionString>".`
+              `No storage connection is live. ${LOGIN_HINT} or run "storage connect <connectionString>".`
             );
           }
           throw new Error(

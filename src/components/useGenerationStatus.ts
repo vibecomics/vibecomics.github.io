@@ -15,7 +15,7 @@ export function useLayerGenerationStatus(panelId: string, layerId: string): Gene
   return useSyncExternalStore(subscribeGenerating, () => layerGenerationStatus(panelId, layerId));
 }
 
-/** Whether this story-bible entry has a reference-image generation queued or running. */
+/** Whether this reference entry has a reference-image generation queued or running. */
 export function useReferenceGenerationStatus(kind: ReferenceKind, id: string): GenerationStatus {
   return useSyncExternalStore(subscribeGenerating, () => referenceGenerationStatus(kind, id));
 }

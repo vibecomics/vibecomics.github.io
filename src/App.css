@@ -724,7 +724,7 @@ kept the same size regardless of that content so a row of them lines up evenly. 
   color: #0d6efd;
 }
 
-/* ---- Story bible: variation tabs ------------------------------------------ */
+/* ---- Reference entries: variation tabs ------------------------------------------ */
 
 /* The active tab's name is edited in place, so it needs to look like the plain tab text it
    replaces (no input chrome) rather than a nested text box. */

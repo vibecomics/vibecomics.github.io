@@ -74,7 +74,7 @@ export function useBackup({ backendKind, deviceCode, disabled }: Props): Backup 
   async function runBackup(kind: Kind) {
     setError('');
     try {
-      const connections = await cb().storage.listConnections();
+      const { connections } = await cb().storage.status();
       const live = connections.find((c) => c.kind === kind && c.connected);
       if (!live) {
         setError(
@@ -92,7 +92,7 @@ export function useBackup({ backendKind, deviceCode, disabled }: Props): Backup 
   async function start() {
     if (!target) return;
     setError('');
-    const connections = await cb().storage.listConnections();
+    const { connections } = await cb().storage.status();
     if (connections.some((c) => c.kind === target && c.connected)) {
       void runBackup(target);
       return;
@@ -101,7 +101,7 @@ export function useBackup({ backendKind, deviceCode, disabled }: Props): Backup 
       setConnectingDrive(true);
       setShowDriveModal(true);
       void cb()
-        .storage.connectWithDevice()
+        .storage.connect('drive')
         .catch((e: unknown) => {
           setError(errorMessage(e));
           setConnectingDrive(false);
@@ -113,7 +113,7 @@ export function useBackup({ backendKind, deviceCode, disabled }: Props): Backup 
   }
 
   async function connectS3(connectionString: string) {
-    await cb().storage.connectWithS3(connectionString);
+    await cb().storage.connect(connectionString);
     setShowS3Modal(false);
     void runBackup('s3');
   }

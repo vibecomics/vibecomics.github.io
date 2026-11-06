@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Modal from './Modal';
-import { cb } from '../ai/actions';
+import type { PromptInspection } from '../ai/actions';
 import {
   defaultReferenceNote,
   initialPromptText,
@@ -39,11 +39,11 @@ interface CommonProps {
   /** The character/object/scene this generation is of, if any — so a manually-added reference of
    * that same entry gets a note that doesn't just restate its own name (see defaultReferenceNote). */
   currentEntryId?: string;
-  /** The labeled pieces the prompt is stitched from (Style, Panel, Layer prompt, ...): each is shown
-   * collapsed, expandable to edit or drop on its own, instead of one large block of text. */
-  getDefaultPromptParts: () => PromptPart[];
-  /** The reference images sent by default; the user can remove some, add others and annotate each. */
-  getDefaultReferences: () => GenerationReference[];
+  /** What generating would send by default (generate.inspect): the labeled pieces the prompt is
+   * stitched from (Style, Panel, Layer prompt, ...), each shown collapsed, expandable to edit or
+   * drop on its own, instead of one large block of text; the reference images (the user can remove
+   * some, add others and annotate each); and how many references the generator uses. */
+  getDefaults: () => PromptInspection;
   /** Shows the prompt as one editable text box with a button per part (Style, Character, ...) that
    * inserts or removes that part's text; any part can be toggled off. Without this, the parts are
    * shown as an expandable list. The parts named in `coreLabels` start in the prompt even when there
@@ -69,7 +69,7 @@ interface SingleProps extends CommonProps {
 
 /** Generates one image per item in a single click instead of the usual generate-preview-accept flow
  * for one image: each item auto-commits itself (there's no one to preview a batch for, same as
- * generate.dirty), so there's no onGenerate/onUse — the dialog just shows which items succeeded.
+ * generate.batch), so there's no onGenerate/onUse — the dialog just shows which items succeeded.
  * Used for the entry-level "Generate all variations" action. */
 interface BulkProps extends CommonProps {
   bulk: {
@@ -101,30 +101,22 @@ function Preview({ item }: { item: MediaItem }) {
 
 /** Generate an image from an editable prompt: generate, preview, then either accept it or discard it
  * and try again (or, in `bulk` mode, generate one image per item in a click, each auto-committing
- * itself). Used for layer/background art and story-bible reference images alike. */
+ * itself). Used for layer/background art and reference images alike. */
 export default function GenerateImageModal(props: Props) {
-  const {
-    title,
-    project,
-    currentEntryId,
-    getDefaultPromptParts,
-    getDefaultReferences,
-    promptButtons,
-    media,
-    bulk,
-    onClose,
-  } = props;
-  const [parts, setParts] = useState(getDefaultPromptParts);
+  const { title, project, currentEntryId, getDefaults, promptButtons, media, bulk, onClose } =
+    props;
+  const [defaults] = useState(getDefaults);
+  const [parts, setParts] = useState(defaults.parts);
   // Collapsed by default (a stitched prompt can be long); expanded state is keyed by label rather
   // than index so it survives a part being deleted.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set());
-  const [references, setReferences] = useState(getDefaultReferences);
+  const [references, setReferences] = useState(defaults.references);
   // The whole prompt, for the prompt-button layout (the list layout derives it from `parts`).
   const [text, setText] = useState(() =>
     promptButtons ? initialPromptText(parts, promptButtons.coreLabels, references.length > 0) : ''
   );
   const [picking, setPicking] = useState(false);
-  const max = cb().generate.maxReferenceImages();
+  const max = defaults.maxReferenceImages;
   const [result, setResult] = useState<Generated | null>(null);
   const [bulkResults, setBulkResults] = useState<BulkResult[] | null>(null);
   const task = useTask();

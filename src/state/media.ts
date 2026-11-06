@@ -10,7 +10,7 @@ export interface MediaRemoval {
 
 /**
  * Take a media item out of the registry and out of everything that uses it: layers showing it
- * are left without an image, and story-bible entries drop it from their reference images.
+ * are left without an image, and reference entries drop it from their reference images.
  * Throws when the id is not registered.
  */
 export function removeMedia(project: ComicProject, id: string): MediaRemoval {

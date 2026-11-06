@@ -37,17 +37,14 @@ export interface CliIo {
 
 /** Commands that do not need the open project loaded first. */
 const WITHOUT_PROJECT = new Set([
-  'storage.connectWithDevice',
-  'storage.connectWithS3',
+  'storage.connect',
   'storage.disconnect',
   'storage.status',
   'storage.listProjects',
-  'storage.showProjects',
   'storage.createProject',
   'storage.openProject',
-  'generate.getConfig',
-  'generate.setConfig',
-  'generate.testConnection',
+  'generate.config',
+  'generate.test',
 ]);
 
 const LOGIN_HINT = 'Run "vibecomics auth login" and have the user approve it.';
@@ -184,13 +181,13 @@ async function run(argv: string[], io: CliIo): Promise<number | void> {
     io.stderr(
       'note: this image has no thumbnail, so the editor must download it in full to list it. ' +
         'Resize a copy to about 256px on its long side and add it with ' +
-        '"media uploadThumbnail <id> <file>" (or pass --thumbnail when uploading).\n'
+        '"media update <id> --thumbnail <file>" (or pass --thumbnail when uploading).\n'
     );
   }
   if (spec.path === 'media.download') {
     result = saveDownload(result as Parameters<typeof saveDownload>[0], flags.get('out'), io.cwd);
   }
-  if (spec.path === 'generate.panelBrief') {
+  if (spec.path === 'generate.inspect' && String(args[0]).startsWith('panel:')) {
     result = savePanelBriefImages(result as PanelBrief, flags.get('out'), io.cwd);
   }
   io.stdout(result === undefined ? json({ ok: true }) : json(result));

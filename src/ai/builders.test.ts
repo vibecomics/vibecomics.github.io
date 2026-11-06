@@ -137,12 +137,13 @@ test("variationsApi add/update/delete manage one entry's variations", () => {
   const deps = makeDeps(createBlankProject('Test'));
   const entry = storyApi(deps, 'objects').create({ name: 'Locker' });
   const variations = variationsApi(deps);
+  const story = storyApi(deps, 'objects');
   const open = variations.add('objects', entry.id, { name: 'Open', prompt: 'Door open.' });
-  assert.equal(variations.list('objects', entry.id).length, 1);
+  assert.equal(story.get(entry.id)?.variations.length, 1);
   variations.update('objects', entry.id, open.id, { imageIds: ['m1'] });
-  assert.deepEqual(variations.get('objects', entry.id, open.id)?.imageIds, ['m1']);
+  assert.deepEqual(story.get(entry.id)?.variations[0].imageIds, ['m1']);
   assert.equal(variations.delete('objects', entry.id, open.id), true);
-  assert.deepEqual(variations.list('objects', entry.id), []);
+  assert.deepEqual(story.get(entry.id)?.variations, []);
 });
 
 test('deleting a variation clears any layer pinned to it', () => {
@@ -209,7 +210,7 @@ test('variationsApi.update marks dirty on a prompt change, and clears it when an
   assert.equal(renamed.dirty, false);
 });
 
-test("characters/scenes/objects.update(description) marks every one of the entry's variations dirty", () => {
+test("reference.update(description) marks every one of the entry's variations dirty", () => {
   const deps = makeDeps(createBlankProject('Test'));
   const story = storyApi(deps, 'objects');
   const entry = story.create({
@@ -219,7 +220,7 @@ test("characters/scenes/objects.update(description) marks every one of the entry
   });
   const variations = variationsApi(deps);
   variations.update('objects', entry.id, entry.variations[0].id, { imageIds: ['m1'] });
-  assert.equal(variations.get('objects', entry.id, entry.variations[0].id)?.dirty, false);
+  assert.equal(story.get(entry.id)?.variations[0].dirty, false);
 
   const updated = story.update(entry.id, { description: 'A glowing blade with a pink gem.' });
   assert.ok(updated.variations.every((v) => v.dirty === true));

@@ -55,7 +55,7 @@ const nodeFieldsOf = (nodes: ComfyNodeMapping): NodeFields => ({
  * workflows folder. Its node mapping is guessed automatically (see detectComfyNodes) and only
  * shown under "Advanced" for a manual correction if the guess is wrong. */
 export default function GeneratorSettings({ onClose }: Props) {
-  const existing = cb().generate.getConfig();
+  const existing = cb().generate.config();
   const task = useTask();
   const [baseUrl, setBaseUrl] = useState(existing?.comfy.baseUrl ?? '');
   const [workflowText, setWorkflowText] = useState(
@@ -133,7 +133,7 @@ export default function GeneratorSettings({ onClose }: Props) {
     if (!workflowName || !workflowText.trim()) {
       throw new Error('Select a workflow saved in ComfyUI first.');
     }
-    const result = cb().generate.setConfig(buildConfig(workflowText, fields));
+    const result = cb().generate.config(buildConfig(workflowText, fields));
     if (!result.ok) throw new Error(result.error);
   }
 
@@ -148,7 +148,7 @@ export default function GeneratorSettings({ onClose }: Props) {
     void task.run(async () => {
       // Saved first, so it reads what's on screen.
       await saveConfig();
-      const result = await cb().generate.testConnection();
+      const result = await cb().generate.test();
       if (!result.ok) throw new Error(result.error);
     });
   }

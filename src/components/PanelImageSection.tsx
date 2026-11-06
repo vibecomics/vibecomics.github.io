@@ -32,7 +32,7 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
   const hasBackground = panel.layers.some((l) => l.kind === 'background' && l.visible);
   const hasLayers = panel.layers.some((l) => l.kind === 'foreground' && l.visible);
   const set = (getItem: () => Promise<MediaItem> | MediaItem) =>
-    void task.run(async () => void cb().panels.setImage(panel.id, (await getItem()).id));
+    void task.run(async () => void cb().panels.update(panel.id, { mediaId: (await getItem()).id }));
 
   return (
     <AccordionItem
@@ -54,7 +54,7 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
             type="checkbox"
             role="switch"
             checked={image.visible}
-            onChange={(e) => cb().panels.setImageVisible(panel.id, e.target.checked)}
+            onChange={(e) => cb().panels.update(panel.id, { imageVisible: e.target.checked })}
           />
           <label className="form-check-label" htmlFor={`panel-image-visible-${panel.id}`}>
             Show the panel image{image.visible ? '' : ' (layers are shown)'}
@@ -83,7 +83,7 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
             item={item}
             width={120}
             removeTitle="Remove the panel image (the layers show again)"
-            onRemove={() => cb().panels.clearImage(panel.id)}
+            onRemove={() => cb().panels.update(panel.id, { mediaId: null })}
           />
         </div>
       )}
@@ -112,7 +112,7 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
         <MediaPicker
           title="Choose the panel image"
           media={media}
-          prefer={{ kind: 'background', aspectRatio: cb().panels.size(panel.id)?.aspectRatio }}
+          prefer={{ kind: 'background', aspectRatio: cb().panels.get(panel.id)?.size.aspectRatio }}
           currentId={image?.mediaId}
           onUpload={(file) => set(() => uploadImage(file))}
           onPick={(picked) => set(() => picked)}

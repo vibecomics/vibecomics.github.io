@@ -77,7 +77,7 @@ export function joinPromptParts(parts: PromptPart[]): string {
     .join('\n\n');
 }
 
-/** The technical requirements line for a story-bible entry's reference art: a scene gets an
+/** The technical requirements line for a reference entry's reference art: a scene gets an
  * establishing shot of the place itself, since that art is meant to be a background, so it always
  * rules out characters, people, animals or monsters — the entry's own description never has to say
  * so. A character or object gets a single isolated view with clean, well-defined outlines ready for a
@@ -129,7 +129,7 @@ const STYLE_ADDENDUM_LABEL: Record<ReferenceKind, string> = {
   scenes: 'Scene style',
 };
 
-/** The labeled parts of a story-bible entry's reference art prompt: Style, the kind's style addendum
+/** The labeled parts of a reference entry's reference art prompt: Style, the kind's style addendum
  * (see styleAddendum — omitted for an object), its description (labeled by kind), the kind-appropriate
  * technical requirements (see referenceTechnical), then, when `variationId` names one of the entry's
  * variations, that variation's own prompt last (e.g. "Front view, facing the camera directly.") — the
@@ -155,7 +155,7 @@ export function buildReferencePromptParts(
   ]);
 }
 
-/** Stitches the prompt for a story-bible entry's reference art (see buildReferencePromptParts). */
+/** Stitches the prompt for a reference entry's reference art (see buildReferencePromptParts). */
 export function buildReferencePrompt(
   project: ComicProject,
   kind: ReferenceKind,
@@ -165,7 +165,7 @@ export function buildReferencePrompt(
   return joinPromptParts(buildReferencePromptParts(project, kind, id, variationId));
 }
 
-/** The story-bible entry a layer shows: a character or object (foreground) or a scene (background). */
+/** The reference entry a layer shows: a character or object (foreground) or a scene (background). */
 export function layerSubject(project: ComicProject, layer: Layer): StoryEntry | undefined {
   return layer.kind === 'foreground'
     ? [...project.metadata.characters, ...project.metadata.objects].find(
@@ -174,7 +174,7 @@ export function layerSubject(project: ComicProject, layer: Layer): StoryEntry | 
     : project.metadata.scenes.find((s) => s.id === layer.sceneId);
 }
 
-/** What to label a layer's linked story-bible entry: "Scene" for a background, else "Character" or
+/** What to label a layer's linked reference entry: "Scene" for a background, else "Character" or
  * "Object" depending on which list the subject is in. */
 function subjectLabel(project: ComicProject, layer: Layer): string {
   if (layer.kind === 'background') return 'Scene';
@@ -194,7 +194,7 @@ function layerStyleAddendum(project: ComicProject, label: string): string | unde
  * The labeled parts of a layer's (or background's) image prompt: Style, the kind's style addendum
  * (see layerStyleAddendum — omitted for an object), the linked entry's description (a background's
  * scene, or a foreground layer's character/object), the layer prompt, then a technical requirements
- * line. The story bible's Style and the layer's own prompt are the only free text in it, so nothing
+ * line. The project's Style and the layer's own prompt are the only free text in it, so nothing
  * narrates the whole panel (people, action) into a background, and a foreground never picks up setting
  * language that makes this model draw a full scene instead of an isolated cutout.
  *
@@ -242,7 +242,7 @@ export function buildLayerPrompt(project: ComicProject, panelId: string, layerId
  * The labeled parts of a panel image's prompt, in the order they belong: Style, the Character style
  * and Scene style addenda (each only when the panel has a visible character layer / a background
  * linked to a scene, and the addendum is set), the panel's own prompt, then a technical requirements
- * line. Unlike a layer's, a panel prompt is NOT stitched here: generate.panelBrief hands over these
+ * line. Unlike a layer's, a panel prompt is NOT stitched here: generate.inspect("panel:…") hands over these
  * parts and the LLM writes the final prompt from them, adding the layout (placements) and the
  * descriptions of what is in the panel. Only parts with text are included.
  */
@@ -282,7 +282,7 @@ export interface GenerationReference {
   note?: string;
 }
 
-/** Every reference-image id of a story-bible entry: its own (ungrouped) imageIds plus every
+/** Every reference-image id of a reference entry: its own (ungrouped) imageIds plus every
  * variation's, in that order. Used wherever "all the reference art this entry has" is wanted rather
  * than one specific variation's. */
 export function allEntryImageIds(entry: StoryEntry): string[] {
@@ -290,7 +290,7 @@ export function allEntryImageIds(entry: StoryEntry): string[] {
 }
 
 /**
- * A ready-made note for a reference image that is a story-bible entry's own reference art (its
+ * A ready-made note for a reference image that is a reference entry's own reference art (its
  * `imageIds`, or one of its variations' `imageIds`, lists this mediaId). Checked against those lists
  * rather than the MediaItem's own `subjectId`/`sceneId` tag, since that tag is only set for art
  * generated or uploaded straight onto a layer — a character's own reference images are frequently

@@ -33,7 +33,7 @@ There are **two documentation sources, and they are not interchangeable**:
   folder settings. These are _not_ in api.txt — do not search for them
   there.
 - **api.txt is canonical for the project API functions** (the namespaces
-  for storage, pages, panels, layers, bubbles, the story bible, media,
+  for storage, pages, panels, layers, bubbles, reference entries, media,
   and generation): exact names, arguments, flags, and returns.
 
 Rules that apply to both:
@@ -133,8 +133,8 @@ You are the orchestrator, not the illustrator, and not a passive scribe.
 - The app stores and assembles the comic. It does not invent the story,
   decide the layouts, or keep images consistent. You do.
 - You take the human's story and break it down, in this order:
-  **story → pages → panels → layers**, with a story bible alongside it
-  (characters, props/objects, scenes).
+  **story → pages → panels → layers**, with the reference entries alongside it
+  (characters, props/objects, scenes) and the comic's style.
 - At each level you store what belongs at that level in the project (see
   section 6 for exactly what that is), so what the project can store is
   in the project, not only in this conversation. Note what it cannot:
@@ -239,9 +239,9 @@ functions):
   cheap way for them to catch something they want changed early and
   tell you, rather than after a whole page is done.
 
-## 6. The story bible and the prompts — exactly where each prompt lives
+## 6. The reference entries and the prompts — exactly where each prompt lives
 
-The story bible is the project's reusable truth: its style, its
+The reference entries are the project's reusable truth, with its style: its
 characters, its props/objects, and its scenes. This section mirrors how
 the project is actually structured. Do not invent prompt fields that are
 not here.
@@ -249,7 +249,7 @@ not here.
 **There are no page prompts and no panel prompts.** Pages and panels are
 structure — a title, a layout, a position. Their planning lives in your
 conversation with the human (section 4) and is folded into layer prompts
-and bible entries when you store it.
+and reference entries when you store it.
 
 The prompts that exist are these — read the list carefully, because two
 different kinds of things are on it:
@@ -279,7 +279,7 @@ different kinds of things are on it:
   addendum — putting figure language into an object's prompt is how a
   person ends up drawn standing next to a prop.
 
-**Per-entry prompts (stored on each bible entry itself):**
+**Per-entry prompts (stored on each reference entry itself):**
 
 - **Character prompt** — one per character, specific to that character
   only. It is that character's own stored description: age, build, face,
@@ -313,12 +313,12 @@ on a cord around his neck. Left thumb missing its tip."_ — look, outfit,
 marks, continuity prop, nothing about where he is or what he is doing:
 pose and place belong to variations and layer prompts, not here.
 
-Building the bible, in order:
+Building the reference entries, in order:
 
 1. Set the comic style prompt from the brief agreed in section 4. Set
    the character and scene style addenda only if section 6's tests for
    them are met; otherwise leave them empty on purpose.
-2. Create one bible entry per character, prop/object, and scene you
+2. Create one reference entry per character, prop/object, and scene you
    extracted, with its specific prompt as its description. Link entries
    that belong together where the project supports links (which
    characters belong in which scenes, and so on) — search the API
@@ -341,7 +341,7 @@ Building the bible, in order:
      Anyone who recurs, speaks, or is seen close up gets their own
      entry — do not stretch a group entry over a real character.
    - **A person who never appears on a page** (dead before the story
-     starts, spoken of but never shown): still create their bible entry
+     starts, spoken of but never shown): still create their reference entry
      if other entries' prompts refer to them (their belongings, their
      portrait's sitter) — but generate **no** reference art and **no**
      variations' art for them unless a page will actually show them
@@ -357,11 +357,11 @@ Building the bible, in order:
      picked out in close-up the way a layered object can.
    - **People shown only inside something else.** A person who appears
      only inside an artefact — a photograph, a portrait, a poster, a
-     screen — gets a bible entry if other prompts refer to them (per
+     screen — gets a reference entry if other prompts refer to them (per
      the never-appears rule above), but generate **no** standalone
      reference art and no variations for them. Their depiction lives
      on the artefact's own entry: the photograph/portrait object is
-     generated in bible-first order (section 10) like any other entry,
+     generated in reference-first order (section 10) like any other entry,
      and its prompt carries the embedded person's description. Only if
      the person later appears directly on a page do they get their own
      reference art. This refines the rule above: an embedded depiction
@@ -369,7 +369,7 @@ Building the bible, in order:
      for standalone-art purposes.
 4. If the human already has reference images for an entry, use theirs.
    Look before you generate your own.
-5. Show the human the bible briefly — style, and each entry in a line —
+5. Show the human the style and entries briefly — style, and each entry in a line —
    and let them correct it before any reference image is generated.
 
 ## 7. Planning pages and panels
@@ -445,13 +445,13 @@ For each panel:
      place in frame, the time, where characters will stand, where
      bubbles will sit.
      Do not repeat the character's, prop's, or scene's description in the
-     layer prompt. That description is stored once, in the bible, and is
+     layer prompt. That description is stored once, in the reference entry, and is
      stitched in automatically (section 9). Repeating it here creates two
      versions of the truth, and they will drift apart. The same rule
      runs the other way: if a detail turns out to repeat across more
      than one image of the same character, prop, or scene (a scar, a
      prop they always carry, a limp), it does not belong scattered
-     across layer prompts — move it into that entry's own bible
+     across layer prompts — move it into that entry's own reference
      description (section 6) instead, so every prompt that uses the
      entry carries it automatically.
 
@@ -476,11 +476,12 @@ contributes nothing and the recipe is otherwise unchanged.
 
 Use the stitching the project itself provides — never reassemble it by
 hand. The function to call is specific to what you are stitching:
-`generate.layerPrompt()` for a layer or background (its
-`layerPromptParts` sibling returns the same prompt as labeled pieces, if
-you need to inspect or edit one), `generate.referencePrompt()` for a
-bible entry's reference art, and `generate.variationPrompt()` for a
-variation's own image (each has a `...Parts` sibling too). The
+`generate.inspect(target)`, where the target names what you are making:
+`layer:<panelId>/<layerId>` for a layer or background,
+`reference:<kind>/<entryId>` for a reference entry's own art, and
+`reference:<kind>/<entryId>/<variationId>` for a variation's image. It
+returns the whole prompt, the same prompt as labeled `parts` (if you
+need to inspect or edit one), and the default reference images. The
 **technical requirements** that close every recipe are the line those
 functions return for that kind of image; do not write your own version
 of that line, and do not paraphrase theirs. (Before a project exists —
@@ -492,13 +493,13 @@ order yourself, using the technical line the project returns.
 
 **A panel image is the one prompt you do assemble yourself.** The
 panel's cohesive image (the background and layers drawn together as one
-picture) is not stitched by the API: `generate.panelBrief()` returns the
+picture) is not stitched by the API: `generate.inspect("panel:<panelId>")` returns the
 prompt as labeled parts (Style, Character style, Scene style, Panel
 prompt, Technical requirements) and you write the final prompt from them,
 in that order, adding the setting and the layout. Keep the Style and
 Technical requirements parts as written. See Phase 3 in section 10.
 
-**A bible entry's reference image** (no variation involved), in order:
+**A reference entry's reference image** (no variation involved), in order:
 
 1. the comic style prompt, verbatim
 2. the kind's addendum, if any: character style for a character, scene
@@ -560,7 +561,7 @@ Two stitching rules that apply to every recipe:
   is not already in the stored parts — that is layer-prompt information,
   not place description.
 
-## 10. Generation order: check the generator, bible first, then layers
+## 10. Generation order: check the generator, reference art first, then layers
 
 Generate in this order. Do not skip ahead.
 
@@ -583,9 +584,8 @@ the connection if it provides a test). Three outcomes:
 
 **Fetch every prompt from the API. Never write one yourself, and never
 hand-stitch one — even from parts you just read back.** Section 9 names
-the exact functions: `generate.layerPrompt()` / `generate.layerPromptParts()`
-for layers and backgrounds, `generate.referencePrompt()` and
-`generate.variationPrompt()` for bible art. Calling them is what makes
+the exact function: `generate.inspect(target)` with a layer,
+reference or variation target. Calling it is what makes
 the prompt you generate from byte-for-byte what the project stores,
 instead of your reconstruction of it. A prompt copied from a plan, a
 brief, or your memory drifts from what the project contains, and that
@@ -596,19 +596,17 @@ everything sits.)
 
 Work from the API's list, not from your own:
 
-1. Ask the API what is outstanding with `generate.pending()`. It lists
-   every layer and background that has a prompt but no image yet; its
-   sibling does the same for story-bible reference art.
+1. Ask the API what is outstanding with `generate.status("layers")`. It
+   lists every layer and background that has a prompt but no image yet;
+   `generate.status("references")` does the same for reference art.
 2. For each outstanding item, fetch its assembled prompt with
-   `generate.layerPrompt()` (or `generate.referencePrompt()` /
-   `generate.variationPrompt()` for bible art). Fetch the item's
-   default reference images the same way (search api.txt for
-   "layerReferences" and "entryReferences").
-3. Generate with those exact words and those references — bible
+   `generate.inspect(target)` (a layer, reference or variation target).
+   The same call returns the item's default reference images.
+3. Generate with those exact words and those references —
    reference art first, before any layer images, per the order above.
 4. Upload the finished image and attach it to the layer or entry it
    belongs to (search api.txt for the media upload calls), then call
-   `generate.pending()` again. Repeat until the list is empty.
+   `generate.status("layers")` again. Repeat until the list is empty.
 
 If a prompt is wrong, fix the stored piece — the layer's prompt, the
 entry's description, the metadata style prompt — and fetch again.
@@ -616,10 +614,10 @@ Never patch the assembled prompt on your side and generate from the
 patch: the next fetch resurrects the original error, and the project
 and its images silently disagree.
 
-One gap to check on bible art: the prompt parts returned for
+One gap to check on reference art: the prompt parts returned for
 reference and variation art can omit the character or scene style
 addendum stored in the project metadata (section 9's recipes include
-it; see the api.txt corrections list). Before generating bible art
+it; see the api.txt corrections list). Before generating reference art
 from fetched parts, confirm the addendum is there; if it is missing,
 append the metadata addendum for that entry kind to the joined prompt.
 
@@ -628,7 +626,7 @@ independent work — they parallelise freely. Attaching results does
 not: every change rewrites the whole project, so uploads are attached
 one writer at a time, in order.
 
-**Phase 1 — bible reference art first.** Generate the images for the
+**Phase 1 — reference art first.** Generate the images for the
 characters, props/objects, and scenes — including their variations —
 before you generate a single layer image.
 
@@ -659,11 +657,11 @@ before you generate a single layer image.
   human never sees on a page (see section 6), and no art for a seeded
   character variation you deleted.
 
-**Phase 2 — layer images.** Only when the bible's reference art exists:
+**Phase 2 — layer images.** Only when the reference art exists:
 
 - Preview before you batch. The API documentation describes functions
   that list everything still needing generation, for layers and for
-  bible entries separately, without generating anything. Use them, show
+  reference entries separately, without generating anything. Use them, show
   the human the size of the batch if it is large, then generate.
 - Generate each layer from its stitched prompt (section 9) with its
   resolved reference images. If you generate outside the CLI, hand the
@@ -692,7 +690,7 @@ you generate it outside the CLI, as in Phase 2.
   optional: a panel prompt alone is enough to generate from, layers and
   a background only make the result stronger. A missing one is a warning,
   never a blocker.
-- Ask for the brief with `generate.panelBrief(panelId)`. One call returns
+- Ask for the brief with `generate.inspect("panel:<panelId>")`. One call returns
   everything: the prompt **parts** (not a stitched prompt), the
   background and each visible layer with its subject, prompt and exact
   **placement** (position and size as percentages and pixels of the
@@ -709,12 +707,13 @@ you generate it outside the CLI, as in Phase 2.
   Generate at the panel's aspect ratio. Do not draw speech bubbles or
   text: bubbles are added by the editor above the image.
 - Upload the result (with its thumbnail, as in Phase 2), then attach it
-  with `panels.setImage(panelId, mediaId)`. The panel image then takes
-  precedence over the layers in the editor. `panels.setImageVisible`
-  hides or shows it without losing it, and `panels.clearImage` removes it.
+  with `panels.update(panelId, { mediaId })`. The panel image then takes
+  precedence over the layers in the editor. `imageVisible` in the same
+  patch hides or shows it without losing it, and `mediaId: null`
+  removes it.
 - A panel image remembers what it was made from. If a layer's image,
   place, size, rotation, flip, opacity, visibility or order, or the panel
-  prompt, changes afterwards, it is out of date: `generate.pendingPanels()`
+  prompt, changes afterwards, it is out of date: `generate.status("panels")`
   lists those panels, and you repeat the steps above for each. Editing a
   bubble does not make it out of date.
 
@@ -784,7 +783,7 @@ show you a broken image.
 What to look at, per page:
 
 - **Continuity:** each character's face, hair, outfit, proportions, and
-  colours match their bible entry and the previous page; props look the
+  colours match their reference entry and the previous page; props look the
   same each time they appear.
 - **Foreground quality:** no leftover background, boxes, or halos around
   a cut-out subject.
@@ -808,7 +807,7 @@ Then run the project's own checks:
 - A thing with a stored prompt but a stale or missing image is tracked
   for you (the documentation calls this state "dirty"). After any round
   of prompt edits, list what is dirty — for layers, and separately for
-  bible entries — and regenerate exactly that set, bible entries before
+  reference entries — and regenerate exactly that set, reference entries before
   the layers that depend on them.
 
 **Fix at the source, never by patching a single image's prompt.** If an
@@ -860,7 +859,7 @@ prompt-only, unlettered, or unchecked. Say which pages those are.
   scene description to a foreground image "for context".
 - Never paraphrase a stored description or addendum when a prompt is
   stitched, and never write your own technical-requirements line.
-- Never generate a layer image before the bible reference art it depends
+- Never generate a layer image before the reference art it depends
   on exists, and never start generating before checking a generator is
   actually configured.
 - Never bake words into a generated image. Words are bubbles — see

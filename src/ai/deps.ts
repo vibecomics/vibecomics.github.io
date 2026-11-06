@@ -85,13 +85,24 @@ export type LayerUpdate = Omit<LayerPatch, 'subjectId' | 'sceneId' | 'variationI
   sceneId?: string | null;
   variationId?: string | null;
   mediaId?: string | null;
+  /** Change the layer's place in its panel's stack (see layers.update). */
+  order?: LayerOrder;
 };
+/** Where layers.update puts a layer: one step, the very top or bottom, or a 0-based position from the bottom. */
+export type LayerOrder = 'top' | 'bottom' | 'up' | 'down' | number;
+/** The fields metadata.update can change. */
+export interface MetadataPatch {
+  style?: string;
+  characterStyle?: string;
+  sceneStyle?: string;
+  pageSize?: PageSize;
+}
 /** Input for bubbles.add(). Position and size are in % of panel size. */
 export type BubbleInput = Partial<Omit<Bubble, 'id'>> & { text: string };
 /** Patch for bubbles.update(). Only the given fields change. */
 export type BubblePatch = Partial<Omit<Bubble, 'id'>>;
 
-/** Input for characters/scenes/objects.create(). */
+/** Input for reference.create(). */
 export interface StoryEntryInput {
   name: string;
   description?: string;
@@ -105,7 +116,7 @@ export interface StoryEntryInput {
   variations?: Variation[];
 }
 
-/** Patch for characters/scenes/objects.update(). Only the given fields change. */
+/** Patch for reference.update(). Only the given fields change. */
 export type StoryEntryPatch = Partial<StoryEntryInput>;
 
 /** Input for variations.add(). */

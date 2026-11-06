@@ -17,7 +17,7 @@ export default function PreviewScreen({ project, page, pageSize }: Props) {
       <div className="position-fixed top-0 bottom-0 start-0 end-0 d-flex flex-column bg-dark">
         <div className="d-flex justify-content-between align-items-center p-3">
           <span className="text-light">Preview — {formatPageLabel(page)}</span>
-          <button className="btn btn-outline-light btn-sm" onClick={() => cb().page.closePreview()}>
+          <button className="btn btn-outline-light btn-sm" onClick={() => cb().page.preview(false)}>
             Close preview
           </button>
         </div>

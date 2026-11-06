@@ -42,7 +42,7 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
     setShowDriveModal(true);
     void device.run(() =>
       cb()
-        .storage.connectWithDevice()
+        .storage.connect('drive')
         .catch((e: unknown) => {
           setError(errorMessage(e));
           setShowDriveModal(false);
@@ -51,7 +51,7 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
   }
 
   async function connectS3(connectionString: string) {
-    await cb().storage.connectWithS3(connectionString);
+    await cb().storage.connect(connectionString);
     setShowS3Modal(false);
     onChange();
   }
@@ -60,7 +60,7 @@ export default function ConnectSettings({ connections, deviceCode, onChange }: P
     setError('');
     setDisconnectingId(id);
     try {
-      await disconnecting.run(() => cb().storage.disconnectConnection(id));
+      await disconnecting.run(() => cb().storage.disconnect(id));
       onChange();
     } catch (e) {
       setError(errorMessage(e));
