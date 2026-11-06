@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { cb } from '../ai/actions';
-import type { ComicPage, MediaItem, PageSize, Panel } from '../types/comic';
+import type { ComicPage, MediaItem, PageSize } from '../types/comic';
 import { formatPageLabel } from '../types/comic';
 import { usePersistentChoice } from '../utils/usePersistentChoice';
 import { useMediaQuery } from '../utils/useViewport';
@@ -26,11 +26,9 @@ interface Props {
   onSelect: (selection: Selection) => void;
 }
 
-const plural = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
-
-/** What the sheet's handle bar says about the highlighted panel. */
-const panelSummary = (number: number, panel: Panel) =>
-  `Panel ${number} · ${plural(panel.layers.length, 'layer')} · ${plural(panel.bubbles.length, 'bubble')}`;
+/** What the phone sheet's handle bar says: the page and the highlighted panel. */
+const sheetTitle = (page: ComicPage, panelNumber: number | null) =>
+  panelNumber ? `Page ${page.number}, Panel ${panelNumber}` : `Page ${page.number}`;
 
 function AddPageButton({ className }: { className: string }) {
   return (
@@ -45,7 +43,7 @@ function AddPageButton({ className }: { className: string }) {
   );
 }
 
-/** Page number rail (left on desktop, footer on mobile), the selected page, and the inspector of its highlighted panel. */
+/** Page number rail (left on desktop, in the bottom sheet on mobile), the selected page, and the inspector of its highlighted panel. */
 export default function PagesTab({
   pages,
   pageIndex,
@@ -86,6 +84,21 @@ export default function PagesTab({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [panelId, current.layerId, current.bubbleId]);
 
+  const pageStrip = (
+    <div className="d-md-none d-flex align-items-center gap-2 border-top bg-body py-2 px-3">
+      <div className="d-flex flex-grow-1 gap-2" style={{ minWidth: 0, overflowX: 'auto' }}>
+        <PageButtons
+          pages={pages}
+          pageIndex={pageIndex}
+          className="px-3 flex-shrink-0"
+          axis="x"
+          conflictPageIds={conflictPageIds}
+        />
+      </div>
+      <AddPageButton className="px-3 flex-shrink-0" />
+    </div>
+  );
+
   return (
     <div className="d-flex flex-column flex-grow-1" style={{ minHeight: 0, minWidth: 0 }}>
       <div className="d-flex flex-grow-1" style={{ minHeight: 0 }}>
@@ -118,68 +131,6 @@ export default function PagesTab({
                 className="flex-grow-1 d-flex flex-column"
                 style={{ minWidth: 0, minHeight: 0 }}
               >
-                <div className="d-flex align-items-center gap-2 px-3 pt-2">
-                  <h2 className="h6 mb-0 text-truncate flex-grow-1">{formatPageLabel(page)}</h2>
-                  {pages.length === 1 && (
-                    <button
-                      className="btn btn-sm btn-primary flex-shrink-0"
-                      onClick={() => cb().page.add()}
-                    >
-                      Add your first page
-                    </button>
-                  )}
-                  <div
-                    className="btn-group btn-group-sm flex-shrink-0"
-                    role="group"
-                    aria-label="Zoom"
-                  >
-                    <button
-                      className="btn btn-outline-secondary"
-                      title="Zoom out"
-                      aria-label="Zoom out"
-                      disabled={view.scale <= MIN_SCALE}
-                      onClick={() => zoomBy(-ZOOM_STEP)}
-                    >
-                      −
-                    </button>
-                    <button
-                      className="btn btn-outline-secondary"
-                      title="Zoom in"
-                      aria-label="Zoom in"
-                      disabled={view.scale >= MAX_SCALE}
-                      onClick={() => zoomBy(ZOOM_STEP)}
-                    >
-                      +
-                    </button>
-                  </div>
-                  {/* The keyboard and touch way to reorder: the cover, page 0, stays first. */}
-                  {pageIndex > 0 && (
-                    <div
-                      className="btn-group btn-group-sm flex-shrink-0"
-                      role="group"
-                      aria-label="Move page"
-                    >
-                      <button
-                        className="btn btn-outline-secondary"
-                        title="Move page earlier"
-                        aria-label="Move page earlier"
-                        disabled={pageIndex <= 1}
-                        onClick={() => cb().page.move(pageIndex, pageIndex - 1)}
-                      >
-                        {wide ? '↑' : '←'}
-                      </button>
-                      <button
-                        className="btn btn-outline-secondary"
-                        title="Move page later"
-                        aria-label="Move page later"
-                        disabled={pageIndex >= pages.length - 1}
-                        onClick={() => cb().page.move(pageIndex, pageIndex + 1)}
-                      >
-                        {wide ? '↓' : '→'}
-                      </button>
-                    </div>
-                  )}
-                </div>
                 <PageSheet
                   page={page}
                   pageSize={pageSize}
@@ -204,10 +155,12 @@ export default function PagesTab({
                 wide={wide}
                 snap={snap}
                 onSnapChange={setSnap}
-                summary={
-                  panel ? panelSummary(panels.indexOf(panel) + 1, panel) : 'No panel selected'
-                }
+                footer={pageStrip}
+                summary={sheetTitle(page, panel ? panels.indexOf(panel) + 1 : null)}
               >
+                <h2 className="h6 text-truncate px-3 pt-3 mb-0 d-none d-md-block">
+                  {formatPageLabel(page)}
+                </h2>
                 {panel ? (
                   <PanelInspector
                     page={page}
@@ -215,6 +168,11 @@ export default function PagesTab({
                     media={media}
                     selection={current}
                     onSelect={onSelect}
+                    zoom={{
+                      canOut: view.scale > MIN_SCALE,
+                      canIn: view.scale < MAX_SCALE,
+                      by: (direction) => zoomBy(direction * ZOOM_STEP),
+                    }}
                   />
                 ) : (
                   <p className="text-muted p-3 mb-0 d-none d-md-block">No panel selected</p>
@@ -227,18 +185,7 @@ export default function PagesTab({
         </main>
       </div>
 
-      <div className="d-md-none d-flex align-items-center gap-2 border-top bg-body py-2 px-3">
-        <div className="d-flex flex-grow-1 gap-2" style={{ minWidth: 0, overflowX: 'auto' }}>
-          <PageButtons
-            pages={pages}
-            pageIndex={pageIndex}
-            className="px-3 flex-shrink-0"
-            axis="x"
-            conflictPageIds={conflictPageIds}
-          />
-        </div>
-        <AddPageButton className="px-3 flex-shrink-0" />
-      </div>
+      {!page && pageStrip}
     </div>
   );
 }

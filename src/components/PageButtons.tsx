@@ -16,7 +16,7 @@ interface ButtonProps {
   index: number;
   selected: boolean;
   className: string;
-  /** The direction the buttons are laid out in: 'y' for the side rail, 'x' for the footer. */
+  /** The direction the buttons are laid out in: 'y' for the side rail, 'x' for the bottom sheet's strip. */
   axis: 'x' | 'y';
   /** Where the button is shown, while pages are being reordered. */
   order: number;
@@ -75,8 +75,8 @@ function PageButton({
       style={{
         order,
         cursor: dragging ? 'grabbing' : undefined,
-        // On the side rail a finger drags the page instead of scrolling the rail. The footer keeps
-        // scrolling sideways under a finger; there, use the move buttons above the page.
+        // On the side rail a finger drags the page instead of scrolling the rail. The sheet's strip
+        // keeps scrolling sideways under a finger, so pages can only be reordered on the rail.
         touchAction: movable && axis === 'y' ? 'none' : undefined,
       }}
       {...handlers}

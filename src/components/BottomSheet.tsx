@@ -17,6 +17,8 @@ interface Props {
   onSnapChange: (snap: Snap) => void;
   /** Always visible on the handle bar. */
   title: ReactNode;
+  /** Docked at the bottom of the sheet, hidden while it is closed (outside the drag handle). */
+  footer?: ReactNode;
   children: ReactNode;
 }
 
@@ -25,7 +27,13 @@ interface Props {
  * handle bar), half and full. Drag the handle bar to resize it (on release it settles on a
  * height), or tap it to open or close. The neighbour takes whatever room is left.
  */
-export default function BottomSheet({ snap, onSnapChange: setSnap, title, children }: Props) {
+export default function BottomSheet({
+  snap,
+  onSnapChange: setSnap,
+  title,
+  footer,
+  children,
+}: Props) {
   const [dragHeight, setDragHeight] = useState<number | null>(null);
   const viewport = useViewportHeight();
 
@@ -92,6 +100,7 @@ export default function BottomSheet({ snap, onSnapChange: setSnap, title, childr
       >
         <div className="inspector">{children}</div>
       </div>
+      {height > 0 && footer}
     </div>
   );
 }

@@ -14,10 +14,12 @@ interface Props {
   media: MediaItem[];
   selection: Selection;
   onSelect: (selection: Selection) => void;
+  /** Zooms the page view: `by(1)` in, `by(-1)` out. */
+  zoom: { canIn: boolean; canOut: boolean; by: (direction: 1 | -1) => void };
 }
 
 /** Everything you can do to the highlighted panel: delete it and edit its content. */
-export default function PanelInspector({ page, panel, media, selection, onSelect }: Props) {
+export default function PanelInspector({ page, panel, media, selection, onSelect, zoom }: Props) {
   const expansion = useExpansion();
   const size = cb().panels.size(panel.id);
   const hasContent = panel.layers.length > 0 || panel.bubbles.length > 0;
@@ -34,19 +36,41 @@ export default function PanelInspector({ page, panel, media, selection, onSelect
             {size && `${size.widthIn}″ × ${size.heightIn}″ · ratio ${size.aspectRatio}`}
           </div>
         </div>
-        <button
-          className="btn btn-outline-secondary btn-sm text-nowrap flex-shrink-0"
-          disabled={onlyPanel}
-          title={onlyPanel ? 'A page needs at least one panel' : 'Delete this panel'}
-          aria-label="Delete this panel"
-          onClick={() => {
-            if (!hasContent || window.confirm('Delete this panel and everything in it?')) {
-              cb().panels.delete(panel.id);
-            }
-          }}
-        >
-          <TrashIcon />
-        </button>
+        <div className="d-flex gap-2 flex-shrink-0">
+          <div className="btn-group btn-group-sm" role="group" aria-label="Zoom">
+            <button
+              className="btn btn-outline-secondary"
+              title="Zoom out"
+              aria-label="Zoom out"
+              disabled={!zoom.canOut}
+              onClick={() => zoom.by(-1)}
+            >
+              −
+            </button>
+            <button
+              className="btn btn-outline-secondary"
+              title="Zoom in"
+              aria-label="Zoom in"
+              disabled={!zoom.canIn}
+              onClick={() => zoom.by(1)}
+            >
+              +
+            </button>
+          </div>
+          <button
+            className="btn btn-outline-secondary btn-sm text-nowrap flex-shrink-0"
+            disabled={onlyPanel}
+            title={onlyPanel ? 'A page needs at least one panel' : 'Delete this panel'}
+            aria-label="Delete this panel"
+            onClick={() => {
+              if (!hasContent || window.confirm('Delete this panel and everything in it?')) {
+                cb().panels.delete(panel.id);
+              }
+            }}
+          >
+            <TrashIcon />
+          </button>
+        </div>
       </div>
 
       {panel.layers.length === 0 && (
