@@ -19,6 +19,8 @@ interface PageEditing {
   onSelect: (selection: Selection) => void;
   /** A tap (a press that barely moves) anywhere on the page area, including on layers and bubbles. */
   onTap?: () => void;
+  /** A horizontal finger swipe across the page at fit scale: -1 for toward the next page (swipe left), 1 for the previous. */
+  onSwipe?: (direction: -1 | 1) => void;
 }
 
 interface Props {
@@ -32,6 +34,10 @@ interface Props {
 
 /** Screen pixels a press may move and still count as a tap. */
 const TAP_SLOP_PX = 6;
+
+/** A swipe must travel this far sideways, and mostly sideways, to turn the page. */
+const SWIPE_MIN_PX = 60;
+const SWIPE_DOMINANCE = 1.5;
 
 const contains = (r: Rect, p: Point) =>
   p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height;
@@ -173,9 +179,23 @@ export default function PageSheet({
         });
       }
     },
-    end: (_, state) => {
+    end: (event, state) => {
       setPanning(false);
-      if (state.moved) return;
+      if (state.moved) {
+        // Only a finger turns pages, and only at fit scale (zoomed in, a drag pans). Layers, bubbles
+        // and handles take their own presses first, so a swipe never fights with moving or resizing.
+        const dx = event.clientX - state.from.x;
+        const dy = event.clientY - state.from.y;
+        if (
+          event.pointerType === 'touch' &&
+          view.scale <= 1 &&
+          Math.abs(dx) >= SWIPE_MIN_PX &&
+          Math.abs(dx) >= Math.abs(dy) * SWIPE_DOMINANCE
+        ) {
+          editing?.onSwipe?.(dx < 0 ? -1 : 1);
+        }
+        return;
+      }
       const panel = page.panels[state.index];
       const layerId = editing?.selection.panelId === panel.id ? state.layerId : undefined;
       editing?.onSelect({ panelId: panel.id, layerId });

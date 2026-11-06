@@ -192,6 +192,11 @@ export default function PagesTab({
                     onTap: () => {
                       if (!wide) setSnap('closed');
                     },
+                    // On a narrow screen, swiping left shows the next page and right the previous one.
+                    onSwipe: (direction) => {
+                      const target = pageIndex - direction;
+                      if (!wide && target >= 0 && target < pages.length) cb().page.select(target);
+                    },
                   }}
                 />
               </section>
