@@ -1,12 +1,16 @@
+import { useState } from 'react';
 import { cb } from '../ai/actions';
 import type { ComicPage, MediaItem, Panel } from '../types/comic';
 import BackgroundSection from './BackgroundSection';
 import BubblesSection from './BubblesSection';
 import HelpSection from './HelpSection';
 import LayersSection from './LayersSection';
+import PanelImageSection from './PanelImageSection';
 import { TrashIcon } from './Icons';
 import type { Selection } from './selection';
 import { useExpansion } from './useExpansion';
+
+type Section = 'image' | 'bubbles' | 'layers' | 'background';
 
 interface Props {
   page: ComicPage;
@@ -24,6 +28,21 @@ export default function PanelInspector({ page, panel, media, selection, onSelect
   const size = cb().panels.size(panel.id);
   const hasContent = panel.layers.length > 0 || panel.bubbles.length > 0;
   const onlyPanel = page.panels.length === 1;
+  // Any number of sections can be open. A shown panel image takes the layers' place on the page, so
+  // it starts open and Layers closed; with no (or a hidden) panel image, Layers starts open.
+  // Clicking a header toggles that section; the choice is kept for this panel only.
+  const panelImageShown = panel.image?.visible === true;
+  const [chosen, setChosen] = useState<{ panelId: string; open: Section[] } | null>(null);
+  const openSections: Section[] =
+    chosen?.panelId === panel.id ? chosen.open : panelImageShown ? ['image'] : ['layers'];
+  const isOpen = (section: Section) => openSections.includes(section);
+  const toggle = (section: Section) =>
+    setChosen({
+      panelId: panel.id,
+      open: isOpen(section)
+        ? openSections.filter((s) => s !== section)
+        : [...openSections, section],
+    });
 
   return (
     <div className="p-3">
@@ -81,26 +100,39 @@ export default function PanelInspector({ page, panel, media, selection, onSelect
           </p>
         </HelpSection>
       )}
-      <BubblesSection
-        panel={panel}
-        selection={selection}
-        onSelect={onSelect}
-        expansion={expansion}
-      />
-      <LayersSection
-        panel={panel}
-        media={media}
-        selection={selection}
-        onSelect={onSelect}
-        expansion={expansion}
-      />
-      <BackgroundSection
-        panel={panel}
-        media={media}
-        selection={selection}
-        onSelect={onSelect}
-        expansion={expansion}
-      />
+      <div className="accordion mb-3">
+        <PanelImageSection
+          panel={panel}
+          media={media}
+          open={isOpen('image')}
+          onToggleOpen={() => toggle('image')}
+        />
+        <BubblesSection
+          panel={panel}
+          selection={selection}
+          onSelect={onSelect}
+          expansion={expansion}
+          open={isOpen('bubbles')}
+          onToggleOpen={() => toggle('bubbles')}
+        />
+        <LayersSection
+          panel={panel}
+          media={media}
+          selection={selection}
+          onSelect={onSelect}
+          expansion={expansion}
+          open={isOpen('layers')}
+          onToggleOpen={() => toggle('layers')}
+        />
+        <BackgroundSection
+          panel={panel}
+          media={media}
+          selection={selection}
+          onSelect={onSelect}
+          open={isOpen('background')}
+          onToggleOpen={() => toggle('background')}
+        />
+      </div>
     </div>
   );
 }

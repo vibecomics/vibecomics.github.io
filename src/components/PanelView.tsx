@@ -5,6 +5,8 @@ import type { Panel } from '../types/comic';
 import { useElementSize } from '../utils/useElementSize';
 import BubbleView from './BubbleView';
 import LayerBox from './LayerBox';
+import { useProject } from './ProjectContext';
+import { useMediaImage } from './useMediaImage';
 
 interface PanelEditing {
   selectedLayerId: string | null;
@@ -27,13 +29,28 @@ export default function PanelView({ panel, number, editing }: Props) {
   const [bubblePreview, setBubblePreview] = useState<{ id: string; patch: BubblePatch } | null>(
     null
   );
-  const layers = panel.layers.filter((layer) => layer.visible);
-  const hasArt = panel.layers.some((layer) => layer.visible && layer.mediaId);
+  const media = useProject().metadata.media;
+  // A shown panel image takes precedence: it is drawn alone, with no background or layers.
+  const panelImage = panel.image?.visible ? panel.image : undefined;
+  const panelImageSrc = useMediaImage(
+    panelImage ? media.find((m) => m.id === panelImage.mediaId) : undefined
+  );
+  const layers = panelImage ? [] : panel.layers.filter((layer) => layer.visible);
+  const hasArt =
+    panelImage !== undefined || panel.layers.some((layer) => layer.visible && layer.mediaId);
 
   return (
     <div className="panel-canvas" ref={canvasRef}>
       {number !== undefined && <span className="panel-number">{number}</span>}
       {!hasArt && <div className="panel-empty">No artwork yet</div>}
+      {panelImageSrc && (
+        <img
+          src={panelImageSrc}
+          alt={panel.title || 'Panel image'}
+          className="panel-layer background"
+          draggable={false}
+        />
+      )}
       {layers.map((layer) => {
         const shown = layerPreview?.id === layer.id ? { ...layer, ...layerPreview.patch } : layer;
         const layerEditing = editing && {

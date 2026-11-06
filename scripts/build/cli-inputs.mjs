@@ -153,9 +153,31 @@ export const INPUTS = {
       type: 'object',
       fields: {
         title: { type: 'string', optional: true, help: 'The new panel title.' },
+        prompt: {
+          type: 'multiline',
+          optional: true,
+          help: 'Direction for the whole panel (action, mood, lighting, time of day), used for the panel image. A blank value clears it.',
+        },
       },
     },
   },
+  'panels.setImage': {
+    panelId: PANEL_ID,
+    mediaId: {
+      type: 'string',
+      example: 'media_ab12cd',
+      help: 'A media id from "media upload" or "media list".',
+    },
+  },
+  'panels.setImageVisible': {
+    panelId: PANEL_ID,
+    visible: {
+      type: 'json',
+      example: 'true',
+      help: 'true shows the panel image, false hides it (the layers show again).',
+    },
+  },
+  'panels.clearImage': { panelId: PANEL_ID },
   'panels.delete': { panelId: PANEL_ID },
 
   'layers.list': { panelId: PANEL_ID },
@@ -360,6 +382,16 @@ export const INPUTS = {
   'generate.layerPrompt': { panelId: PANEL_ID, layerId: LAYER_ID },
   'generate.layerPromptParts': { panelId: PANEL_ID, layerId: LAYER_ID },
   'generate.pending': {},
+  'generate.panelBrief': {
+    panelId: PANEL_ID,
+    includeImages: {
+      type: 'json',
+      optional: true,
+      example: 'false',
+      help: 'false returns the brief without fetching the reference images. By default each image is saved to a file (see --out) and its path is given as "file".',
+    },
+  },
+  'generate.pendingPanels': {},
   'generate.dirty': {
     kinds: {
       type: 'json',

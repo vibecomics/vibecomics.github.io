@@ -254,6 +254,32 @@
       "required": ["id", "name", "fileName", "mimeType"],
       "type": "object"
     },
+    "PanelImage": {
+      "description": "A panel's own cohesive image: background, layers and lighting drawn together as one picture. While visible it takes precedence over the panel's layers (bubbles still draw above it).",
+      "properties": {
+        "basis": {
+          "description": "Fingerprint of everything the image was made from (the panel prompt and each visible layer's image, place, size, rotation, flip, opacity and order). The image is out of date when the panel's current fingerprint differs.",
+          "type": "string"
+        },
+        "mediaHistory": {
+          "description": "Previous panel images, most-recent-first.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "mediaId": {
+          "description": "Id of the MediaItem holding the image.",
+          "type": "string"
+        },
+        "visible": {
+          "description": "False hides the panel image so the layers show again.",
+          "type": "boolean"
+        }
+      },
+      "required": ["mediaId", "visible", "basis"],
+      "type": "object"
+    },
     "Panel": {
       "properties": {
         "bubbles": {
@@ -271,8 +297,11 @@
           },
           "type": "array"
         },
+        "image": {
+          "$ref": "#/$defs/PanelImage"
+        },
         "prompt": {
-          "description": "The intent of the panel: what it shows and why (moment, camera, mood). Stitched after the page prompt and before each layer's prompt into the prompt for every layer's image in the panel.",
+          "description": "Direction for the panel as a whole (action, mood, lighting, time of day), used when generating the panel image (generate.panelBrief). Absent means none.",
           "type": "string"
         },
         "title": {

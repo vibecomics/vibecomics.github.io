@@ -1,5 +1,5 @@
 import type { ComicProject, Layer, StoryEntry } from '../types/comic';
-import { findPanel, layerArtSize } from './builders';
+import { artSize, findPanel, layerArtSize } from './builders';
 
 export type ReferenceKind = 'characters' | 'objects' | 'scenes';
 
@@ -236,6 +236,44 @@ export function buildLayerPromptParts(
 /** Stitches the prompt for a layer's (or background's) image (see buildLayerPromptParts). */
 export function buildLayerPrompt(project: ComicProject, panelId: string, layerId: string): string {
   return joinPromptParts(buildLayerPromptParts(project, panelId, layerId));
+}
+
+/**
+ * The labeled parts of a panel image's prompt, in the order they belong: Style, the Character style
+ * and Scene style addenda (each only when the panel has a visible character layer / a background
+ * linked to a scene, and the addendum is set), the panel's own prompt, then a technical requirements
+ * line. Unlike a layer's, a panel prompt is NOT stitched here: generate.panelBrief hands over these
+ * parts and the LLM writes the final prompt from them, adding the layout (placements) and the
+ * descriptions of what is in the panel. Only parts with text are included.
+ */
+export function buildPanelPromptParts(project: ComicProject, panelId: string): PromptPart[] {
+  const panel = findPanel(project, panelId);
+  if (!panel) throw new Error(`Panel "${panelId}" not found.`);
+  const visible = panel.layers.filter((layer) => layer.visible);
+  const hasCharacter = visible.some(
+    (layer) =>
+      layer.kind === 'foreground' &&
+      project.metadata.characters.some((c) => c.id === layer.subjectId)
+  );
+  const hasScene = visible.some(
+    (layer) =>
+      layer.kind === 'background' && project.metadata.scenes.some((s) => s.id === layer.sceneId)
+  );
+  const { widthIn, heightIn } = project.metadata.pageSize;
+  const size = artSize((widthIn * panel.width) / 100, (heightIn * panel.height) / 100);
+  const technical =
+    `One finished comic panel, aspect ratio ${size.aspectRatio}:1, drawn as a single cohesive image: ` +
+    'one light source and direction, one time of day, one color palette and one perspective shared ' +
+    'by the background and every character and object, with consistent shadows and color cast. ' +
+    'Keep each element where the layout places it and keep its design exactly as in its reference ' +
+    'image. No speech bubbles, captions, lettering or other text, and no panel border.';
+  return keepNonEmpty([
+    { label: 'Style', text: project.metadata.style },
+    { label: 'Character style', text: hasCharacter ? project.metadata.characterStyle : undefined },
+    { label: 'Scene style', text: hasScene ? project.metadata.sceneStyle : undefined },
+    { label: 'Panel prompt', text: panel.prompt },
+    { label: 'Technical requirements', text: technical },
+  ]);
 }
 
 /** A reference image chosen for one generation, with an optional note on how to use it. */

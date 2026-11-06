@@ -4,6 +4,7 @@ import { useDragGhost } from '../utils/dragGhost';
 import type { Point } from '../utils/dragGhost';
 import { moved, slotAt } from '../utils/reorder';
 import type { MediaItem, Panel } from '../types/comic';
+import AccordionItem from './AccordionItem';
 import HelpSection from './HelpSection';
 import LayerRow from './LayerRow';
 import type { Selection } from './selection';
@@ -15,10 +16,21 @@ interface Props {
   selection: Selection;
   onSelect: (selection: Selection) => void;
   expansion: Expansion;
+  /** Whether the section's content is shown; it can be collapsed to just its heading. */
+  open: boolean;
+  onToggleOpen: () => void;
 }
 
 /** The panel's layers, top of the stack first. Drag a row's ≡ handle to reorder. */
-export default function LayersSection({ panel, media, selection, onSelect, expansion }: Props) {
+export default function LayersSection({
+  panel,
+  media,
+  selection,
+  onSelect,
+  expansion,
+  open,
+  onToggleOpen,
+}: Props) {
   const [drag, setDrag] = useState<{ id: string; over: number } | null>(null);
   const rows = useRef(new Map<string, HTMLElement>());
   const midpoints = useRef<Array<{ id: string; mid: number }>>([]);
@@ -81,12 +93,22 @@ export default function LayersSection({ panel, media, selection, onSelect, expan
   }
 
   return (
-    <section className="mb-3" aria-label="Layers">
-      <div className="d-flex justify-content-between align-items-center">
-        <h3 className="h6 mb-0">Layers</h3>
+    <AccordionItem title="Layers" open={open} onToggle={onToggleOpen}>
+      {foreground.length === 0 && (
+        <HelpSection title="What are layers?" open>
+          <p className="mb-0">
+            The characters, props and effects placed on this panel. Stacked from the bottom up, each
+            one can be moved, resized and reused.
+          </p>
+        </HelpSection>
+      )}
+      <div className="d-flex justify-content-between align-items-center my-2">
+        <button className="btn btn-outline-secondary btn-sm" onClick={addLayer}>
+          Add layer
+        </button>
         {foreground.length > 0 && (
           <button
-            className="btn btn-link btn-sm p-0 text-decoration-none"
+            className="btn btn-link btn-sm p-0 text-decoration-none flex-shrink-0"
             onClick={() =>
               expansion.setAll(
                 foreground.map((l) => l.id),
@@ -98,17 +120,6 @@ export default function LayersSection({ panel, media, selection, onSelect, expan
           </button>
         )}
       </div>
-      {foreground.length === 0 && (
-        <HelpSection title="What are layers?" open>
-          <p className="mb-0">
-            The characters, props and effects placed on this panel. Stacked from the bottom up, each
-            one can be moved, resized and reused.
-          </p>
-        </HelpSection>
-      )}
-      <button className="btn btn-outline-secondary btn-sm my-2" onClick={addLayer}>
-        Add layer
-      </button>
       {/* Rows keep their place in the DOM while one is dragged (moving it would drop the pointer capture); `order` shows the new sequence. */}
       <div className="d-flex flex-column">
         {topFirst.map((layer) => (
@@ -141,6 +152,6 @@ export default function LayersSection({ panel, media, selection, onSelect, expan
           </div>
         ))}
       </div>
-    </section>
+    </AccordionItem>
   );
 }

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
 import type { MediaItem, Panel } from '../types/comic';
+import AccordionItem from './AccordionItem';
 import HelpSection from './HelpSection';
 import LayerRow from './LayerRow';
 import MediaPicker from './MediaPicker';
@@ -8,18 +9,26 @@ import Spinner from './Spinner';
 import { addMediaLayer, uploadImage } from './panelActions';
 import type { Selection } from './selection';
 import { useTask } from './useTask';
-import type { Expansion } from './useExpansion';
 
 interface Props {
   panel: Panel;
   media: MediaItem[];
   selection: Selection;
   onSelect: (selection: Selection) => void;
-  expansion: Expansion;
+  /** Whether the section's content is shown; it can be collapsed to just its heading. */
+  open: boolean;
+  onToggleOpen: () => void;
 }
 
 /** The panel's background: a button to set one, or a row for the one that is set. */
-export default function BackgroundSection({ panel, media, selection, onSelect, expansion }: Props) {
+export default function BackgroundSection({
+  panel,
+  media,
+  selection,
+  onSelect,
+  open,
+  onToggleOpen,
+}: Props) {
   const task = useTask();
   const [picking, setPicking] = useState(false);
   const background = panel.layers.find((layer) => layer.kind === 'background');
@@ -27,8 +36,7 @@ export default function BackgroundSection({ panel, media, selection, onSelect, e
     void task.run(async () => addMediaLayer(panel.id, await getItem(), 'background'));
 
   return (
-    <section className="mb-3" aria-label="Background">
-      <h3 className="h6">Background</h3>
+    <AccordionItem title="Background" open={open} onToggle={onToggleOpen}>
       {!background && (
         <HelpSection title="What is the background?" open>
           <p className="mb-0">
@@ -42,14 +50,13 @@ export default function BackgroundSection({ panel, media, selection, onSelect, e
           layer={background}
           media={media}
           selected={selection.layerId === background.id}
-          expanded={expansion.isOpen(background.id)}
+          collapsible={false}
           onSelect={() =>
             onSelect({
               panelId: panel.id,
               layerId: selection.layerId === background.id ? undefined : background.id,
             })
           }
-          onToggleExpanded={() => expansion.toggle(background.id)}
         />
       ) : (
         <>
@@ -65,7 +72,10 @@ export default function BackgroundSection({ panel, media, selection, onSelect, e
             <MediaPicker
               title="Choose a background image"
               media={media}
-              prefer={{ kind: 'background', aspectRatio: cb().panels.size(panel.id)?.aspectRatio }}
+              prefer={{
+                kind: 'background',
+                aspectRatio: cb().panels.size(panel.id)?.aspectRatio,
+              }}
               onUpload={(file) => set(() => uploadImage(file))}
               onPick={(item) => set(() => item)}
               onClose={() => setPicking(false)}
@@ -74,6 +84,6 @@ export default function BackgroundSection({ panel, media, selection, onSelect, e
         </>
       )}
       {task.error && <div className="text-danger small mt-2">{task.error}</div>}
-    </section>
+    </AccordionItem>
   );
 }

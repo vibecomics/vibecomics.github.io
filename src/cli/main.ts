@@ -4,8 +4,10 @@
  * the user's Google Drive. See help.ts for the user-facing description.
  */
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { createComicBuilder } from '../ai/actions';
+import type { PanelBrief } from '../ai/panelBrief';
 import type { DeviceClient } from '../drive/deviceOAuth';
 import { UsageError, buildArgs, parseArgv } from './args';
 import {
@@ -62,6 +64,49 @@ function saveDownload(
   const payload = result.dataUrl.slice(result.dataUrl.indexOf(',') + 1);
   fs.writeFileSync(target, Buffer.from(payload, 'base64'));
   return { name: result.name, mimeType: result.mimeType, savedTo: target };
+}
+
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/webp': '.webp',
+  'image/gif': '.gif',
+  'image/svg+xml': '.svg',
+};
+
+/**
+ * Write each reference image of a panel brief to a file and swap its base64 `dataUrl` for the
+ * file's `file` path, so the JSON stays small and the LLM can attach the files straight to its
+ * image generator. Files are named by the reference's number and role (01-background-name.png) to
+ * match the numbering in the brief. They go to --out, or else a folder in the system temp dir.
+ */
+function savePanelBriefImages(
+  brief: PanelBrief,
+  out: string | true | undefined,
+  cwd: string
+): PanelBrief {
+  const dir =
+    typeof out === 'string'
+      ? path.resolve(cwd, out)
+      : path.join(os.tmpdir(), 'vibecomics', brief.panel.id);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const ref of brief.references) {
+    if (!ref.dataUrl) continue;
+    const slug = (ref.name ?? ref.mediaId)
+      .replace(/\.[^.]+$/, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-|-$/g, '');
+    const extension = IMAGE_EXTENSIONS[ref.mimeType ?? ''] ?? '.png';
+    const file = path.join(
+      dir,
+      `${String(ref.index).padStart(2, '0')}-${ref.role}${slug ? `-${slug}` : ''}${extension}`
+    );
+    fs.writeFileSync(file, Buffer.from(ref.dataUrl.slice(ref.dataUrl.indexOf(',') + 1), 'base64'));
+    delete ref.dataUrl;
+    ref.file = file;
+  }
+  return brief;
 }
 
 async function run(argv: string[], io: CliIo): Promise<number | void> {
@@ -144,6 +189,9 @@ async function run(argv: string[], io: CliIo): Promise<number | void> {
   }
   if (spec.path === 'media.download') {
     result = saveDownload(result as Parameters<typeof saveDownload>[0], flags.get('out'), io.cwd);
+  }
+  if (spec.path === 'generate.panelBrief') {
+    result = savePanelBriefImages(result as PanelBrief, flags.get('out'), io.cwd);
   }
   io.stdout(result === undefined ? json({ ok: true }) : json(result));
   if (spec.path === 'project.lint') {

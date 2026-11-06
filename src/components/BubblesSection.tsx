@@ -1,6 +1,7 @@
 import { cb } from '../ai/actions';
 import { defaultPointer } from '../state/layout';
 import type { Bubble, BubbleKind, Panel } from '../types/comic';
+import AccordionItem from './AccordionItem';
 import { DeleteButton, ExpandButton } from './RowButtons';
 import type { Selection } from './selection';
 import type { Expansion } from './useExpansion';
@@ -17,6 +18,8 @@ interface Props {
   selection: Selection;
   onSelect: (selection: Selection) => void;
   expansion: Expansion;
+  open: boolean;
+  onToggleOpen: () => void;
 }
 
 function BubbleRow({
@@ -81,7 +84,14 @@ function BubbleRow({
 }
 
 /** The panel's speech, thought, shout and caption bubbles. Size and place them on the page itself. */
-export default function BubblesSection({ panel, selection, onSelect, expansion }: Props) {
+export default function BubblesSection({
+  panel,
+  selection,
+  onSelect,
+  expansion,
+  open,
+  onToggleOpen,
+}: Props) {
   function add(kind: BubbleKind, sample: string) {
     const offset = panel.bubbles.length % 4;
     const bubble = cb().bubbles.add(panel.id, {
@@ -95,8 +105,7 @@ export default function BubblesSection({ panel, selection, onSelect, expansion }
   }
 
   return (
-    <section className="mb-3" aria-label="Bubbles">
-      <h3 className="h6">Bubbles</h3>
+    <AccordionItem title="Bubbles" open={open} onToggle={onToggleOpen}>
       <div className="btn-group btn-group-sm mb-2">
         {KINDS.map(({ kind, label, sample }) => (
           <button
@@ -124,6 +133,6 @@ export default function BubblesSection({ panel, selection, onSelect, expansion }
           onToggleExpanded={() => expansion.toggle(bubble.id)}
         />
       ))}
-    </section>
+    </AccordionItem>
   );
 }

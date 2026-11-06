@@ -22,6 +22,7 @@ import type {
   Variation,
 } from '../types/comic';
 import { newId } from '../utils/id';
+import { isPanelImageDirty, swapPanelImage } from './panelImage';
 import type {
   ComicBuilderDeps,
   StoryEntryInput,
@@ -626,6 +627,38 @@ export function pendingReferenceGenerations(project: ComicProject): PendingRefer
   );
 }
 
+export interface PendingPanelImage {
+  pageId: string;
+  panelId: string;
+  /** Zero-based page number, as shown in the UI. */
+  page: number;
+  panelTitle?: string;
+  /** 1-based position of the panel on its page. */
+  panelNumber: number;
+  prompt?: string;
+}
+
+/** What needs a new panel image: every panel whose panel image no longer matches its layers or prompt.
+ * A panel with no panel image is not listed; panel images are opt-in (see generate.panelBrief). */
+export function pendingPanelImages(project: ComicProject): PendingPanelImage[] {
+  return project.pages.flatMap((page) =>
+    page.panels.flatMap((panel, i) =>
+      isPanelImageDirty(panel)
+        ? [
+            {
+              pageId: page.id,
+              panelId: panel.id,
+              page: page.number,
+              panelTitle: panel.title,
+              panelNumber: i + 1,
+              prompt: panel.prompt,
+            },
+          ]
+        : []
+    )
+  );
+}
+
 /** The index of the page that holds this panel, or -1 when no page does. */
 export function pageIndexOfPanel(project: ComicProject, panelId: string): number {
   return project.pages.findIndex((page) => page.panels.some((panel) => panel.id === panelId));
@@ -711,14 +744,48 @@ export function panelsApi(deps: ComicBuilderDeps) {
         })
       );
     },
-    update: (panelId: string, patch: { title?: string }): Panel => {
+    update: (panelId: string, patch: { title?: string; prompt?: string }): Panel => {
       assertOptionalText(patch.title, 'title');
+      assertOptionalText(patch.prompt, 'prompt');
       return snapshot(
-        mutate(deps, (p) =>
-          Object.assign(requirePanel(p, panelId), definedFields({ title: patch.title }))
-        )
+        mutate(deps, (p) => {
+          const panel = requirePanel(p, panelId);
+          Object.assign(panel, definedFields({ title: patch.title }));
+          // A blank prompt clears it, so the panel goes back to having none.
+          if (patch.prompt !== undefined) {
+            if (patch.prompt.trim()) panel.prompt = patch.prompt;
+            else delete panel.prompt;
+          }
+          return panel;
+        })
       );
     },
+    setImage: (panelId: string, mediaId: string): Panel =>
+      snapshot(
+        mutate(deps, (p) => {
+          resolveLayerImage(p, { mediaId });
+          const panel = requirePanel(p, panelId);
+          panel.image = swapPanelImage(panel, mediaId);
+          return panel;
+        })
+      ),
+    setImageVisible: (panelId: string, visible: boolean): Panel =>
+      snapshot(
+        mutate(deps, (p) => {
+          const panel = requirePanel(p, panelId);
+          if (!panel.image) throw new Error(`Panel "${panelId}" has no panel image.`);
+          panel.image.visible = Boolean(visible);
+          return panel;
+        })
+      ),
+    clearImage: (panelId: string): Panel =>
+      snapshot(
+        mutate(deps, (p) => {
+          const panel = requirePanel(p, panelId);
+          delete panel.image;
+          return panel;
+        })
+      ),
     delete: (panelId: string): boolean =>
       mutate(deps, (p) => {
         const page = pageOfPanel(p, panelId);

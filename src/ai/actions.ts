@@ -43,6 +43,7 @@ import {
   panelItemsApi,
   panelsApi,
   pendingGenerations,
+  pendingPanelImages,
   pendingReferenceGenerations,
   requirePanel,
   requireProject,
@@ -51,7 +52,13 @@ import {
   storyApi,
   variationsApi,
 } from './builders';
-import type { LayerKind, PendingGeneration, PendingReference, StoryKind } from './builders';
+import type {
+  LayerKind,
+  PendingGeneration,
+  PendingPanelImage,
+  PendingReference,
+  StoryKind,
+} from './builders';
 import type {
   ActionResult,
   BubbleInput,
@@ -61,6 +68,8 @@ import type {
   LayerUpdate,
 } from './deps';
 import { attachDocs } from './docs';
+import { panelBrief } from './panelBrief';
+import type { PanelBrief } from './panelBrief';
 import {
   cancelAllGenerations,
   cancelLayerGeneration,
@@ -615,9 +624,21 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
      * afterwards with resize; delete a panel with delete (a neighbour stretches
      * over its space). See the page namespace for more examples.
      *
-     * A panel has only a title (set with update) — there is no panel prompt.
-     * What a panel's images show comes entirely from its layers' own
-     * prompts (see the layers namespace).
+     * A panel has a title and an optional panel prompt (both set with update).
+     * The panel prompt is used ONLY for the panel's own image (below); it is
+     * never part of a layer's prompt, so what a layer's images show still
+     * comes entirely from the layers' own prompts (see the layers namespace).
+     *
+     * PANEL IMAGE. Besides its layers, a panel can have one cohesive image of
+     * the whole panel (background, characters and lighting drawn together, so
+     * they share light, color and perspective). Do this last, once the layers
+     * are final. generate.panelBrief gives you everything to generate it
+     * (prompt parts, where each layer sits, the reference images); upload the
+     * result with media.upload and attach it with setImage. While it is
+     * visible, the editor draws only this image in place of the layers
+     * (bubbles still draw above it); setImageVisible hides or shows it and
+     * clearImage removes it. It is optional, and goes out of date, listed by
+     * generate.pendingPanels, when the layers or the panel prompt change.
      *
      * A panel's aspect ratio follows from its rectangle and metadata.pageSize
      * (see size), so generate artwork at that ratio. The panel array is in the
@@ -706,12 +727,42 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
       resize: panels.resize,
 
       /**
-       * Update a panel's title. Only the given fields change.
+       * Update a panel's title or panel prompt. Only the given fields change.
        * @param panelId - The panel id.
-       * @param patch - { title? }.
+       * @param patch - { title?, prompt? }. prompt is direction for the panel as a whole (action, mood, lighting, time of day) used when generating the panel image (see generate.panelBrief); a blank prompt clears it. Changing it makes an existing panel image out of date.
        * @returns A deep-cloned snapshot of the updated Panel. Throws when not found.
        */
       update: panels.update,
+
+      /**
+       * Set the panel's own image: one cohesive picture of the whole panel (background, layers and
+       * lighting drawn together), made from generate.panelBrief. Upload it first with media.upload.
+       * While it is visible it takes precedence over the layers: the editor shows only this image
+       * (bubbles still draw above it) and the layers are not drawn. The previous panel image, if any,
+       * goes to mediaHistory. The image remembers what it was made from: editing a layer's image,
+       * place, size, rotation, flip, opacity, visibility or order, or the panel prompt, makes it out
+       * of date (see generate.pendingPanels), until you set a new one. Editing a bubble does not.
+       * @param panelId - The panel id.
+       * @param mediaId - A media id from media.upload or media.list.
+       * @returns A deep-cloned snapshot of the updated Panel. Throws when the panel or media is not found.
+       */
+      setImage: panels.setImage,
+
+      /**
+       * Show or hide the panel image without removing it. Hidden, the panel shows its layers again.
+       * @param panelId - The panel id.
+       * @param visible - True to show the panel image, false to hide it.
+       * @returns A deep-cloned snapshot of the updated Panel. Throws when the panel is not found or has no panel image.
+       */
+      setImageVisible: panels.setImageVisible,
+
+      /**
+       * Remove the panel image, so the panel shows its layers again. The image stays in the
+       * project's media (see media.delete to remove it everywhere).
+       * @param panelId - The panel id.
+       * @returns A deep-cloned snapshot of the updated Panel. Throws when not found.
+       */
+      clearImage: panels.clearImage,
 
       /**
        * Delete a panel. The neighbouring panel or panels that exactly cover one
@@ -1643,6 +1694,41 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        */
       dirty: (kinds?: LayerKind[]): Promise<GenerationOutcome[]> =>
         generateAllDirty(deps, setLayerMedia, kinds),
+
+      /**
+       * Everything needed to generate a PANEL IMAGE: one cohesive picture of the whole panel
+       * (background, characters and props drawn together, so they share lighting, perspective and
+       * style) that you generate yourself, outside the CLI, and then save with panels.setImage. Do
+       * this last, once the background and layers are final. It needs no configured image
+       * generator. Layers and a background are optional: with neither, a panel prompt alone is
+       * enough, they only make the result stronger (their absence is a warning, not an error).
+       *
+       * The result is JSON with: panel (id, page, number, size in inches, aspect ratio and pixels);
+       * style; promptParts (the labeled parts of the prompt: Style, Character style, Scene style,
+       * Panel prompt, Technical requirements; NOT stitched, you write the final prompt from them
+       * in order and add the setting and the layout); background (scene, variation, prompt,
+       * mediaId); layers (visible foreground layers, back to front, each with its subject,
+       * variation, prompt, mediaId, dirty and placement: x/y/width/height in % of the panel,
+       * rotation, flipX, opacity, the same in pixels, its center, and a plain-words description);
+       * skipped (hidden layers); references (the images to send to the generator, numbered by
+       * index, each with role, note, name, mimeType and the image itself as a data: URL; the CLI
+       * saves each to a file and gives its path as `file` instead); currentImage (the panel's
+       * existing panel image, with dirty); warnings; and instructions (how to use all this and how
+       * to save the result).
+       * @param panelId - The panel id.
+       * @param includeImages - Whether to fetch the reference images and include them (the default, true). Pass false for the same brief without the images.
+       * @returns A promise resolving to the panel brief. Rejects when the panel is not found.
+       */
+      panelBrief: (panelId: string, includeImages?: boolean): Promise<PanelBrief> =>
+        panelBrief(deps, panelId, includeImages),
+
+      /**
+       * The panels whose panel image is out of date: its layers or prompt changed since it was set
+       * (see panels.setImage). A panel with no panel image is not listed; panel images are optional,
+       * call generate.panelBrief for any panel to make one.
+       * @returns One { pageId, panelId, page, panelTitle?, panelNumber, prompt? } per out-of-date panel image.
+       */
+      pendingPanels: (): PendingPanelImage[] => pendingPanelImages(requireProject(deps)),
 
       /**
        * What generate.dirtyReferences() would generate, without generating

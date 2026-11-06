@@ -77,9 +77,37 @@ export interface Bubble {
   tailY?: number;
 }
 
+/**
+ * A panel's own cohesive image: the background, layers and lighting drawn together as one picture
+ * (see generate.panelBrief). While it is `visible` it takes precedence over the panel's layers, which
+ * are not drawn; bubbles still draw above it.
+ */
+export interface PanelImage {
+  /** Id of the MediaItem holding the image. */
+  mediaId: string;
+  /** Previous panel images, most-recent-first (same rules as Layer.mediaHistory). */
+  mediaHistory?: string[];
+  /** False hides the panel image so the layers show again; it is kept, not deleted. */
+  visible: boolean;
+  /**
+   * A fingerprint of everything the image was made from (see panelCompositeBasis): the panel prompt
+   * and each layer's image, place, size, rotation, flip, opacity, visibility and stacking order.
+   * Set whenever the image is set. The image is out of date (dirty) when the panel's current
+   * fingerprint differs; that is computed, not stored, so every way of editing a layer counts.
+   */
+  basis: string;
+}
+
 export interface Panel {
   id: string;
   title?: string;
+  /**
+   * Direction for the panel as a whole (action, mood, lighting, time of day), used when generating
+   * the panel image. The story bible's style and the layers supply the rest.
+   */
+  prompt?: string;
+  /** The panel's cohesive image, if it has one; takes precedence over the layers while visible. */
+  image?: PanelImage;
   /**
    * Position and size as percentages of the page. Panels tile the page, so a
    * panel's aspect ratio follows from its rectangle and the page size.

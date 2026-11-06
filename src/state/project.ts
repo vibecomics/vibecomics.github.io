@@ -152,13 +152,26 @@ function checkPanel(value: unknown, path: string): void {
   const panel = expectRecord(value, path);
   expectStrings(panel, path, ['id']);
   optionalString(panel, path, 'title');
+  optionalString(panel, path, 'prompt');
   checkPanelRect(panel, path);
+  if (panel.image !== undefined) checkPanelImage(panel.image, `${path}.image`);
   expectArray(panel.layers, path, 'layers').forEach((layer, i) =>
     checkLayer(layer, `${path}.layers[${i}]`)
   );
   expectArray(panel.bubbles, path, 'bubbles').forEach((bubble, i) =>
     checkBubble(bubble, `${path}.bubbles[${i}]`)
   );
+}
+
+function checkPanelImage(value: unknown, path: string): void {
+  const image = expectRecord(value, path);
+  expectStrings(image, path, ['mediaId', 'basis']);
+  if (typeof image.visible !== 'boolean') fail(path, 'expected boolean "visible"');
+  if (image.mediaHistory !== undefined) {
+    expectArray(image.mediaHistory, path, 'mediaHistory').forEach((id, i) => {
+      if (typeof id !== 'string') fail(`${path}.mediaHistory[${i}]`, 'expected string id');
+    });
+  }
 }
 
 /** A panel's rectangle is optional (older projects lack it) but must be complete when present. */

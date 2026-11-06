@@ -490,6 +490,14 @@ the technical line shown as a placeholder, never as an invented quote.)
 If you generate an image with a tool outside the CLI, reproduce the same
 order yourself, using the technical line the project returns.
 
+**A panel image is the one prompt you do assemble yourself.** The
+panel's cohesive image (the background and layers drawn together as one
+picture) is not stitched by the API: `generate.panelBrief()` returns the
+prompt as labeled parts (Style, Character style, Scene style, Panel
+prompt, Technical requirements) and you write the final prompt from them,
+in that order, adding the setting and the layout. Keep the Style and
+Technical requirements parts as written. See Phase 3 in section 10.
+
 **A bible entry's reference image** (no variation involved), in order:
 
 1. the comic style prompt, verbatim
@@ -581,7 +589,10 @@ for layers and backgrounds, `generate.referencePrompt()` and
 the prompt you generate from byte-for-byte what the project stores,
 instead of your reconstruction of it. A prompt copied from a plan, a
 brief, or your memory drifts from what the project contains, and that
-drift is where wrong images come from.
+drift is where wrong images come from. (The one exception is a panel
+image, Phase 3 below: there the API hands you the labeled parts and you
+write the prompt from them, because it also has to describe where
+everything sits.)
 
 Work from the API's list, not from your own:
 
@@ -667,6 +678,45 @@ before you generate a single layer image.
   thumbnail the editor uses to list images — search the API
   documentation for what an upload requires. An image without one makes
   the editor download the full image just to display the list.
+
+**Phase 3 — panel images (optional, last).** Layers generated one at a
+time can disagree about light, color and perspective. A **panel image**
+is one cohesive picture of the whole panel (background, characters and
+props drawn together) that, while it is visible, is shown in place of the
+layers. Do this only after the background and layers are final; skip it
+for any panel that already reads well. It needs no configured generator:
+you generate it outside the CLI, as in Phase 2.
+
+- A panel can have a **panel prompt** (action, mood, lighting, time of
+  day) that you set with `panels.update`. Layers and a background are
+  optional: a panel prompt alone is enough to generate from, layers and
+  a background only make the result stronger. A missing one is a warning,
+  never a blocker.
+- Ask for the brief with `generate.panelBrief(panelId)`. One call returns
+  everything: the prompt **parts** (not a stitched prompt), the
+  background and each visible layer with its subject, prompt and exact
+  **placement** (position and size as percentages and pixels of the
+  panel, rotation, mirroring, opacity, and a plain-words description such
+  as "right third, lower part, about 30% of the panel width"), the
+  numbered **reference images** (already saved to files, with their paths
+  in `file`), the panel size, any `warnings`, and `instructions`.
+- Write the prompt from `promptParts` in order, keep the Style and
+  Technical requirements parts as written, then describe the setting and
+  each layer from back to front using its subject description, its prompt
+  and its placement words. Layers later in the list are in front of
+  earlier ones. Send the reference images to the generator in `index`
+  order, with each `note`, so every character and object keeps its design.
+  Generate at the panel's aspect ratio. Do not draw speech bubbles or
+  text: bubbles are added by the editor above the image.
+- Upload the result (with its thumbnail, as in Phase 2), then attach it
+  with `panels.setImage(panelId, mediaId)`. The panel image then takes
+  precedence over the layers in the editor. `panels.setImageVisible`
+  hides or shows it without losing it, and `panels.clearImage` removes it.
+- A panel image remembers what it was made from. If a layer's image,
+  place, size, rotation, flip, opacity, visibility or order, or the panel
+  prompt, changes afterwards, it is out of date: `generate.pendingPanels()`
+  lists those panels, and you repeat the steps above for each. Editing a
+  bubble does not make it out of date.
 
 ## 11. Composing each panel
 

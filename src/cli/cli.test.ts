@@ -1093,3 +1093,149 @@ test('variations: default seeding, CRUD, layer pinning, and generate() through t
   assert.ok(outcomes.every((o: { ok: boolean }) => o.ok === false));
   assert.match(outcomes[0].error, /No image generator is configured/);
 });
+
+test('panel images: a brief for the LLM, saving the image, and going out of date', async () => {
+  const { run, login, google, work } = setup();
+  await login();
+  const { id: folderId } = (await run('storage', 'createProject', 'Panels')).json();
+  const saved = () => google.projectIn(folderId);
+  const panelId = saved().pages[0].panels[0].id;
+  await run('metadata', 'setStyle', 'STYLE: watercolor comic.');
+  const labels = (parts: Array<{ label: string }>) => parts.map((p) => p.label);
+
+  // With no layers and no prompt the brief still works; it only warns.
+  const bare = await run('generate', 'panelBrief', panelId, 'false');
+  assert.equal(bare.code, 0, bare.err);
+  assert.deepEqual(labels(bare.json().promptParts), ['Style', 'Technical requirements']);
+  assert.equal(bare.json().promptParts.length, 2, 'parts are returned, not a stitched prompt');
+  assert.equal('prompt' in bare.json(), false);
+  const warnings: string[] = bare.json().warnings;
+  assert.ok(warnings.some((w) => /no background layer/.test(w)));
+  assert.ok(warnings.some((w) => /no visible foreground layers/.test(w)));
+  assert.ok(warnings.some((w) => /nothing to describe/.test(w)));
+  assert.deepEqual(bare.json().references, []);
+  assert.equal((await run('generate', 'pendingPanels')).json().length, 0);
+
+  // A panel prompt alone is enough: still just warnings, and the nothing-to-describe one is gone.
+  await run('panels', 'update', panelId, '--prompt', 'Golden hour, low sun from the left.');
+  const prompted = (await run('generate', 'panelBrief', panelId, 'false')).json();
+  assert.deepEqual(labels(prompted.promptParts), [
+    'Style',
+    'Panel prompt',
+    'Technical requirements',
+  ]);
+  assert.ok(!prompted.warnings.some((w: string) => /nothing to describe/.test(w)));
+  assert.equal(saved().pages[0].panels[0].prompt, 'Golden hour, low sun from the left.');
+
+  // Now a scene background and a character layer, both with art.
+  fs.writeFileSync(path.join(work, 'bg.png'), PNG);
+  fs.writeFileSync(path.join(work, 'mara.png'), PNG);
+  const bgMedia = (await run('media', 'upload', 'bg.png')).json();
+  const maraMedia = (await run('media', 'upload', 'mara.png')).json();
+  const roof = (
+    await run('scenes', 'create', '{"name":"Rooftop","description":"A rooftop."}')
+  ).json();
+  const mara = (
+    await run('characters', 'create', '{"name":"Mara","description":"Red hair."}')
+  ).json();
+  await run('metadata', 'setCharacterStyle', 'CHAR: bold outlines.');
+  await run('metadata', 'setSceneStyle', 'SCENE: soft washes.');
+  await run(
+    'layers',
+    'add',
+    panelId,
+    JSON.stringify({ kind: 'background', sceneId: roof.id, mediaId: bgMedia.id })
+  );
+  const marasLayer = (
+    await run(
+      'layers',
+      'add',
+      panelId,
+      JSON.stringify({
+        name: 'Mara',
+        subjectId: mara.id,
+        mediaId: maraMedia.id,
+        x: 60,
+        y: 40,
+        width: 30,
+        flipX: true,
+      })
+    )
+  ).json();
+
+  const outDir = path.join(work, 'brief');
+  const brief = (await run('generate', 'panelBrief', panelId, '--out', outDir)).json();
+  assert.equal(brief.version, 1);
+  assert.deepEqual(labels(brief.promptParts), [
+    'Style',
+    'Character style',
+    'Scene style',
+    'Panel prompt',
+    'Technical requirements',
+  ]);
+  assert.equal(brief.background.scene.name, 'Rooftop');
+  assert.equal(brief.background.fills, 'panel');
+  assert.equal(brief.layers.length, 1);
+  const placed = brief.layers[0];
+  assert.equal(placed.subject.name, 'Mara');
+  assert.equal(placed.placement.x, 60);
+  assert.equal(placed.placement.width, 30);
+  assert.equal(placed.placement.flipX, true);
+  assert.match(placed.placement.description, /right third/);
+  assert.match(placed.placement.description, /mirrored/);
+  assert.equal(brief.warnings.length, 0, brief.warnings.join('; '));
+
+  // Reference images come back as saved files, in the same response, not base64.
+  assert.deepEqual(
+    brief.references.map((r: { role: string }) => r.role),
+    ['background', 'layer']
+  );
+  for (const ref of brief.references) {
+    assert.equal('dataUrl' in ref, false);
+    assert.ok(ref.file.startsWith(outDir), ref.file);
+    assert.deepEqual(fs.readFileSync(ref.file), PNG);
+  }
+  assert.match(path.basename(brief.references[0].file), /^01-background/);
+
+  // Saving the panel image: it takes the layers' place and is current until a layer changes.
+  const panelMedia = (await run('media', 'upload', 'bg.png', '--name', 'panel.png')).json();
+  assert.equal((await run('panels', 'setImage', panelId, 'media-nope')).code, 1);
+  const withImage = (await run('panels', 'setImage', panelId, panelMedia.id)).json();
+  assert.equal(withImage.image.mediaId, panelMedia.id);
+  assert.equal(withImage.image.visible, true);
+  assert.equal((await run('generate', 'pendingPanels')).json().length, 0);
+  assert.equal(
+    (await run('generate', 'panelBrief', panelId, 'false')).json().currentImage.dirty,
+    false
+  );
+
+  // A bubble sits above the panel image, so it does not make it stale; moving a layer does.
+  await run('bubbles', 'add', panelId, '{"kind":"speech","text":"Hi","x":5,"y":5,"width":20}');
+  assert.equal((await run('generate', 'pendingPanels')).json().length, 0);
+  await run('layers', 'update', panelId, marasLayer.id, '{"x":10}');
+  const pending = (await run('generate', 'pendingPanels')).json();
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].panelId, panelId);
+  assert.equal(
+    (await run('generate', 'panelBrief', panelId, 'false')).json().currentImage.dirty,
+    true
+  );
+
+  // A new image replaces it, keeps the old one in history, and is current again.
+  const second = (await run('media', 'upload', 'mara.png', '--name', 'panel2.png')).json();
+  const replaced = (await run('panels', 'setImage', panelId, second.id)).json();
+  assert.deepEqual(replaced.image.mediaHistory, [panelMedia.id]);
+  assert.equal((await run('generate', 'pendingPanels')).json().length, 0);
+
+  // Hide it (it stays), show it again, then remove it.
+  const hidden = (await run('panels', 'setImageVisible', panelId, 'false')).json();
+  assert.equal(hidden.image.visible, false);
+  assert.equal(saved().pages[0].panels[0].image.visible, false);
+  assert.equal(
+    (await run('panels', 'setImageVisible', panelId, 'true')).json().image.visible,
+    true
+  );
+  const cleared = (await run('panels', 'clearImage', panelId)).json();
+  assert.equal('image' in cleared, false);
+  assert.equal((await run('panels', 'setImageVisible', panelId, 'true')).code, 1);
+});
