@@ -16,6 +16,8 @@ interface Props {
   /** Why generating isn't possible yet, other than no generator being configured or a generation
    * already being queued/running for this field (e.g. an empty prompt). */
   blockedReason?: string;
+  /** The prompt changed since the thing it describes was last generated: shows a corner dot. */
+  dirty?: boolean;
   onGenerate: () => void;
   onCancel: () => void;
 }
@@ -27,7 +29,8 @@ interface Props {
  * so it never overlaps the typed text regardless of how many lines there are. It's muted until the
  * field is hovered or focused, except while a generation is queued or running, when it stays fully
  * visible since it doubles as the cancel control (see .prompt-generate-field / .prompt-generate-btn in
- * App.css).
+ * App.css). A top-right corner dot flags the prompt itself as out of date, since that's what dirty
+ * means here: the prompt changed since the thing it describes was last generated.
  *
  * Give this a React `key` tied to the entity it edits (layer id, panel id, variation id) when the
  * same mounted field can be pointed at a different entity: it keeps its own uncommitted text locally
@@ -44,6 +47,7 @@ export default function PromptGenerateField({
   status,
   generateTitle,
   blockedReason,
+  dirty = false,
   onGenerate,
   onCancel,
 }: Props) {
@@ -75,6 +79,13 @@ export default function PromptGenerateField({
           onCancel={onCancel}
         />
       </span>
+      {dirty && (
+        <span
+          className="prompt-generate-dirty-dot"
+          title="Out of date: the prompt changed since this was last generated"
+          aria-label="Out of date: the prompt changed since this was last generated"
+        />
+      )}
     </div>
   );
 }

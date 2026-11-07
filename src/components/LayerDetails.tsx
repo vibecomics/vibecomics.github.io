@@ -83,6 +83,7 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         status={status}
         generateTitle="Generate a new image from this prompt"
         blockedReason={layer.prompt?.trim() ? undefined : 'Write a prompt first'}
+        dirty={layer.dirty}
         onGenerate={() => setGeneratingModal(true)}
         onCancel={() => cb().generate.cancel({ type: 'layer', panelId, layerId: layer.id })}
       />
@@ -158,7 +159,6 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         <LayerImageStrip
           images={images}
           busy={task.busy}
-          dirty={layer.dirty}
           addLabel={`${layer.mediaId ? 'Change' : 'Add'} ${background ? 'background' : 'layer'} image`}
           onSelect={(id) => update({ mediaId: id })}
           onUnlink={unlinkImage}

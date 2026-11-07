@@ -763,12 +763,10 @@ kept the same size regardless of that content so a row of them lines up evenly. 
   }
 }
 
-/* A small corner dot: this thumbnail's image no longer matches its prompt (see MediaThumb's `dirty`
-   prop). Top-right, nudged further out past the corner than MediaThumb's own remove button (top-0
-   end-0 m-1) sits, so the two don't fully overlap. Purely a glance-level signal, not a control: the
-   existing click-to-mark-clean "●" buttons (LayerRow, ReferenceImages tabs) still own that
-   interaction. */
-.media-thumb-dirty-dot {
+/* A small corner dot on PromptGenerateField: the prompt changed since this was last generated.
+   Purely a glance-level signal, not a control: the existing click-to-mark-clean "●" buttons
+   (LayerRow, ReferenceImages tabs) still own that interaction. */
+.prompt-generate-dirty-dot {
   position: absolute;
   top: -6px;
   right: -6px;

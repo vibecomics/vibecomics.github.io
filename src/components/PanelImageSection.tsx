@@ -99,7 +99,6 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
             width={120}
             removeTitle="Remove the panel image (the layers show again)"
             onRemove={() => cb().panels.update(panel.id, { mediaId: null })}
-            dirty={dirty}
           />
         </div>
       )}
@@ -126,6 +125,7 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
         rows={2}
         status={status}
         generateTitle="Generate a new panel image"
+        dirty={dirty}
         onGenerate={() => setGeneratingModal(true)}
         onCancel={() => cb().generate.cancel({ type: 'panel', panelId: panel.id })}
       />

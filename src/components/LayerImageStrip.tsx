@@ -18,8 +18,6 @@ interface Props {
   /** Every image this layer (or background) has, in a fixed order; the current one is flagged. */
   images: LayerImage[];
   busy: boolean;
-  /** The current image no longer matches the layer's prompt; flags its slot with a corner dot. */
-  dirty?: boolean;
   /** Label for the trailing "+" tile, e.g. "Add background image". */
   addLabel: string;
   /** Makes this image the layer's current one. */
@@ -43,7 +41,6 @@ interface Props {
 export default function LayerImageStrip({
   images,
   busy,
-  dirty = false,
   addLabel,
   onSelect,
   onUnlink,
@@ -81,7 +78,6 @@ export default function LayerImageStrip({
             onRemove={() => onUnlink(item.id)}
             removeGlyph="🔗"
             removeTitle="Unlink this image from the layer (it stays in the project)"
-            dirty={current && dirty}
           />
         </div>
       ))}

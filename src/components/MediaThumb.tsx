@@ -26,8 +26,6 @@ interface Props {
   removeGlyph?: ReactNode;
   /** The remove button's tooltip; defaults to "Remove from this entry". */
   removeTitle?: string;
-  /** Shows a small corner dot: the prompt changed since this image was made. */
-  dirty?: boolean;
 }
 
 /** A thumbnail of a media item (square by default), with a button to remove it. */
@@ -41,7 +39,6 @@ export default function MediaThumb({
   fillHeight = false,
   removeGlyph = <>&times;</>,
   removeTitle = 'Remove from this entry',
-  dirty = false,
 }: Props) {
   const { url, failed, error } = useMediaUrl(item);
 
@@ -83,13 +80,6 @@ export default function MediaThumb({
       >
         {removeGlyph}
       </button>
-      {dirty && (
-        <span
-          className="media-thumb-dirty-dot"
-          title="Out of date: the prompt changed since this image was made"
-          aria-label="Out of date: the prompt changed since this image was made"
-        />
-      )}
     </div>
   );
 }

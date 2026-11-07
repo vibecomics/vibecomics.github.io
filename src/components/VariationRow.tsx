@@ -67,7 +67,6 @@ export default function VariationRow({
                 imageIds: variation.imageIds.filter((id) => id !== currentItem.id),
               })
             }
-            dirty={variation.dirty}
           />
           {variation.imageIds.length > 1 && (
             <span
@@ -97,6 +96,7 @@ export default function VariationRow({
         rows={3}
         status={status}
         generateTitle={`Generate a new image for "${variation.name}"`}
+        dirty={variation.dirty}
         onGenerate={() => setGeneratingModal(true)}
         onCancel={() =>
           cb().generate.cancel({ type: 'reference', kind, entryId, variationId: variation.id })
