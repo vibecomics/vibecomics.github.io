@@ -158,9 +158,32 @@ export default function PagesTab({
                 footer={pageStrip}
                 summary={sheetTitle(page, panel ? panels.indexOf(panel) + 1 : null)}
               >
-                <h2 className="h6 text-truncate px-3 pt-3 mb-0 d-none d-md-block">
-                  {formatPageLabel(page)}
-                </h2>
+                <div className="d-none d-md-flex align-items-center justify-content-between px-3 pt-3">
+                  <h2 className="h6 text-truncate mb-0">{formatPageLabel(page)}</h2>
+                  <div className="d-flex align-items-center gap-1">
+                    <span aria-hidden="true">🔍</span>
+                    <div className="btn-group btn-group-sm" role="group" aria-label="Zoom">
+                      <button
+                        className="btn btn-outline-secondary"
+                        title="Zoom out"
+                        aria-label="Zoom out"
+                        disabled={view.scale <= MIN_SCALE}
+                        onClick={() => zoomBy(-ZOOM_STEP)}
+                      >
+                        ➖
+                      </button>
+                      <button
+                        className="btn btn-outline-secondary"
+                        title="Zoom in"
+                        aria-label="Zoom in"
+                        disabled={view.scale >= MAX_SCALE}
+                        onClick={() => zoomBy(ZOOM_STEP)}
+                      >
+                        ➕
+                      </button>
+                    </div>
+                  </div>
+                </div>
                 {panel ? (
                   <PanelInspector
                     page={page}
@@ -168,11 +191,6 @@ export default function PagesTab({
                     media={media}
                     selection={current}
                     onSelect={onSelect}
-                    zoom={{
-                      canOut: view.scale > MIN_SCALE,
-                      canIn: view.scale < MAX_SCALE,
-                      by: (direction) => zoomBy(direction * ZOOM_STEP),
-                    }}
                   />
                 ) : (
                   <p className="text-muted p-3 mb-0 d-none d-md-block">No panel selected</p>

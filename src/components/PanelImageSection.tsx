@@ -5,13 +5,12 @@ import { buildPanelImagePromptParts, defaultPanelReferences } from '../ai/panelB
 import { joinPromptParts } from '../ai/prompt';
 import type { MediaItem, Panel } from '../types/comic';
 import AccordionItem from './AccordionItem';
-import GenerateButton from './GenerateButton';
 import GenerateImageModal from './GenerateImageModal';
 import HelpSection from './HelpSection';
 import MediaPicker from './MediaPicker';
 import MediaThumb from './MediaThumb';
+import PromptGenerateField from './PromptGenerateField';
 import Spinner from './Spinner';
-import StyleField from './StyleField';
 import { uploadImage } from './panelActions';
 import { useProject } from './ProjectContext';
 import { usePanelGenerationStatus } from './useGenerationStatus';
@@ -60,22 +59,29 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
           </span>
         ) : undefined
       }
+      actions={
+        image ? (
+          <div
+            className="form-check form-switch mb-0 d-flex align-items-center"
+            title={
+              image.visible ? 'Showing the panel image (layers are hidden)' : 'Showing the layers'
+            }
+          >
+            <label className="visually-hidden" htmlFor={`panel-image-visible-${panel.id}`}>
+              Show the panel image
+            </label>
+            <input
+              id={`panel-image-visible-${panel.id}`}
+              className="form-check-input"
+              type="checkbox"
+              role="switch"
+              checked={image.visible}
+              onChange={(e) => cb().panels.update(panel.id, { imageVisible: e.target.checked })}
+            />
+          </div>
+        ) : undefined
+      }
     >
-      {image && (
-        <div className="form-check form-switch mb-2">
-          <input
-            id={`panel-image-visible-${panel.id}`}
-            className="form-check-input"
-            type="checkbox"
-            role="switch"
-            checked={image.visible}
-            onChange={(e) => cb().panels.update(panel.id, { imageVisible: e.target.checked })}
-          />
-          <label className="form-check-label" htmlFor={`panel-image-visible-${panel.id}`}>
-            Show the panel image{image.visible ? '' : ' (layers are shown)'}
-          </label>
-        </div>
-      )}
       {!image && (
         <HelpSection title="What is a panel image?" open>
           <p className="mb-0">
@@ -93,6 +99,7 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
             width={120}
             removeTitle="Remove the panel image (the layers show again)"
             onRemove={() => cb().panels.update(panel.id, { mediaId: null })}
+            dirty={dirty}
           />
         </div>
       )}
@@ -109,21 +116,27 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
         </div>
       )}
 
-      <div className="d-flex align-items-center gap-2">
-        <GenerateButton
-          status={status}
-          title="Generate a new panel image"
-          onClick={() => setGeneratingModal(true)}
-        />
-        <button
-          className="btn btn-outline-secondary btn-sm"
-          disabled={task.busy}
-          onClick={() => setPicking(true)}
-        >
-          {task.busy && <Spinner />}
-          {image ? 'Replace image' : 'Set panel image'}
-        </button>
-      </div>
+      <PromptGenerateField
+        key={panel.id}
+        className="mb-2"
+        value={panel.prompt ?? ''}
+        onCommit={(text) => cb().panels.update(panel.id, { prompt: text })}
+        placeholder="Mood, action and lighting for the whole panel, e.g. golden hour, low sun from the left"
+        ariaLabel="Panel prompt"
+        rows={2}
+        status={status}
+        generateTitle="Generate a new panel image"
+        onGenerate={() => setGeneratingModal(true)}
+        onCancel={() => cb().generate.cancel({ type: 'panel', panelId: panel.id })}
+      />
+      <button
+        className="btn btn-outline-secondary btn-sm mb-2"
+        disabled={task.busy}
+        onClick={() => setPicking(true)}
+      >
+        {task.busy && <Spinner />}
+        {image ? 'Replace image' : 'Set panel image'}
+      </button>
       {generatingModal && (
         <GenerateImageModal
           title="Generate panel image"
@@ -161,17 +174,6 @@ export default function PanelImageSection({ panel, media, open, onToggleOpen }: 
         />
       )}
       {task.error && <div className="text-danger small mt-2">{task.error}</div>}
-
-      <StyleField
-        key={panel.id}
-        id={`panel-prompt-${panel.id}`}
-        label="Panel prompt"
-        placeholder="Mood, action and lighting for the whole panel, e.g. golden hour, low sun from the left"
-        value={panel.prompt ?? ''}
-        rows={2}
-        autoSave
-        onSave={(text) => void cb().panels.update(panel.id, { prompt: text })}
-      />
     </AccordionItem>
   );
 }

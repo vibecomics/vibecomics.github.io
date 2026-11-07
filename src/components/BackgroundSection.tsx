@@ -2,28 +2,22 @@ import { cb } from '../ai/actions';
 import type { MediaItem, Panel } from '../types/comic';
 import AccordionItem from './AccordionItem';
 import HelpSection from './HelpSection';
-import LayerRow from './LayerRow';
+import LayerDetails from './LayerDetails';
 import type { Selection } from './selection';
 
 interface Props {
   panel: Panel;
   media: MediaItem[];
-  selection: Selection;
   onSelect: (selection: Selection) => void;
   /** Whether the section's content is shown; it can be collapsed to just its heading. */
   open: boolean;
   onToggleOpen: () => void;
 }
 
-/** The panel's background: a button to set one, or a row for the one that is set. */
-export default function BackgroundSection({
-  panel,
-  media,
-  selection,
-  onSelect,
-  open,
-  onToggleOpen,
-}: Props) {
+/** The panel's background: a button to set one, or its details (there's only ever one, so unlike a
+ * foreground layer it needs no name, row or delete button — the accordion title already says
+ * "Background", and it's never removed once set). */
+export default function BackgroundSection({ panel, media, onSelect, open, onToggleOpen }: Props) {
   const background = panel.layers.find((layer) => layer.kind === 'background');
 
   /** Add an empty background, open it, and let the user type its prompt or pick an image; unlike a
@@ -44,19 +38,7 @@ export default function BackgroundSection({
         </HelpSection>
       )}
       {background ? (
-        <LayerRow
-          panelId={panel.id}
-          layer={background}
-          media={media}
-          selected={selection.layerId === background.id}
-          collapsible={false}
-          onSelect={() =>
-            onSelect({
-              panelId: panel.id,
-              layerId: selection.layerId === background.id ? undefined : background.id,
-            })
-          }
-        />
+        <LayerDetails panelId={panel.id} layer={background} media={media} />
       ) : (
         <button className="btn btn-outline-secondary btn-sm" onClick={addBackground}>
           Set background

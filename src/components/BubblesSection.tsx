@@ -106,11 +106,12 @@ export default function BubblesSection({
 
   return (
     <AccordionItem title="Bubbles" open={open} onToggle={onToggleOpen}>
-      <div className="btn-group btn-group-sm mb-2">
+      <div className="btn-group btn-group-sm mb-2 w-100">
         {KINDS.map(({ kind, label, sample }) => (
           <button
             key={kind}
-            className="btn btn-outline-secondary"
+            type="button"
+            className="btn btn-outline-secondary flex-fill"
             onClick={() => add(kind, sample)}
           >
             + {label}

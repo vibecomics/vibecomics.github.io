@@ -769,6 +769,7 @@ test('generate: status, cancel, batch and config are validated', async () => {
   assert.deepEqual((await run('generate', 'status')).json(), []);
   assert.deepEqual((await run('generate', 'status', 'layers')).json(), []);
   assert.deepEqual((await run('generate', 'status', 'references')).json(), []);
+  assert.deepEqual((await run('generate', 'status', 'panels')).json(), []);
   assert.match((await run('generate', 'status', 'nope')).err, /must be one of/);
   assert.equal((await run('generate', 'cancel', 'all')).json(), 0);
   assert.equal((await run('generate', 'cancel', '99')).json(), 0);
@@ -778,6 +779,9 @@ test('generate: status, cancel, batch and config are validated', async () => {
     (await run('generate', 'batch', 'layers', '--kinds', '["sideways"]')).err,
     /Layer kind/
   );
+  // No panel has a panel image yet, so none can be dirty: batch("panels") has nothing to do, and
+  // doesn't need a configured image service to say so.
+  assert.deepEqual((await run('generate', 'batch', 'panels')).json(), []);
   assert.match((await run('generate', 'batch', 'layer:a/b')).err, /batch needs/);
   assert.match((await run('generate', 'run', 'reference:characters/x/*')).err, /generate.batch/);
   assert.match((await run('generate', 'run', 'panel:p')).err, /No image service is configured/);

@@ -2,7 +2,11 @@ import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { cb } from '../ai/actions';
-import { pendingGenerations, pendingReferenceGenerations } from '../ai/builders';
+import {
+  pendingGenerations,
+  pendingPanelImages,
+  pendingReferenceGenerations,
+} from '../ai/builders';
 import type { LayerKind, StoryKind } from '../ai/builders';
 import { clearCompletedQueueItems } from '../ai/generation';
 import type { GenerationTarget, QueueItem } from '../ai/generation';
@@ -11,19 +15,21 @@ import { useProject } from './ProjectContext';
 import { useBusy } from './useBusy';
 import { useGenerationQueue } from './useGenerationStatus';
 
-/** One checkbox in the "Generate" split button's dropdown: a reference kind (reference art) or a
- * layer kind, each independently selectable so "Generate" can be pointed at just cast, or just
- * backgrounds, instead of everything dirty. */
+/** One checkbox in the "Generate" split button's dropdown: a reference kind (reference art), a
+ * layer kind, or panel images as a whole, each independently selectable so "Generate" can be
+ * pointed at just cast, or just backgrounds, instead of everything dirty. */
 type Category =
-  | { group: 'reference'; kind: StoryKind; label: string }
-  | { group: 'layer'; kind: LayerKind; label: string };
+  | { id: string; group: 'reference'; kind: StoryKind; label: string }
+  | { id: string; group: 'layer'; kind: LayerKind; label: string }
+  | { id: string; group: 'panel'; label: string };
 
 const CATEGORIES: Category[] = [
-  { group: 'reference', kind: 'characters', label: 'Cast' },
-  { group: 'reference', kind: 'objects', label: 'Props' },
-  { group: 'reference', kind: 'scenes', label: 'Scenes' },
-  { group: 'layer', kind: 'foreground', label: 'Layers' },
-  { group: 'layer', kind: 'background', label: 'Backgrounds' },
+  { id: 'characters', group: 'reference', kind: 'characters', label: 'Cast' },
+  { id: 'objects', group: 'reference', kind: 'objects', label: 'Props' },
+  { id: 'scenes', group: 'reference', kind: 'scenes', label: 'Scenes' },
+  { id: 'foreground', group: 'layer', kind: 'foreground', label: 'Layers' },
+  { id: 'background', group: 'layer', kind: 'background', label: 'Backgrounds' },
+  { id: 'panels', group: 'panel', label: 'Panel images' },
 ];
 
 interface Props {
@@ -83,7 +89,8 @@ function QueueRow({ item, onShow }: { item: QueueItem; onShow: () => void }) {
 /**
  * The right-side panel opened by the toolbar's 🪄 button: every generation that's queued, running,
  * or has finished since the queue was last cleared, plus a "Generate" split button that queues every
- * dirty item in the checked categories (cast, props, scenes, layers, backgrounds — see CATEGORIES);
+ * dirty item in the checked categories (cast, props, scenes, layers, backgrounds, panel images — see
+ * CATEGORIES);
  * all are checked by default, so a plain click still generates everything dirty. Unlike the old queue
  * dropdown, finished rows stay put until "Clear generated" removes them, so you can see what was
  * actually produced. Not modal: it stays open (no backdrop, no
@@ -95,27 +102,30 @@ export default function GenerationPanel({ onClose, onShow }: Props) {
   const project = useProject();
   const pendingLayers = pendingGenerations(project);
   const pendingRefs = pendingReferenceGenerations(project);
-  const dirtyCount = pendingLayers.length + pendingRefs.length;
+  const pendingPanels = pendingPanelImages(project);
+  const dirtyCount = pendingLayers.length + pendingRefs.length + pendingPanels.length;
   const queue = useGenerationQueue();
   const task = useBusy();
   const [menuOpen, setMenuOpen] = useState(false);
   // All checked by default, so a plain click still generates everything dirty, same as before.
-  const [selected, setSelected] = useState<Set<string>>(
-    () => new Set(CATEGORIES.map((c) => c.kind))
-  );
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(CATEGORIES.map((c) => c.id)));
   const countOf = (category: Category) =>
     category.group === 'reference'
       ? pendingRefs.filter((r) => r.kind === category.kind).length
-      : pendingLayers.filter((l) => l.kind === category.kind).length;
+      : category.group === 'layer'
+        ? pendingLayers.filter((l) => l.kind === category.kind).length
+        : pendingPanels.length;
   const selectedStoryKinds = CATEGORIES.filter(
-    (c): c is Category & { group: 'reference' } => c.group === 'reference' && selected.has(c.kind)
+    (c): c is Category & { group: 'reference' } => c.group === 'reference' && selected.has(c.id)
   ).map((c) => c.kind);
   const selectedLayerKinds = CATEGORIES.filter(
-    (c): c is Category & { group: 'layer' } => c.group === 'layer' && selected.has(c.kind)
+    (c): c is Category & { group: 'layer' } => c.group === 'layer' && selected.has(c.id)
   ).map((c) => c.kind);
+  const panelsSelected = CATEGORIES.some((c) => c.group === 'panel' && selected.has(c.id));
   const selectedCount =
     pendingRefs.filter((r) => selectedStoryKinds.includes(r.kind)).length +
-    pendingLayers.filter((l) => selectedLayerKinds.includes(l.kind)).length;
+    pendingLayers.filter((l) => selectedLayerKinds.includes(l.kind)).length +
+    (panelsSelected ? pendingPanels.length : 0);
   // A full-width flex sibling would squeeze the comic page to nothing on a phone, so there it's an
   // overlay instead (see the wide/narrow split below) — the same trade-off InspectorPane makes.
   const wide = useMediaQuery('(min-width: 768px)');
@@ -160,7 +170,7 @@ export default function GenerationPanel({ onClose, onShow }: Props) {
               disabled={selectedCount === 0 || task.busy}
               title={
                 dirtyCount === 0
-                  ? 'Nothing is dirty — every layer, character, prop and scene already matches its prompt'
+                  ? 'Nothing is dirty — every layer, character, prop, scene and panel image already matches its prompt'
                   : selectedCount === 0
                     ? 'Nothing is checked in the dropdown — pick what to generate'
                     : `Generate images for the checked categories whose art no longer matches its prompt (${selectedCount})`
@@ -169,12 +179,14 @@ export default function GenerationPanel({ onClose, onShow }: Props) {
                 void task.run(async () => {
                   // Reference art (cast/objects/scenes) first: a layer's or background's own
                   // generation reads whatever reference images its subject/scene currently has, so
-                  // those should be fresh before any layer that might use them runs, not generated
-                  // after or alongside it.
+                  // those should be fresh before any layer that might use them runs. Panel images
+                  // last: a panel image is composited from its own layers, so it should be made
+                  // only once those are fresh too.
                   if (selectedStoryKinds.length)
                     await cb().generate.batch('references', { kinds: selectedStoryKinds });
                   if (selectedLayerKinds.length)
                     await cb().generate.batch('layers', { kinds: selectedLayerKinds });
+                  if (panelsSelected && pendingPanels.length) await cb().generate.batch('panels');
                 })
               }
             >
@@ -221,25 +233,25 @@ export default function GenerationPanel({ onClose, onShow }: Props) {
                 }}
               >
                 {CATEGORIES.map((category) => {
-                  const id = `generate-category-${category.kind}`;
+                  const id = `generate-category-${category.id}`;
                   const count = countOf(category);
                   // Nothing dirty in this category: check it off the list rather than letting it
                   // stay checked but inert, or unchecked and mistaken for a deliberate exclusion.
                   const empty = count === 0;
                   return (
-                    <li key={category.kind} className="px-3 py-1">
+                    <li key={category.id} className="px-3 py-1">
                       <div className="form-check text-nowrap">
                         <input
                           type="checkbox"
                           className="form-check-input"
                           id={id}
-                          checked={selected.has(category.kind)}
+                          checked={selected.has(category.id)}
                           disabled={empty}
                           onChange={(e) =>
                             setSelected((s) => {
                               const next = new Set(s);
-                              if (e.target.checked) next.add(category.kind);
-                              else next.delete(category.kind);
+                              if (e.target.checked) next.add(category.id);
+                              else next.delete(category.id);
                               return next;
                             })
                           }

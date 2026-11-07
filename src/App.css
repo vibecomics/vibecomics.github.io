@@ -724,6 +724,61 @@ kept the same size regardless of that content so a row of them lines up evenly. 
   color: #0d6efd;
 }
 
+/* AccordionItem redraws its own chevron after any header `actions` (see .accordion-button-no-caret),
+   so an action like "+ Add layer" reads before the expand/collapse indicator, not after it. */
+.accordion-button-no-caret::after {
+  display: none;
+}
+
+/* A prompt textarea with its Generate control anchored inside it (see PromptGenerateField), bottom
+   right — the reserved padding-right keeps every line of text clear of that corner regardless of
+   its height. Muted until the field is hovered or focused, so it doesn't compete with the text when
+   idle, but never display:none (a disabled/queued button still needs to be reachable and show its
+   tooltip). */
+.prompt-generate-field {
+  position: relative;
+}
+
+.prompt-generate-field textarea {
+  padding-right: 2.75rem;
+}
+
+.prompt-generate-btn {
+  position: absolute;
+  right: 0.4rem;
+  bottom: 0.4rem;
+  opacity: 0.35;
+  transition: opacity 0.15s ease;
+}
+
+.prompt-generate-field:hover .prompt-generate-btn,
+.prompt-generate-field:focus-within .prompt-generate-btn,
+.prompt-generate-btn.active {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prompt-generate-btn {
+    transition: none;
+  }
+}
+
+/* A small corner dot: this thumbnail's image no longer matches its prompt (see MediaThumb's `dirty`
+   prop). Top-right, nudged further out past the corner than MediaThumb's own remove button (top-0
+   end-0 m-1) sits, so the two don't fully overlap. Purely a glance-level signal, not a control: the
+   existing click-to-mark-clean "●" buttons (LayerRow, ReferenceImages tabs) still own that
+   interaction. */
+.media-thumb-dirty-dot {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bs-warning);
+  border: 2px solid var(--bs-body-bg);
+}
+
 /* ---- Reference entries: variation tabs ------------------------------------------ */
 
 /* The active tab's name is edited in place, so it needs to look like the plain tab text it

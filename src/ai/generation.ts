@@ -25,10 +25,12 @@ import {
   findPanel,
   layerArtSize,
   panelArtSize,
+  pendingPanelImages,
   requireProject,
 } from './builders';
-import type { LayerKind, LayerRef, StoryKind, VariationRef } from './builders';
+import type { LayerKind, LayerRef, PendingPanelImage, StoryKind, VariationRef } from './builders';
 import type { ComicBuilderDeps } from './deps';
+import { swapPanelImage } from './panelImage';
 import { buildPanelImagePrompt, defaultPanelReferences } from './panelBrief';
 import {
   allEntryImageIds,
@@ -795,6 +797,66 @@ export async function generateAllDirty(
     failed
       ? `Generated ${outcomes.length - failed} of ${outcomes.length}; ${failed} failed.`
       : `Generated ${outcomes.length} image${outcomes.length === 1 ? '' : 's'}.`
+  );
+  return outcomes;
+}
+
+/** One dirty panel's outcome from generateAllDirtyPanelImages. */
+export interface PanelImageOutcome {
+  pageId: string;
+  panelId: string;
+  ok: boolean;
+  error?: string;
+}
+
+function commitPanelImage(deps: ComicBuilderDeps, panelId: string, mediaId: string): void {
+  deps.updateProject((p) => {
+    for (const page of p.pages) {
+      const panel = page.panels.find((panel) => panel.id === panelId);
+      if (panel) panel.image = swapPanelImage(panel, mediaId);
+    }
+  });
+}
+
+/**
+ * Generates a new image for every panel whose panel image no longer matches its layers or prompt,
+ * one request at a time, committing each result as its panel image as it goes (like generateAllDirty,
+ * there's no one to preview a batch for — a panel only reaches this list once it already has a panel
+ * image, see pendingPanelImages/isPanelImageDirty, so there's no "first image" ambiguity to resolve).
+ */
+export async function generateAllDirtyPanelImages(
+  deps: ComicBuilderDeps
+): Promise<PanelImageOutcome[]> {
+  const pending: PendingPanelImage[] = pendingPanelImages(requireProject(deps));
+
+  // Queue every dirty panel's generation up front, not one at a time as each finishes: same
+  // reasoning as generateAllDirty and generateAllVariations.
+  const runs = pending.map((p) => {
+    const key = panelKey(p.panelId);
+    const label = describePanel(deps, p.panelId);
+    const target: GenerationTarget = { type: 'panel', panelId: p.panelId };
+    const run = trackedGeneration(key, label, target, async (signal) => {
+      const image = await runPanelGeneration(deps, p.panelId, undefined, undefined, signal);
+      commitPanelImage(deps, p.panelId, image.id);
+    });
+    return { p, run };
+  });
+
+  const outcomes: PanelImageOutcome[] = [];
+  for (const { p, run } of runs) {
+    deps.setStatus(`Generating panel image ${outcomes.length + 1} of ${pending.length}…`);
+    try {
+      await run;
+      outcomes.push({ pageId: p.pageId, panelId: p.panelId, ok: true });
+    } catch (e) {
+      outcomes.push({ pageId: p.pageId, panelId: p.panelId, ok: false, error: errorMessage(e) });
+    }
+  }
+  const failed = outcomes.filter((o) => !o.ok).length;
+  deps.setStatus(
+    failed
+      ? `Generated ${outcomes.length - failed} of ${outcomes.length}; ${failed} failed.`
+      : `Generated ${outcomes.length} panel image${outcomes.length === 1 ? '' : 's'}.`
   );
   return outcomes;
 }

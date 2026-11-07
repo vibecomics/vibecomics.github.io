@@ -19,30 +19,25 @@ interface Props {
   media: MediaItem[];
   /** Highlighted on the page. */
   selected: boolean;
-  /** Showing its details here. Not needed when `collapsible` is false. */
-  expanded?: boolean;
+  /** Showing its details here. */
+  expanded: boolean;
   onSelect: () => void;
-  onToggleExpanded?: () => void;
-  /**
-   * False when the row sits inside a section that is already collapsible (the background): no
-   * chevron, and the details are always shown. Defaults to true.
-   */
-  collapsible?: boolean;
+  onToggleExpanded: () => void;
   rowRef?: (element: HTMLElement | null) => void;
   /** Present for layers that can be reordered by dragging the ≡ handle. */
   reorder?: Reorder;
 }
 
-/** One layer: click its name to select it on the page, the chevron to show or hide its details. */
+/** One foreground layer: click its name to select it on the page, the chevron to show or hide its
+ * details. The background layer has no row of its own — see BackgroundSection. */
 export default function LayerRow({
   panelId,
   layer,
   media,
   selected,
-  expanded = false,
+  expanded,
   onSelect,
   onToggleExpanded,
-  collapsible = true,
   rowRef,
   reorder,
 }: Props) {
@@ -55,17 +50,11 @@ export default function LayerRow({
     end: () => reorder?.commit(),
     cancel: () => reorder?.cancel(),
   });
-  const background = layer.kind === 'background';
 
   return (
     <div
       ref={rowRef}
-      className={[
-        collapsible && `border rounded p-2 mb-2${selected ? ' border-primary' : ''}`,
-        reorder?.dragging && 'opacity-50',
-      ]
-        .filter(Boolean)
-        .join(' ')}
+      className={`border rounded p-2 mb-2${selected ? ' border-primary' : ''}${reorder?.dragging ? ' opacity-50' : ''}`}
     >
       <div className="d-flex align-items-center gap-2">
         {reorder && (
@@ -79,13 +68,7 @@ export default function LayerRow({
             ≡
           </span>
         )}
-        {collapsible && (
-          <ExpandButton
-            expanded={expanded}
-            label={layer.name}
-            onClick={() => onToggleExpanded?.()}
-          />
-        )}
+        <ExpandButton expanded={expanded} label={layer.name} onClick={onToggleExpanded} />
         <input
           type="checkbox"
           className="form-check-input mt-0"
@@ -98,11 +81,8 @@ export default function LayerRow({
           className="btn btn-link btn-sm p-0 text-start text-truncate flex-grow-1 text-decoration-none"
           onClick={onSelect}
         >
-          {/* In its own "Background" section the word would repeat the heading: show the name. */}
-          {background && collapsible ? 'Background' : layer.name}
-          {((background && collapsible) || !layer.mediaId) && (
-            <span className="text-muted ms-2">{layer.mediaId ? layer.name : 'no image'}</span>
-          )}
+          {layer.name}
+          {!layer.mediaId && <span className="text-muted ms-2">no image</span>}
         </button>
         {layer.dirty && (
           <button
@@ -116,12 +96,9 @@ export default function LayerRow({
             ●
           </button>
         )}
-        <DeleteButton
-          label={background ? 'background' : layer.name}
-          onClick={() => cb().layers.delete(panelId, layer.id)}
-        />
+        <DeleteButton label={layer.name} onClick={() => cb().layers.delete(panelId, layer.id)} />
       </div>
-      {(expanded || !collapsible) && <LayerDetails panelId={panelId} layer={layer} media={media} />}
+      {expanded && <LayerDetails panelId={panelId} layer={layer} media={media} />}
     </div>
   );
 }

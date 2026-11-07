@@ -86,6 +86,7 @@ import {
   defaultEntryReferences,
   defaultLayerReferences,
   generateAllDirty,
+  generateAllDirtyPanelImages,
   generateAllDirtyVariations,
   generateAllVariations,
   generateLayerImage,
@@ -99,6 +100,7 @@ import type { GenerationReference, GenerationTarget } from './generation';
 import type {
   GeneratedImage,
   GenerationOutcome,
+  PanelImageOutcome,
   QueueItem,
   VariationOutcome,
   VariationRefOutcome,
@@ -1461,10 +1463,13 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
        *   - "references": every variation (reference art for a character, object or scene) across the
        *     whole set of reference entries whose dirty is true — set automatically when its own prompt, or its
        *     entry's description, changes. Run both to regenerate everything stale in the project.
+       *   - "panels": every panel whose panel image no longer matches its layers or prompt (see
+       *     generate.status("panels")). Only panels that already have a panel image are ever dirty —
+       *     a panel with none yet is generated with generate.run, which also sets its first image.
        *   - "reference:<kind>/<entryId>/*": every variation of one entry, dirty or not.
-       * @param scope - "layers", "references", or "reference:<kind>/<entryId>/*".
-       * @param options - Optional { kinds?, prompt?, references? }. kinds restricts "layers" to these layer kinds (e.g. ["background"] for backgrounds only) or "references" to these lists (e.g. ["characters"] for cast only); omit for all. prompt and references only apply to "reference:<kind>/<entryId>/*": prompt replaces the shared base (Style + description + technical requirements), each variation's own prompt is still stitched on top so every image still draws a different pose/state; references replace each variation's own default references.
-       * @returns A promise resolving to one outcome per item found when it started: { pageId, panelId, layerId, ok, error? } for "layers", { kind, entryId, variationId, ok, error? } for "references", { variationId, ok, error? } for one entry's variations.
+       * @param scope - "layers", "references", "panels", or "reference:<kind>/<entryId>/*".
+       * @param options - Optional { kinds?, prompt?, references? }. kinds restricts "layers" to these layer kinds (e.g. ["background"] for backgrounds only) or "references" to these lists (e.g. ["characters"] for cast only); ignored for "panels". prompt and references only apply to "reference:<kind>/<entryId>/*": prompt replaces the shared base (Style + description + technical requirements), each variation's own prompt is still stitched on top so every image still draws a different pose/state; references replace each variation's own default references.
+       * @returns A promise resolving to one outcome per item found when it started: { pageId, panelId, layerId, ok, error? } for "layers", { kind, entryId, variationId, ok, error? } for "references", { pageId, panelId, ok, error? } for "panels", { variationId, ok, error? } for one entry's variations.
        */
       batch: (
         scope: string | AnyTarget,
@@ -1473,7 +1478,9 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
           prompt?: string;
           references?: GenerationReference[];
         }
-      ): Promise<Array<GenerationOutcome | VariationRefOutcome | VariationOutcome>> => {
+      ): Promise<
+        Array<GenerationOutcome | VariationRefOutcome | VariationOutcome | PanelImageOutcome>
+      > => {
         const kinds = options?.kinds;
         if (scope === 'layers' || scope === 'references') {
           if (kinds !== undefined && !Array.isArray(kinds)) {
@@ -1487,10 +1494,11 @@ export function createComicBuilder(deps: ComicBuilderDeps) {
             ? generateAllDirty(deps, setLayerMedia, kinds as LayerKind[] | undefined)
             : generateAllDirtyVariations(deps, kinds as StoryKind[] | undefined);
         }
+        if (scope === 'panels') return generateAllDirtyPanelImages(deps);
         const t = parseTarget(scope);
         if (t.type !== 'variations') {
           throw new Error(
-            'batch needs "layers", "references" or "reference:<kind>/<entryId>/*"; for one image use generate.run.'
+            'batch needs "layers", "references", "panels" or "reference:<kind>/<entryId>/*"; for one image use generate.run.'
           );
         }
         return generateAllVariations(deps, t.kind, t.entryId, options?.prompt, options?.references);

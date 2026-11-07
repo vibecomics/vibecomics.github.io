@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { cb } from '../ai/actions';
 import type { MediaItem, Variation } from '../types/comic';
-import GenerateIconButton from './GenerateIconButton';
 import GenerateImageModal from './GenerateImageModal';
 import IconButton from './IconButton';
 import { TrashIcon } from './Icons';
 import MediaPicker from './MediaPicker';
 import MediaThumb from './MediaThumb';
+import PromptGenerateField from './PromptGenerateField';
 import { uploadImage } from './panelActions';
 import { useProject } from './ProjectContext';
 import { useVariationGenerationStatus } from './useGenerationStatus';
@@ -67,6 +67,7 @@ export default function VariationRow({
                 imageIds: variation.imageIds.filter((id) => id !== currentItem.id),
               })
             }
+            dirty={variation.dirty}
           />
           {variation.imageIds.length > 1 && (
             <span
@@ -86,18 +87,20 @@ export default function VariationRow({
           No image
         </div>
       )}
-      <textarea
-        className="form-control flex-grow-1"
-        style={{ width: '100%', resize: 'vertical' }}
-        rows={3}
-        defaultValue={variation.prompt}
+      <PromptGenerateField
+        key={variation.id}
+        className="flex-grow-1"
+        value={variation.prompt}
+        onCommit={(text) => cb().variations.update(kind, entryId, variation.id, { prompt: text })}
         placeholder="What makes this variation different, e.g. “Front view, facing the camera directly.”"
-        aria-label="Variation prompt"
-        onBlur={(e) => {
-          if (e.target.value !== variation.prompt) {
-            cb().variations.update(kind, entryId, variation.id, { prompt: e.target.value });
-          }
-        }}
+        ariaLabel="Variation prompt"
+        rows={3}
+        status={status}
+        generateTitle={`Generate a new image for "${variation.name}"`}
+        onGenerate={() => setGeneratingModal(true)}
+        onCancel={() =>
+          cb().generate.cancel({ type: 'reference', kind, entryId, variationId: variation.id })
+        }
       />
       <div className="d-flex flex-column gap-1" style={{ flexShrink: 0 }}>
         <IconButton
@@ -115,14 +118,6 @@ export default function VariationRow({
         >
           🖼
         </IconButton>
-        <GenerateIconButton
-          status={status}
-          title={`Generate a new image for "${variation.name}"`}
-          onClick={() => setGeneratingModal(true)}
-          onCancel={() =>
-            cb().generate.cancel({ type: 'reference', kind, entryId, variationId: variation.id })
-          }
-        />
       </div>
       {generatingModal && (
         <GenerateImageModal

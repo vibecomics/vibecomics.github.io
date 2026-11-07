@@ -5,10 +5,10 @@ import { CORE_LAYER_PARTS } from '../ai/prompt';
 import type { LayerUpdate } from '../ai/deps';
 import type { Layer, MediaItem } from '../types/comic';
 import { uploadImage, setLayerMedia } from './panelActions';
-import GenerateButton from './GenerateButton';
 import GenerateImageModal from './GenerateImageModal';
 import LayerImageStrip, { type LayerImage } from './LayerImageStrip';
 import MediaPicker from './MediaPicker';
+import PromptGenerateField from './PromptGenerateField';
 import { useProject } from './ProjectContext';
 import SliderRow from './SliderRow';
 import { useLayerGenerationStatus } from './useGenerationStatus';
@@ -63,20 +63,28 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
 
   return (
     <div className="mt-2">
-      <input
-        className="form-control form-control-sm mb-2"
-        value={layer.name}
-        aria-label="Layer name"
-        onChange={(e) => update({ name: e.target.value })}
-      />
-      <textarea
-        className="form-control form-control-sm mb-2"
-        rows={3}
+      {!background && (
+        <input
+          className="form-control form-control-sm mb-2"
+          value={layer.name}
+          aria-label="Layer name"
+          onChange={(e) => update({ name: e.target.value })}
+        />
+      )}
+      <PromptGenerateField
+        key={layer.id}
+        className="mb-2"
         value={layer.prompt ?? ''}
+        onCommit={(text) => update({ prompt: text })}
         placeholder="Prompt or description"
-        aria-label="Layer prompt"
+        ariaLabel="Layer prompt"
+        rows={3}
         autoFocus={!layer.prompt && !layer.mediaId}
-        onChange={(e) => update({ prompt: e.target.value })}
+        status={status}
+        generateTitle="Generate a new image from this prompt"
+        blockedReason={layer.prompt?.trim() ? undefined : 'Write a prompt first'}
+        onGenerate={() => setGeneratingModal(true)}
+        onCancel={() => cb().generate.cancel({ type: 'layer', panelId, layerId: layer.id })}
       />
       <div className="d-flex gap-2 mb-2">
         {background ? (
@@ -150,6 +158,7 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         <LayerImageStrip
           images={images}
           busy={task.busy}
+          dirty={layer.dirty}
           addLabel={`${layer.mediaId ? 'Change' : 'Add'} ${background ? 'background' : 'layer'} image`}
           onSelect={(id) => update({ mediaId: id })}
           onUnlink={unlinkImage}
@@ -205,24 +214,14 @@ export default function LayerDetails({ panelId, layer, media }: Props) {
         />
       )}
       {task.error && <div className="text-danger small mb-2">{task.error}</div>}
-      <div className="d-flex align-items-center gap-2">
-        <GenerateButton
-          status={status}
-          blockedReason={layer.prompt?.trim() ? undefined : 'Write a prompt first'}
-          title="Generate a new image from this prompt"
-          onClick={() => setGeneratingModal(true)}
-        />
-        <div className="flex-grow-1">
-          <SliderRow
-            label="Opacity"
-            value={layer.opacity}
-            min={0}
-            max={1}
-            step={0.05}
-            onChange={(opacity) => update({ opacity })}
-          />
-        </div>
-      </div>
+      <SliderRow
+        label="Opacity"
+        value={layer.opacity}
+        min={0}
+        max={1}
+        step={0.05}
+        onChange={(opacity) => update({ opacity })}
+      />
     </div>
   );
 }

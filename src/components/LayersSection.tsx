@@ -38,7 +38,6 @@ export default function LayersSection({
 
   const foreground = panel.layers.filter((layer) => layer.kind !== 'background');
   const topFirst = [...foreground].reverse();
-  const allOpen = foreground.length > 0 && foreground.every((layer) => expansion.isOpen(layer.id));
   const shown = drag ? moved(topFirst, drag.id, drag.over) : topFirst;
 
   function begin(id: string, point: Point) {
@@ -93,7 +92,22 @@ export default function LayersSection({
   }
 
   return (
-    <AccordionItem title="Layers" open={open} onToggle={onToggleOpen}>
+    <AccordionItem
+      title="Layers"
+      open={open}
+      onToggle={onToggleOpen}
+      actions={
+        <button
+          type="button"
+          className="btn btn-outline-secondary btn-sm btn-icon"
+          title="Add layer"
+          aria-label="Add layer"
+          onClick={addLayer}
+        >
+          +
+        </button>
+      }
+    >
       {foreground.length === 0 && (
         <HelpSection title="What are layers?" open>
           <p className="mb-0">
@@ -102,24 +116,6 @@ export default function LayersSection({
           </p>
         </HelpSection>
       )}
-      <div className="d-flex justify-content-between align-items-center my-2">
-        <button className="btn btn-outline-secondary btn-sm" onClick={addLayer}>
-          Add layer
-        </button>
-        {foreground.length > 0 && (
-          <button
-            className="btn btn-link btn-sm p-0 text-decoration-none flex-shrink-0"
-            onClick={() =>
-              expansion.setAll(
-                foreground.map((l) => l.id),
-                !allOpen
-              )
-            }
-          >
-            {allOpen ? 'Collapse all' : 'Expand all'}
-          </button>
-        )}
-      </div>
       {/* Rows keep their place in the DOM while one is dragged (moving it would drop the pointer capture); `order` shows the new sequence. */}
       <div className="d-flex flex-column">
         {topFirst.map((layer) => (
