@@ -9,6 +9,7 @@ import {
   defaultEntryReferences,
   defaultLayerReferences,
   generateLayerImage,
+  generatePanelImage,
   getQueue,
   layerGenerationStatus,
 } from './generation';
@@ -184,4 +185,88 @@ test('each layer generation gets its own queue row, and the layer stays queued u
     getQueue().map((i) => i.status),
     ['error', 'error']
   );
+});
+
+test('generatePanelImage sends the background and each layer as its own prompt+image+box, for a masked-inpaint workflow to place', async () => {
+  clearCompletedQueueItems();
+  // A square page makes the panel square too, so a layer's placement height (which follows the
+  // panel's aspect ratio) comes out equal to its width instead of needing that ratio in the math.
+  const project = createBlankProject('Test', { label: 'Square', widthIn: 10, heightIn: 10 });
+  project.metadata.scenes.push({
+    id: 'scene1',
+    name: 'Rooftop',
+    description: 'A city rooftop.',
+    imageIds: [],
+    variations: [],
+    characterIds: [],
+  });
+  project.metadata.media.push(
+    { id: 'm-bg', name: 'bg', fileName: 'bg.png', mimeType: 'image/png' },
+    { id: 'm-layer', name: 'layer', fileName: 'layer.png', mimeType: 'image/png' }
+  );
+  project.pages[0].panels[0].layers.push(
+    {
+      id: 'bg1',
+      name: 'Rooftop',
+      kind: 'background',
+      visible: true,
+      x: 0,
+      y: 0,
+      width: 100,
+      rotation: 0,
+      opacity: 1,
+      sceneId: 'scene1',
+      mediaId: 'm-bg',
+    },
+    {
+      id: 'l1',
+      name: 'Mara',
+      kind: 'foreground',
+      visible: true,
+      x: 10,
+      y: 50,
+      width: 40,
+      rotation: 0,
+      opacity: 1,
+      aspectRatio: 1,
+      mediaId: 'm-layer',
+    }
+  );
+  let seenBody: Record<string, unknown> | undefined;
+  const deps = {
+    getProject: () => project,
+    getGeneratorConfig: () => ({ provider: 'service' as const, url: 'http://svc/generate' }),
+    generatorFetch: (async (_url: string, init: RequestInit) => {
+      seenBody = JSON.parse(init.body as string);
+      return new Response(new Uint8Array([137, 80, 78, 71]), {
+        headers: { 'content-type': 'image/png' },
+      });
+    }) as unknown as typeof fetch,
+    downloadStorageMedia: async (id: string) => ({
+      name: id,
+      mimeType: 'image/png',
+      dataUrl: `data:image/png;base64,${id}`,
+    }),
+    uploadStorageMedia: async (name: string) => ({
+      id: 'm-panel',
+      name,
+      fileName: 'panel.png',
+      mimeType: 'image/png',
+    }),
+  } as unknown as ComicBuilderDeps;
+  const panelId = project.pages[0].panels[0].id;
+
+  await generatePanelImage(deps, panelId);
+
+  const background = seenBody?.panelBackground as { prompt: string; image: string };
+  const layers = seenBody?.panelLayers as Array<{
+    prompt: string;
+    image: string;
+    box: { x: number; y: number; width: number; height: number };
+  }>;
+  assert.equal(background.image, 'data:image/png;base64,m-bg');
+  assert.match(background.prompt, /Rooftop/);
+  assert.equal(layers.length, 1);
+  assert.equal(layers[0].image, 'data:image/png;base64,m-layer');
+  assert.deepEqual(layers[0].box, { x: 0.1, y: 0.5, width: 0.4, height: 0.4 });
 });

@@ -1,6 +1,9 @@
 /** The generic image service: POST the generation request as JSON to a URL, get an image back.
  *
- * Request body: { kind, prompt, referenceImages: [dataUrl], width?, height?, transparent? }.
+ * Request body: { kind, prompt, referenceImages: [dataUrl], width?, height?, transparent?,
+ * panelBackground?, panelLayers? } (the last two, kind: 'panel' only — see GenerationRequest). A
+ * service that doesn't understand panelBackground/panelLayers can ignore them and use
+ * prompt/referenceImages as it always has.
  * Response: the image bytes (any image/* content type), or JSON { image: "data:..." }. A non-2xx
  * response carries JSON { error } or plain text. GET on the same URL answers 2xx when it's alive. */
 import { readFileAsDataUrl } from '../utils/files';

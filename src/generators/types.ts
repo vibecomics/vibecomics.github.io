@@ -24,6 +24,18 @@ export interface GenerationRequest {
    * full-bleed image (a background/scene). A provider that has no way to produce real transparency
    * may ignore this; the caller falls back to its own background-removal heuristic in that case. */
   transparent?: boolean;
+  /** kind: 'panel' only. The background to start from, and its own prompt (style included). A
+   * provider that understands this (ComfyUI-Vibecomic does) masks each of panelLayers to its own
+   * box instead of relying on placement read out of the plain `prompt`; one that doesn't can
+   * ignore both and fall back to `prompt`/`referenceImages`. */
+  panelBackground?: { prompt: string; image: string };
+  /** kind: 'panel' only. Foreground layers to paint into panelBackground, back to front, each with
+   * its own prompt and placement box (fractions of the panel; x/y is the top-left corner). */
+  panelLayers?: Array<{
+    prompt: string;
+    image: string;
+    box: { x: number; y: number; width: number; height: number };
+  }>;
   /** Aborts the request when the caller cancels it. */
   signal?: AbortSignal;
 }

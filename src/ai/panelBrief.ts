@@ -456,6 +456,78 @@ export function buildPanelImagePrompt(project: ComicProject, panelId: string): s
   return joinPromptParts(buildPanelImagePromptParts(project, panelId));
 }
 
+export interface PanelGenerationPlanLayer {
+  mediaId: string;
+  prompt: string;
+  /** Placement box, as fractions (0-1) of the panel: x/y is the top-left corner. */
+  box: { x: number; y: number; width: number; height: number };
+}
+
+export interface PanelGenerationPlan {
+  /** Undefined when the background has no image yet: nothing to mask layers onto. */
+  background?: { mediaId: string; prompt: string };
+  /** Back to front. Layers with no image yet are left out: there's nothing to place. */
+  layers: PanelGenerationPlanLayer[];
+}
+
+/**
+ * The panel as a background to start from plus foreground layers to paint into it, each with its
+ * own full prompt (style included) and placement box — what a masked-inpaint workflow needs to
+ * make placement a hard constraint instead of a line in a stitched text prompt (see
+ * ComfyUI-Vibecomic's build_panel_workflow). Mirrors buildPanelImagePromptParts' per-part text,
+ * just kept apart by element instead of joined into one prompt.
+ */
+export function buildPanelGenerationPlan(
+  project: ComicProject,
+  panelId: string
+): PanelGenerationPlan {
+  const brief = buildPanelBrief(project, panelId);
+  const panelPrompt = brief.promptParts.find((p) => p.label === 'Panel prompt')?.text;
+  const technical = brief.promptParts.find((p) => p.label === 'Technical requirements')?.text;
+  const tail = [panelPrompt, technical].filter(Boolean).join(' ');
+
+  let background: PanelGenerationPlan['background'];
+  const backgroundMediaId = brief.background?.mediaId;
+  if (brief.background?.hasImage && backgroundMediaId) {
+    const bg = brief.background;
+    const text = [
+      bg.scene && `${bg.scene.name}: ${bg.scene.description}`,
+      bg.variation?.prompt,
+      bg.prompt,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    background = {
+      mediaId: backgroundMediaId,
+      prompt: [brief.style.style, brief.style.sceneStyle, text, tail].filter(Boolean).join(' '),
+    };
+  }
+
+  const layers: PanelGenerationPlanLayer[] = [];
+  for (const layer of brief.layers) {
+    if (!layer.hasImage || !layer.mediaId) continue;
+    const text = [
+      layer.subject && `${layer.subject.name}: ${layer.subject.description}`,
+      layer.variation?.prompt,
+      layer.prompt,
+    ]
+      .filter(Boolean)
+      .join(' ');
+    layers.push({
+      mediaId: layer.mediaId,
+      prompt: [brief.style.style, brief.style.characterStyle, text, tail].filter(Boolean).join(' '),
+      box: {
+        x: layer.placement.x / 100,
+        y: layer.placement.y / 100,
+        width: layer.placement.width / 100,
+        height: layer.placement.height / 100,
+      },
+    });
+  }
+
+  return { background, layers };
+}
+
 /**
  * The reference images a panel image's generation sends by default: the same ordered,
  * deduplicated list buildPanelBrief computes for the agent brief (the background and each visible

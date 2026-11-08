@@ -31,7 +31,11 @@ import {
 import type { LayerKind, LayerRef, PendingPanelImage, StoryKind, VariationRef } from './builders';
 import type { ComicBuilderDeps } from './deps';
 import { swapPanelImage } from './panelImage';
-import { buildPanelImagePrompt, defaultPanelReferences } from './panelBrief';
+import {
+  buildPanelGenerationPlan,
+  buildPanelImagePrompt,
+  defaultPanelReferences,
+} from './panelBrief';
 import {
   allEntryImageIds,
   appendReferenceNotes,
@@ -393,6 +397,26 @@ async function runPanelGeneration(
   );
   const referenceImages = await downloadReferences(deps, used);
   const size = panelArtSize(project, panelId);
+
+  // A manual prompt override asks for full control over the one stitched prompt, which the
+  // per-element plan below has no room for, so it's only sent when there's no override.
+  const plan = promptOverride?.trim() ? undefined : buildPanelGenerationPlan(project, panelId);
+  const panelBackground = plan?.background
+    ? {
+        prompt: plan.background.prompt,
+        image: (await deps.downloadStorageMedia(plan.background.mediaId)).dataUrl,
+      }
+    : undefined;
+  const panelLayers = plan?.layers.length
+    ? await Promise.all(
+        plan.layers.map(async (layer) => ({
+          prompt: layer.prompt,
+          image: (await deps.downloadStorageMedia(layer.mediaId)).dataUrl,
+          box: layer.box,
+        }))
+      )
+    : undefined;
+
   const rawDataUrl = await provider.generate({
     kind: 'panel',
     prompt,
@@ -400,6 +424,8 @@ async function runPanelGeneration(
     width: size?.pixels.width,
     height: size?.pixels.height,
     transparent: false,
+    panelBackground,
+    panelLayers,
     signal,
   });
   const media = await deps.uploadStorageMedia(

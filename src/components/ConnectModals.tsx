@@ -59,10 +59,10 @@ export function ConnectS3Modal({
   onConnect: (connectionString: string) => Promise<void>;
   onClose: () => void;
 }) {
-  const [host, setHost] = useState('');
-  const [bucket, setBucket] = useState('');
-  const [accessKeyId, setAccessKeyId] = useState('');
-  const [secretAccessKey, setSecretAccessKey] = useState('');
+  const [host, setHost] = useState('server:9000');
+  const [bucket, setBucket] = useState('vibecomics');
+  const [accessKeyId, setAccessKeyId] = useState('changeme');
+  const [secretAccessKey, setSecretAccessKey] = useState('changeme');
   const [region, setRegion] = useState('us-east-1');
   const [tls, setTls] = useState(false);
   const [error, setError] = useState('');
