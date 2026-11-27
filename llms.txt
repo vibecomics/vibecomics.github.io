@@ -619,7 +619,7 @@ transparent?, ... }`); it answers with the image (`image/*` bytes, or
   line instead of text).
 
 ```
-node vibecomics-generate.mjs --service http://127.0.0.1:8188/vibecomic/generate \
+node vibecomics-generate.mjs --service http://127.0.0.1:8188/vibecomics/generate \
   --s3 s3://KEY@192.168.1.10:9000/vibecomics --project "My comic"
 ```
 
