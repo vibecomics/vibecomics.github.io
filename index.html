@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      // Pre-this-change bookmarks and shares point here with a route in the hash
+      // (#comic=..., #settings, #nux). The app that understands those now lives
+      // at /app/, so forward immediately, before anything paints.
+      if (location.hash && location.hash !== '#') {
+        location.replace('./app/' + location.hash);
+      }
+    </script>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+    <link rel="apple-touch-icon" href="logo.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="google-site-verification" content="GUBZmRr6TcJ-H3GU6fFYoszMKIuF9AD5imbLE4zMVqc" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#0d6efd" />
+    <meta
+      name="description"
+      content="VibeComics directs an AI agent to write, draw and refine your comic page by page, reusing the same cast and style in every panel, so it's actually good: not one-shot AI slop."
+    />
+    <meta property="og:title" content="VibeComics" />
+    <meta
+      property="og:description"
+      content="Direct an AI agent to write, draw and refine your comic, page by page, until it's actually good."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="logo.png" />
+    <meta name="twitter:card" content="summary" />
+    <title>VibeComics: build a comic with an AI agent</title>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-2EW4F03KTW"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+      gtag('config', 'G-2EW4F03KTW');
+    </script>
+    <script>
+      // Retire any service worker + cache left over from before the app moved to /app/.
+      // Scoped to an exact match (root scope, the old cache's exact name) so a returning
+      // visitor's real /app/ worker and cache are never touched.
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then((regs) => {
+          for (const reg of regs) {
+            if (reg.scope === location.origin + '/') reg.unregister();
+          }
+        });
+      }
+      if ('caches' in window) {
+        caches.delete('comic-builder:' + location.origin + '/');
+      }
+    </script>
+    <style>
+      /* Hand-matched to Bootstrap 5.3's own default and [data-bs-theme=dark] tokens (the same
+         ones the app at /app/ uses), so the two feel like one product, not a marketing skin
+         bolted onto an app: page bg is Bootstrap's --bs-tertiary-bg, the card is --bs-body-bg,
+         and "Copy" is a plain btn-primary blue, exactly like the app's own buttons. */
+      :root {
+        --page-bg: #f8f9fa;
+        --card-bg: #fff;
+        --text: #212529;
+        --muted: rgba(33, 37, 41, 0.75);
+        --border: #dee2e6;
+        --primary: #0d6efd;
+        --primary-hover: #0b5ed7;
+      }
+
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --page-bg: #2b3035;
+          --card-bg: #212529;
+          --text: #dee2e6;
+          --muted: rgba(222, 226, 230, 0.75);
+          --border: #495057;
+        }
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--page-bg);
+        color: var(--text);
+        font-family: -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        display: flex;
+        justify-content: center;
+      }
+
+      main {
+        width: 100%;
+        max-width: 760px;
+        padding: clamp(3rem, 10vh, 7rem) 1.5rem;
+        text-align: center;
+      }
+
+      .brand {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.6rem;
+        margin-bottom: 2.5rem;
+      }
+
+      .brand img {
+        width: 32px;
+        height: 32px;
+      }
+
+      .brand span {
+        font-size: 1.1rem;
+        font-weight: 600;
+      }
+
+      h1 {
+        font-size: clamp(1.75rem, 4.5vw, 2.4rem);
+        font-weight: 700;
+        line-height: 1.25;
+        letter-spacing: -0.01em;
+        margin: 0 0 1rem;
+      }
+
+      .subhead {
+        font-size: 1.15rem;
+        font-weight: 300;
+        line-height: 1.55;
+        color: var(--muted);
+        margin: 0 auto 2.5rem;
+        max-width: 34rem;
+      }
+
+      .cta {
+        margin-bottom: 3rem;
+      }
+
+      #copy {
+        padding: 0.75rem 1.75rem;
+        border: 1px solid var(--primary);
+        border-radius: 0.5rem;
+        background: var(--primary);
+        color: #fff;
+        font-weight: 500;
+        font-size: 1.05rem;
+        cursor: pointer;
+      }
+
+      #copy:hover {
+        background: var(--primary-hover);
+        border-color: var(--primary-hover);
+      }
+
+      .prompt-box {
+        max-width: 30rem;
+        margin: 1rem auto 0;
+        padding: 0.75rem 1rem;
+        border: 1px solid var(--border);
+        border-radius: 0.5rem;
+        background: var(--card-bg);
+        text-align: left;
+        font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+        font-size: 0.85rem;
+        line-height: 1.5;
+        color: var(--text);
+        word-break: break-all;
+        cursor: text;
+      }
+
+      .prompt-box:focus-visible {
+        outline: 2px solid var(--primary);
+        outline-offset: 1px;
+      }
+
+      .steps {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        max-width: 34rem;
+        margin: 0 auto 3rem;
+        padding: 0;
+        list-style: none;
+        text-align: left;
+      }
+
+      .steps li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        font-size: 0.9rem;
+        line-height: 1.5;
+        color: var(--muted);
+      }
+
+      .steps li::before {
+        content: attr(data-step);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.5rem;
+        height: 1.5rem;
+        flex-shrink: 0;
+        margin-top: 0.1rem;
+        border-radius: 50%;
+        background: var(--border);
+        color: var(--text);
+        font-size: 0.75rem;
+        font-weight: 600;
+        font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
+      }
+
+      .open-app {
+        display: inline-block;
+        font-size: 0.9rem;
+        color: var(--muted);
+        text-decoration: none;
+      }
+
+      .open-app:hover {
+        color: var(--primary);
+        text-decoration: underline;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        <img src="logo.png" alt="" />
+        <span>VibeComics</span>
+      </div>
+
+      <h1>Build a comic with an AI agent, and actually make it good.</h1>
+      <p class="subhead">
+        VibeComics keeps your agent using the same characters, scenes and style across every panel,
+        so you refine the art instead of rerolling it. Not one-shot AI slop.
+      </p>
+
+      <div class="cta">
+        <button id="copy" type="button">Copy the starter prompt</button>
+        <div class="prompt-box" id="prompt" tabindex="0" aria-label="Starter prompt"></div>
+      </div>
+
+      <ol class="steps">
+        <li data-step="1">
+          Paste it into Claude, ChatGPT, Gemini, or any AI agent that can run commands.
+        </li>
+        <li data-step="2">
+          It asks what your comic is about, and where to keep it: your Google Drive, or storage of
+          your own.
+        </li>
+        <li data-step="3">Watch it write, draw and refine the comic, page by page.</li>
+      </ol>
+
+      <a class="open-app" href="app/">Already building one? Open the app →</a>
+    </main>
+    <script>
+      var guide = new URL('llms.txt', document.baseURI).href;
+      var promptText = 'Read ' + guide + ' and build me a comic.';
+      var promptBox = document.getElementById('prompt');
+      promptBox.textContent = promptText;
+
+      function selectPromptBox() {
+        var range = document.createRange();
+        range.selectNodeContents(promptBox);
+        var selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      promptBox.addEventListener('click', selectPromptBox);
+      promptBox.addEventListener('focus', selectPromptBox);
+
+      document.getElementById('copy').addEventListener('click', function () {
+        var btn = this;
+        var reset = function () {
+          btn.textContent = 'Copy the starter prompt';
+        };
+        navigator.clipboard
+          .writeText(promptText)
+          .then(function () {
+            btn.textContent = 'Copied!';
+            setTimeout(reset, 1500);
+          })
+          .catch(function () {
+            selectPromptBox();
+            document.execCommand('copy');
+            window.getSelection().removeAllRanges();
+            btn.textContent = 'Copied!';
+            setTimeout(reset, 1500);
+          });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy - VibeComics</title>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-2EW4F03KTW"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-2EW4F03KTW');
+    </script>
+    <style>
+      body {
+        max-width: 42rem;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        font-family:
+          system-ui,
+          -apple-system,
+          'Segoe UI',
+          Roboto,
+          sans-serif;
+        line-height: 1.6;
+        color: #1b1b3a;
+      }
+      h1 {
+        margin-bottom: 0.25rem;
+      }
+      h2 {
+        margin-top: 2rem;
+      }
+      nav {
+        margin: 1rem 0 2rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Privacy Policy</h1>
+    <p>VibeComics. Last updated: 20 September 2026.</p>
+    <nav>
+      <a href="../app/">Back to the app</a> &middot; <a href="tos.html">Terms of Service</a> &middot;
+      <a href="https://github.com/vibecomics">Source code on GitHub</a>
+    </nav>
+
+    <p>
+      <strong>Short version: we do not store anything.</strong> VibeComics has no server, no
+      database, no user accounts and no advertising. Your comics live on your own Google Drive, and
+      we never receive them. We do use Google Analytics to understand how the site is used; see
+      below.
+    </p>
+
+    <h2>What VibeComics is</h2>
+    <p>
+      VibeComics is a static website. All of its code runs in your browser. The complete source code
+      is public at
+      <a href="https://github.com/vibecomics"
+        >https://github.com/vibecomics</a
+      >, so you can check every statement on this page against the code.
+    </p>
+
+    <h2>Your comics</h2>
+    <p>
+      A comic is saved as a project file (<code>project.json</code>) and its image files, inside a
+      folder on your Google Drive. The app reads and writes those files directly from your browser
+      to Google. They do not pass through any server of ours, because we do not run one.
+    </p>
+
+    <h2>Google Drive access</h2>
+    <p>
+      VibeComics asks for one Google permission, the <code>drive.file</code> scope. It lets the app
+      see and change only the files and folders that the app itself created. It cannot see the rest
+      of your Drive.
+    </p>
+    <p>
+      The access token Google gives the app is kept only in the memory of the open page. It is not
+      written to cookies or to any storage, and reloading the page discards it. Using
+      &ldquo;Disconnect&rdquo; in the app revokes the grant at Google. You can also remove the app's
+      access at any time from your Google Account settings, under third-party access.
+    </p>
+    <p>
+      The use and transfer of information received from Google APIs by VibeComics adheres to the
+      <a href="https://developers.google.com/terms/api-services-user-data-policy"
+        >Google API Services User Data Policy</a
+      >, including the Limited Use requirements. The information is used only to open, show, edit
+      and save your comic. It is not transferred to anyone, used for advertising, or read by people.
+    </p>
+
+    <h2>What is stored in your browser</h2>
+    <ul>
+      <li>
+        One interface preference (how tall the editor's bottom panel is), kept in your browser's
+        local storage. It contains no personal data and no comic content.
+      </li>
+      <li>
+        A copy of the app's own files (its code and images), kept by the browser's cache so the site
+        loads faster. It contains no comic content.
+      </li>
+      <li>
+        Cookies set by Google Analytics (see below), used to distinguish visitors and measure usage
+        of the site.
+      </li>
+    </ul>
+
+    <h2>Analytics</h2>
+    <p>
+      VibeComics uses Google Analytics to understand how the site is used, for example which pages
+      are visited and how often. Google Analytics collects information such as your approximate
+      location, device and browser type, and the pages you visit, and sets cookies to do so. It does
+      not have access to your comics or your Google Drive content. See
+      <a href="https://policies.google.com/privacy">Google's Privacy Policy</a> for how Google
+      handles this data.
+    </p>
+
+    <h2>Third parties</h2>
+    <ul>
+      <li>
+        <strong>Google.</strong> Signing in and using Drive involves Google, which handles that data
+        under <a href="https://policies.google.com/privacy">Google's Privacy Policy</a>. The page
+        loads Google's sign-in script from Google's servers.
+      </li>
+      <li>
+        <strong>Google Analytics.</strong> The page loads Google's analytics script to measure site
+        usage, as described above.
+      </li>
+      <li>
+        <strong>Hosting.</strong> The site is served as static files, for example from GitHub Pages.
+        Like any web host, the host may keep ordinary server logs (such as IP addresses and
+        requested pages) under its own policy. The app does not collect those logs and does not have
+        access to them.
+      </li>
+    </ul>
+
+    <h2>AI assistants</h2>
+    <p>
+      The editor exposes a scripting interface in the page so that an AI assistant you choose to run
+      against your own browser session can operate it. VibeComics does not send your comic to any
+      assistant. What you share with an assistant, and what it does with it, is between you and that
+      assistant's provider.
+    </p>
+
+    <h2>Your control</h2>
+    <p>
+      Your comics are ordinary files in your own Drive. You can open, copy, move or delete them
+      there whenever you like, and you can revoke the app's access whenever you like. Because we
+      hold no copy, there is nothing for us to delete on request.
+    </p>
+
+    <h2>Changes to this policy</h2>
+    <p>
+      If this policy changes, the new version will be published at this address with a new date. The
+      full history is in the public repository.
+    </p>
+
+    <h2>Questions</h2>
+    <p>
+      Open an issue at
+      <a href="https://github.com/vibecomics"
+        >https://github.com/vibecomics</a
+      >.
+    </p>
+  </body>
+</html>
